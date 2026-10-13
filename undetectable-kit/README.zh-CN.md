@@ -25,7 +25,7 @@ ghostbrowser/
     runtime/chrome/                    完整 Chromium 运行目录
     runtime-manifest.json              463 个浏览器文件的长度与 SHA-256
     fingerprints/
-      library.json                    10 条指纹快照，不含 Cookies 或账号令牌
+      library.json                    4 条去重快照，不含 Cookies 或账号令牌
       library.sqlite                  同一批指纹的 SQLite 版本
       field-index.json                明确统计口径的 JSON 字段索引
       templates/
@@ -202,7 +202,7 @@ JSON data + configMeta + runtime
 运行 `bin/GhostBrowser.exe`，或项目的 `build/bin/GhostBrowser.exe`。
 
 1. 进入「设置」，点击「使用项目自带 Chromium 与指纹库」。若移动了项目，可先修改「本地指纹包目录」。
-2. 返回环境列表，点击「指纹库 / JSON」。可以从 10 条快照中选择一条创建环境，或导入 `examples/native-profile.json`。
+2. 返回环境列表，点击「指纹库 / JSON」。可以从 4 条去重快照中选择一条创建环境，或导入 `examples/native-profile.json`。
 3. 点击环境的「启动」。原生模式由 GhostBrowser 保持 CDP 监督；关闭 GhostBrowser 会关闭它启动的环境。
 4. 「导出启动 JSON」导出当前环境的完整配置，包含当前机器的内核/模板/数据路径，可直接供命令行启动器读取。
 5. 「验证运行中的指纹」临时创建本地检测标签页、检查实际值，然后关闭该检测标签页。结果显示在 JSON 文本框中。
@@ -219,7 +219,7 @@ GUI 需保持运行并启用本地 API，默认地址 `http://127.0.0.1:25325`�
 
 | 方法和路径 | 作用 |
 |---|---|
-| `GET /fingerprints` | 列出本地 10 条快照及配置 ID |
+| `GET /fingerprints` | 列出本地 4 条去重快照及配置 ID |
 | `POST /profile/launch-json` | 请求体为完整启动 JSON，导入为新环境并启动 |
 | `GET /profile/json?profile=<ID>` | 导出已有环境启动 JSON |
 | `POST /profile/verify?profile=<ID>` | 检查运行中环境的新标签页指纹 |
@@ -239,7 +239,7 @@ Invoke-RestMethod -Method Post `
 
 ## 8. 指纹库数量和已验证范围
 
-`library.json` 有 10 条环境快照，10 条全部引用 `configID=3285798`，故当前可确认的基础配置 ID 为 **1 个**。3 个 `.bin` 是不同序列化布局/版本的模板，不能当成 3 个新的上游配置 ID。
+`library.json` 当前保留 **4 条去重后的配置快照**，都引用 `configID=3285798`，所以本地可确认的基础配置 ID 仍为 **1 个**。原来 10 条记录归一后只有 3 套；本机历史库补入一条有效变体：洛杉矶时区、UA 使用 Chrome 缩减版本 `153.0.0.0`，完整 UA-CH 版本仍保存在 `configMeta`。按 `data` 与 `configMeta` 规范化内容去重后共 4 套；克隆名称和记录 ID 不参与比较，PID、调试端口、DevTools 链接、备注、起始页和公开 RTC 字段不打包，嵌套 JSON 字符串在比较前先解析。每条快照的 `fingerprintHash` 是规范化配置的 SHA-256。3 个 `.bin` 是不同序列化布局/版本的模板，不是额外 JSON 配置，也不能当成新的上游配置 ID。
 
 本包对原 `data` 去掉了 `pid`、`debugPort`、`devToolsLink`、`note`、`startPage`、`publicRTC` 六个运行/环境字段，并修正了空的 UA 版本。`configMeta` 完整保存，其中 JSON 字符串被展开为对象。
 
