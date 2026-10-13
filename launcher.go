@@ -242,6 +242,7 @@ func (s *Store) Launch(id string) (*RunState, error) {
 			s.PutProfile(*p)
 		}
 	}
+	s.afterStart(id, ws)
 	return rs, nil
 }
 

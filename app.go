@@ -30,6 +30,7 @@ func (a *App) startup(ctx context.Context) {
 		wruntime.EventsEmit(a.ctx, "profile:exit", id)
 		globalAuto.AfterExit(id)
 	}
+	runReg.beforeStop = func(id, ws string) { _ = snapshotSession(a.store.ProfileDir(id), a.store.GetSettings().DeviceID, ws) }
 	a.auto = globalAuto
 	api.start(a.store)
 	// Server-first reconcile on start-up, off the UI thread.
@@ -160,6 +161,17 @@ func (a *App) StartProfile(id string) (*RunState, error) {
 
 // SyncNow runs the same server-first comparison as start-up.
 func (a *App) SyncNow() SyncEvent { return a.auto.Reconcile() }
+
+// PendingSyncPrompt returns the open "cloud is newer" prompt, if any (the UI
+// asks on load in case it missed the event).
+func (a *App) PendingSyncPrompt() *SyncPrompt { return a.auto.Pending() }
+
+// SyncHold stops the prompt's countdown while the user is choosing.
+func (a *App) SyncHold() { a.auto.Hold() }
+
+// SyncDecide answers the prompt: listed profiles are pulled from the cloud,
+// the others keep the local copy (which is then uploaded over the cloud one).
+func (a *App) SyncDecide(pull []string) bool { return a.auto.Decide(pull) }
 
 func (a *App) StopProfile(id string) {
 	if rs, ok := runReg.get(id); ok && strings.HasPrefix(rs.WSURL, "ws") {

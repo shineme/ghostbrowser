@@ -84,6 +84,7 @@ type Profile struct {
 	LastRun     int64          `json:"lastRun"`
 	CloudVer    int64          `json:"cloudVersion"`
 	SyncedAt    int64          `json:"syncedAt"`
+	KeepLocal   int64          `json:"keepLocalVersion,omitempty"` // user kept local over this cloud version
 }
 
 type Settings struct {
@@ -98,9 +99,13 @@ type Settings struct {
 	SyncToken       string `json:"syncToken"`
 	SyncPassword    string `json:"syncPassword"`
 	AutoSyncOff     bool   `json:"autoSyncOff"` // auto sync is on by default once sync is configured
-	DeviceName      string `json:"deviceName"`
-	DeviceID        string `json:"deviceId"`
-	Theme           string `json:"theme"`
+	// Start-up prompt when the cloud has newer copies: wait this many seconds,
+	// then apply SyncPromptAction ("pull" or "keep"). 0 = apply at once, no prompt.
+	SyncPromptSecs   int    `json:"syncPromptSecs"`
+	SyncPromptAction string `json:"syncPromptAction"`
+	DeviceName       string `json:"deviceName"`
+	DeviceID         string `json:"deviceId"`
+	Theme            string `json:"theme"`
 }
 
 type RunState struct {

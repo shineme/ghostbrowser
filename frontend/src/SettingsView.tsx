@@ -49,10 +49,14 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
 
       <div className="panel pad setting-card spot rise" style={{ ['--i' as any]: 2 }}>
         <div className="head"><span className="ic"><Icon.cloud /></span><div><h4>云端同步</h4><span>你的 VPS + PHP，端到端加密</span></div></div>
-        <Field label="同步服务器地址" hint="指向你 VPS 上部署的 PHP 同步端，例如 https://sync.yourdomain.com"><input type="text" value={s.syncServer} onChange={e => set({ syncServer: e.target.value })} placeholder="https://sync.yourdomain.com" /></Field>
+        <Field label="同步服务器地址" hint="填 ghostsync.php 的完整网址（单文件 PHP，无需伪静态）"><input type="text" value={s.syncServer} onChange={e => set({ syncServer: e.target.value })} placeholder="https://你的域名/ghostsync.php" /></Field>
         <Field label="访问令牌 (Bearer Token)"><input type="password" value={s.syncToken} onChange={e => set({ syncToken: e.target.value })} /></Field>
         <Field label="同步密码 (端到端加密)" hint="用于派生 AES-256 密钥。只存在本机，绝不上传；忘记将无法解密云端数据。"><input type="password" value={s.syncPassword} onChange={e => set({ syncPassword: e.target.value })} /></Field>
-        <Toggle on={!s.autoSyncOff} onChange={v => set({ autoSyncOff: !v })} label="自动同步" hint="启动时对比云端，服务器较新则优先下载；每次关闭浏览器后立即上传" />
+        <Toggle on={!s.autoSyncOff} onChange={v => set({ autoSyncOff: !v })} label="自动同步" hint="启动时对比云端与本地；每次关闭浏览器后立即上传（含登录状态）" />
+        {!s.autoSyncOff && <div className="grid2">
+          <Field label="云端较新时询问等待（秒）" hint="0 = 不弹窗，直接执行右侧动作"><input type="number" min={0} max={300} value={s.syncPromptSecs ?? 3} onChange={e => set({ syncPromptSecs: Math.max(0, Math.min(300, Math.round(+e.target.value || 0))) })} /></Field>
+          <Field label="倒计时结束后"><select value={s.syncPromptAction || 'pull'} onChange={e => set({ syncPromptAction: e.target.value })}><option value="pull">拉取云端覆盖本地</option><option value="keep">保留本地（上传覆盖云端）</option></select></Field>
+        </div>}
         <Field label="本机设备名"><input type="text" value={s.deviceName} onChange={e => set({ deviceName: e.target.value })} /></Field>
         <button className="btn" onClick={test} disabled={testing}><Icon.refresh s={14} /> {testing ? '测试中…' : '测试连接'}</button>
       </div>

@@ -18,9 +18,9 @@ func TestAutoSyncServerFirst(t *testing.T) {
 	project, _ := os.Getwd()
 	root := t.TempDir()
 	port := freePort()
-	base := "http://127.0.0.1:" + itoa(port)
+	base := "http://127.0.0.1:" + itoa(port) + "/ghostsync.php"
 	token := strings.Repeat("test-private-token-", 4)
-	cmd := exec.Command(php, "-S", "127.0.0.1:"+itoa(port), "-t", filepath.Join(project, "cloud-server", "public"), filepath.Join(project, "cloud-server", "router.php"))
+	cmd := exec.Command(php, "-S", "127.0.0.1:"+itoa(port), "-t", filepath.Join(project, "cloud-server"))
 	cmd.Env = append(os.Environ(), "GHOST_SYNC_TOKEN="+token, "GHOST_SYNC_DATA_DIR="+filepath.Join(root, "server"))
 	if e := cmd.Start(); e != nil {
 		t.Fatal(e)
@@ -76,5 +76,53 @@ func TestAutoSyncServerFirst(t *testing.T) {
 	// Nothing left to do.
 	if r := autoA.Reconcile(); r.Pulled+r.Pushed+r.Failed != 0 {
 		t.Fatalf("A idle reconcile: %+v", r)
+	}
+
+	// A pushes v3; B has a stale v2 and gets the start-up prompt.
+	ap, _ = a.GetProfile(p.ID)
+	ap.LastRun = time.Now().Unix() + 10
+	a.PutProfile(*ap)
+	_ = os.WriteFile(filepath.Join(a.ProfileDir(p.ID), "marker.txt"), []byte("v3"), 0600)
+	if e := retry(1, a.PushProfile, p.ID); e != nil {
+		t.Fatal(e)
+	}
+	b.Settings.SyncPromptSecs, b.Settings.SyncPromptAction = 30, "pull"
+	go func() {
+		for autoB.Pending() == nil {
+			time.Sleep(50 * time.Millisecond)
+		}
+		pr := autoB.Pending()
+		if len(pr.Items) != 1 || pr.Items[0].CloudVersion != 3 || pr.Items[0].LocalVersion != 2 {
+			t.Errorf("prompt: %+v", pr)
+		}
+		autoB.Hold()
+		autoB.Decide(nil) // keep local on B
+	}()
+	if r := autoB.Reconcile(); r.Pulled != 0 || r.Pushed != 1 || r.Failed != 0 {
+		t.Fatalf("B keep-local reconcile: %+v", r)
+	}
+	if got, _ := os.ReadFile(filepath.Join(b.ProfileDir(p.ID), "marker.txt")); string(got) != "v2" {
+		t.Fatalf("B kept marker = %q", got)
+	}
+	// B's copy replaced the cloud (v4); A pulls it via the countdown default.
+	a.Settings.SyncPromptSecs, a.Settings.SyncPromptAction = 1, "pull"
+	start := time.Now()
+	if r := autoA.Reconcile(); r.Pulled != 1 || time.Since(start) < 900*time.Millisecond {
+		t.Fatalf("A countdown reconcile: %+v after %v", r, time.Since(start))
+	}
+	if got, _ := os.ReadFile(filepath.Join(a.ProfileDir(p.ID), "marker.txt")); string(got) != "v2" {
+		t.Fatalf("A marker after countdown = %q", got)
+	}
+	if ap, _ = a.GetProfile(p.ID); ap.CloudVer != 4 {
+		t.Fatalf("A cloud version = %d", ap.CloudVer)
+	}
+}
+
+func TestSyncURL(t *testing.T) {
+	if u := syncURL("https://x.com/sync/ghostsync.php", "/api/profiles/ab/blob?version=3"); u != "https://x.com/sync/ghostsync.php?r=%2Fapi%2Fprofiles%2Fab%2Fblob&version=3" {
+		t.Fatal(u)
+	}
+	if u := syncURL("https://x.com", "/api/ping"); u != "https://x.com/api/ping" {
+		t.Fatal(u)
 	}
 }

@@ -196,31 +196,58 @@ func unzipDir(blob []byte, dir string) error {
 }
 
 type syncClient struct {
-	base, token, device, lockToken string
+	base, token, device, lockToken, deviceName string
 	hc                             *http.Client
 }
 
 func (s *Store) sync() *syncClient {
 	st := s.GetSettings()
-	return &syncClient{base: strings.TrimRight(st.SyncServer, "/"), token: st.SyncToken, device: st.DeviceID, hc: &http.Client{Timeout: 5 * time.Minute}}
+	return &syncClient{base: strings.TrimRight(st.SyncServer, "/"), token: st.SyncToken, device: st.DeviceID, deviceName: st.DeviceName, hc: &http.Client{Timeout: 5 * time.Minute}}
 }
 
 func (c *syncClient) req(method, path string, body io.Reader, ct string) (*http.Response, error) {
-	req, err := http.NewRequest(method, c.base+path, body)
+	req, err := http.NewRequest(method, syncURL(c.base, path), body)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("X-Ghost-Token", c.token) // some PHP hosts strip Authorization
 	if ct != "" {
 		req.Header.Set("Content-Type", ct)
 	}
 	if c.device != "" {
 		req.Header.Set("X-Device-ID", c.device)
 	}
+	if c.deviceName != "" {
+		req.Header.Set("X-Device-Name", url.QueryEscape(c.deviceName))
+	}
 	if c.lockToken != "" {
 		req.Header.Set("X-Lock-Token", c.lockToken)
 	}
 	return c.hc.Do(req)
+}
+
+// syncURL joins the server address and an API path. A server address that
+// points at a .php file (the single-file server, no URL rewrite needed) gets
+// the path as ?r=/api/...
+func syncURL(base, path string) string {
+	u, err := url.Parse(base)
+	if err != nil || !strings.HasSuffix(strings.ToLower(u.Path), ".php") {
+		return base + path
+	}
+	p, q, _ := strings.Cut(path, "?")
+	v := u.Query()
+	v.Set("r", p)
+	if q != "" {
+		extra, _ := url.ParseQuery(q)
+		for k, vs := range extra {
+			for _, x := range vs {
+				v.Add(k, x)
+			}
+		}
+	}
+	u.RawQuery = v.Encode()
+	return u.String()
 }
 
 func syncStatus(resp *http.Response) error {
@@ -264,6 +291,9 @@ type cloudMeta struct {
 	Sha256  string          `json:"sha256"`
 	Meta    json.RawMessage `json:"meta"`
 	Locked  string          `json:"lockedBy"`
+	Updated int64           `json:"updatedAt"`
+	Size    int64           `json:"size"`
+	Device  string          `json:"deviceName"`
 }
 
 func syncReady(st Settings, password bool) error {
@@ -497,6 +527,7 @@ func (s *Store) PullProfile(id string) error {
 	}
 	p.Storage = "cloud"
 	p.CloudVer = version
+	p.KeepLocal = 0
 	p.SyncedAt = syncStamp(p.LastRun)
 	backup := ""
 	if _, e = os.Stat(dir); e == nil {
@@ -520,7 +551,15 @@ func (s *Store) PullProfile(id string) error {
 		return fmt.Errorf("restore failed: %w", e)
 	}
 	s.PutProfile(p)
-	// Keep the previous environment as a named backup, rather than erasing it.
+	// Keep the previous environment as a named backup (only the newest one).
+	if backup != "" {
+		old, _ := filepath.Glob(filepath.Join(root, ".before-pull-"+id+"-*"))
+		for _, o := range old {
+			if o != backup {
+				_ = os.RemoveAll(o)
+			}
+		}
+	}
 	return nil
 }
 

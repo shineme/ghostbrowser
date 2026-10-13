@@ -68,6 +68,8 @@ export function NewFingerprint(arg1:string):Promise<main.Fingerprint>;
 
 export function ParseProxy(arg1:string):Promise<main.Proxy>;
 
+export function PendingSyncPrompt():Promise<main.SyncPrompt>;
+
 export function PickFolder():Promise<string>;
 
 export function PickKernel():Promise<string>;
@@ -95,6 +97,10 @@ export function SpeedTestProxies(arg1:Array<string>):Promise<Array<main.Proxy>>;
 export function StartProfile(arg1:string):Promise<main.RunState>;
 
 export function StopProfile(arg1:string):Promise<void>;
+
+export function SyncDecide(arg1:Array<string>):Promise<boolean>;
+
+export function SyncHold():Promise<void>;
 
 export function SyncNow():Promise<main.SyncEvent>;
 

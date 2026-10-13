@@ -49,7 +49,7 @@ ghostbrowser/
 
 完整运行文件共 529,814,860 字节，约 505 MiB。用于启动的二进制没有进行补丁修改。
 
-云同步服务端现已提供，部署入口为 `cloud-server/public/index.php`，详见 [PHP 云同步部署文档](cloud-server/README.zh-CN.md)。新版 GUI 会列出其它设备的云端环境，支持加密上传与元数据恢复；请使用随包更新后的 GUI 与服务端。
+云同步服务端现已提供，服务端为单文件 `cloud-server/ghostsync.php`（无需伪静态、无需数据库），详见 [PHP 云同步部署文档](cloud-server/README.zh-CN.md)。新版 GUI 会列出其它设备的云端环境，支持加密上传与元数据恢复；请使用随包更新后的 GUI 与服务端。
 
 ## 2. 直接使用 JSON 启动
 

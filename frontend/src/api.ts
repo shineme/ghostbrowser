@@ -38,7 +38,7 @@ const mock = {
     { id: 'px3', name: 'JP Mobile', type: 'http', host: '133.18.2.40', port: 8000, user: 'a', pass: 'b', changeIpUrl: 'https://example/rotate', ip: '', country: '', city: '', timezone: '', lat: 0, lon: 0, latency: 0, status: 'fail', checkedAt: 0 },
   ] as any[],
   running: [] as any[],
-  settings: { kernelPath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', kernelMode: 'stock', profilesDir: 'C:\\Users\\me\\AppData\\Roaming\\GhostBrowser\\profiles', apiPort: 25325, apiEnabled: true, defaultOS: 'windows', syncServer: '', syncToken: '', syncPassword: '', deviceName: 'DESKTOP-01', deviceId: 'abc', theme: 'dark' } as any,
+  settings: { kernelPath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', kernelMode: 'stock', profilesDir: 'C:\\Users\\me\\AppData\\Roaming\\GhostBrowser\\profiles', apiPort: 25325, apiEnabled: true, defaultOS: 'windows', syncServer: '', syncToken: '', syncPassword: '', deviceName: 'DESKTOP-01', deviceId: 'abc', theme: 'dark', syncPromptSecs: 3, syncPromptAction: 'pull' } as any,
 };
 ['Shopify-Store-A', 'FB-Ads-01', 'FB-Ads-02', 'Amazon-Seller-EU', 'TikTok-Shop', 'Gmail-Warmup'].forEach((n, i) => {
   mock.profiles.push({ id: rid(), name: n, group: i < 3 ? '广告投放' : '电商', tags: i % 2 ? ['养号'] : ['主力'], notes: '', storage: i % 3 === 0 ? 'cloud' : 'local', proxyId: i % 2 ? 'px2' : 'px1', startUrls: [], cookies: '', fingerprint: mockFP(i === 3 ? 'macos' : 'windows'), createdAt: Date.now() / 1000 - i * 3600, lastRun: i < 4 ? Date.now() / 1000 - i * 5000 : 0, cloudVersion: i % 3 === 0 ? 3 : 0, syncedAt: 0 });
@@ -64,6 +64,11 @@ const M = {
   LibraryRemove: async (_os: string, _f: string, _v: string) => {},
   SaveDevicePreset: async (p: any) => ({ ...p, id: 'my-1', name: p.name || '我的预设', custom: true }),
   DeleteDevicePreset: async (_id: string) => {},
+  PendingSyncPrompt: async (): Promise<any> => location.hash.includes('syncprompt') ? { seconds: 3, action: 'pull', held: false, deadline: Date.now() + 3000, items: [
+    { id: 'p1', name: 'Shopify-Store-A', action: 'pull', reason: 'cloud_newer', conflict: false, cloudVersion: 7, localVersion: 5, cloudUpdatedAt: Date.now() / 1000 - 3600, cloudDevice: 'OFFICE-PC', localLastRun: Date.now() / 1000 - 86400, size: 18e6 },
+    { id: 'p2', name: 'FB Ads 02', action: 'pull', reason: 'cloud_newer', conflict: true, cloudVersion: 3, localVersion: 2, cloudUpdatedAt: Date.now() / 1000 - 600, cloudDevice: 'LAPTOP', localLastRun: Date.now() / 1000 - 1200, size: 42e6 }] } : null,
+  SyncHold: async () => {},
+  SyncDecide: async (_ids: string[]) => true,
   SyncNow: async (): Promise<any> => ({ phase: 'done', pulled: 0, pushed: 0, failed: 0, message: '同步完成：下载 0，上传 0，失败 0' }),
   FingerprintCatalog: async (os: string): Promise<any> => {
     const majors = ['142', '141', '140', '139', '138'];

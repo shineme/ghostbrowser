@@ -134,6 +134,10 @@ export function ParseProxy(arg1) {
   return window['go']['main']['App']['ParseProxy'](arg1);
 }
 
+export function PendingSyncPrompt() {
+  return window['go']['main']['App']['PendingSyncPrompt']();
+}
+
 export function PickFolder() {
   return window['go']['main']['App']['PickFolder']();
 }
@@ -188,6 +192,14 @@ export function StartProfile(arg1) {
 
 export function StopProfile(arg1) {
   return window['go']['main']['App']['StopProfile'](arg1);
+}
+
+export function SyncDecide(arg1) {
+  return window['go']['main']['App']['SyncDecide'](arg1);
+}
+
+export function SyncHold() {
+  return window['go']['main']['App']['SyncHold']();
 }
 
 export function SyncNow() {

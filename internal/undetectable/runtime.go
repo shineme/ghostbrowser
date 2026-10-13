@@ -387,6 +387,11 @@ func (s *Session) Close() {
 			if c, err := DialCDP(s.WSURL, 3*time.Second); err == nil {
 				_ = c.Call("Browser.close", nil, nil)
 				c.Close()
+				// Let Chromium flush cookies / storage before forcing it.
+				select {
+				case <-s.Done:
+				case <-time.After(8 * time.Second):
+				}
 			}
 		}
 		if s.Cmd != nil && s.Cmd.Process != nil {

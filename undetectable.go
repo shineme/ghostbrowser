@@ -307,6 +307,7 @@ func (s *Store) launchUndetectable(p *Profile, st Settings) (*RunState, error) {
 		p.Cookies = ""
 		s.PutProfile(*p)
 	}
+	s.afterStart(p.ID, rs.WSURL)
 	return rs, nil
 }
 

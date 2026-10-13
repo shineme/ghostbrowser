@@ -62,6 +62,13 @@ func NewStore() *Store {
 		h, _ := os.Hostname()
 		s.Settings.DeviceName = h
 	}
+	if s.Settings.SyncPromptAction == "" { // first run with the start-up prompt
+		s.Settings.SyncPromptAction = "pull"
+		s.Settings.SyncPromptSecs = 3
+	}
+	if s.Settings.SyncPromptSecs > 300 {
+		s.Settings.SyncPromptSecs = 300
+	}
 	if s.Settings.Theme == "" {
 		s.Settings.Theme = "dark"
 	}

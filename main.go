@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"time"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -35,8 +36,8 @@ func main() {
 			DisableFramelessWindowDecorations: true,
 			Theme:                             windows.Dark,
 		},
-		OnStartup:        app.startup,
-		OnShutdown:       func(_ context.Context) { runReg.stopAll() },
+		OnStartup:  app.startup,
+		OnShutdown: func(_ context.Context) { runReg.stopAll(); globalAuto.Drain(90 * time.Second) },
 		Bind: []interface{}{
 			app,
 		},

@@ -8,6 +8,7 @@ import { ProfileDrawer } from './ProfileDrawer';
 import { ProxyView } from './ProxyView';
 import { SettingsView } from './SettingsView';
 import { CloudView } from './CloudView';
+import { SyncPrompt } from './SyncPrompt';
 import { NativeTools } from './NativeTools';
 
 type Tab = 'profiles' | 'proxies' | 'cloud' | 'settings';
@@ -31,7 +32,7 @@ function Shell() {
   useEffect(() => { reload(); api.GetSettings().then(setSettings); }, [reload]);
   // Auto sync: refresh the list whenever a profile is pulled/pushed; surface failures.
   useEffect(() => onEvent('sync:event', (e: any) => {
-    if (e.phase === 'item') { reload(); if (e.error) toast(`${e.name || e.id} ${e.action === 'pull' ? '下载' : '上传'}失败：${e.error}`, 'bad'); else if (e.action === 'push') toast(`已同步 ${e.name} 到服务器`); }
+    if (e.phase === 'item') { reload(); if (e.message) toast(`${e.name || e.id}：${e.message}`, 'bad'); else if (e.error) toast(`${e.name || e.id} ${e.action === 'pull' ? '下载' : '上传'}失败：${e.error}`, 'bad'); else if (e.action === 'push') toast(`已同步 ${e.name} 到服务器`); else if (e.action === 'pull') toast(`已从云端拉取 ${e.name}`); }
     if (e.phase === 'done' && (e.pulled || e.pushed || e.failed)) { reload(); toast(e.message, e.failed ? 'bad' : undefined); }
     if (e.phase === 'error') toast(e.message, 'bad');
   }), [reload]);
@@ -287,4 +288,4 @@ const BulkModal: React.FC<{ proxies: Proxy[]; onClose: () => void; onDone: () =>
 
 const osLabel = (o: string) => ({ windows: 'Windows', macos: 'macOS', linux: 'Linux' } as any)[o] || o;
 
-export default function App() { return <ToastHost><Shell /><Splash /></ToastHost>; }
+export default function App() { return <ToastHost><Shell /><SyncPrompt /><Splash /></ToastHost>; }

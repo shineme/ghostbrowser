@@ -295,6 +295,7 @@ export namespace main {
 	    lastRun: number;
 	    cloudVersion: number;
 	    syncedAt: number;
+	    keepLocalVersion?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Profile(source);
@@ -318,6 +319,7 @@ export namespace main {
 	        this.lastRun = source["lastRun"];
 	        this.cloudVersion = source["cloudVersion"];
 	        this.syncedAt = source["syncedAt"];
+	        this.keepLocalVersion = source["keepLocalVersion"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -411,6 +413,8 @@ export namespace main {
 	    syncToken: string;
 	    syncPassword: string;
 	    autoSyncOff: boolean;
+	    syncPromptSecs: number;
+	    syncPromptAction: string;
 	    deviceName: string;
 	    deviceId: string;
 	    theme: string;
@@ -432,10 +436,82 @@ export namespace main {
 	        this.syncToken = source["syncToken"];
 	        this.syncPassword = source["syncPassword"];
 	        this.autoSyncOff = source["autoSyncOff"];
+	        this.syncPromptSecs = source["syncPromptSecs"];
+	        this.syncPromptAction = source["syncPromptAction"];
 	        this.deviceName = source["deviceName"];
 	        this.deviceId = source["deviceId"];
 	        this.theme = source["theme"];
 	    }
+	}
+	export class SyncItem {
+	    id: string;
+	    name: string;
+	    action: string;
+	    reason: string;
+	    conflict: boolean;
+	    cloudVersion: number;
+	    localVersion: number;
+	    cloudUpdatedAt: number;
+	    cloudDevice: string;
+	    localLastRun: number;
+	    size: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SyncItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.action = source["action"];
+	        this.reason = source["reason"];
+	        this.conflict = source["conflict"];
+	        this.cloudVersion = source["cloudVersion"];
+	        this.localVersion = source["localVersion"];
+	        this.cloudUpdatedAt = source["cloudUpdatedAt"];
+	        this.cloudDevice = source["cloudDevice"];
+	        this.localLastRun = source["localLastRun"];
+	        this.size = source["size"];
+	    }
+	}
+	export class SyncPrompt {
+	    items: SyncItem[];
+	    seconds: number;
+	    action: string;
+	    deadline: number;
+	    held: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SyncPrompt(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], SyncItem);
+	        this.seconds = source["seconds"];
+	        this.action = source["action"];
+	        this.deadline = source["deadline"];
+	        this.held = source["held"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class SyncEvent {
 	    phase: string;
@@ -447,6 +523,7 @@ export namespace main {
 	    pushed: number;
 	    failed: number;
 	    message?: string;
+	    prompt?: SyncPrompt;
 	
 	    static createFrom(source: any = {}) {
 	        return new SyncEvent(source);
@@ -463,8 +540,29 @@ export namespace main {
 	        this.pushed = source["pushed"];
 	        this.failed = source["failed"];
 	        this.message = source["message"];
+	        this.prompt = this.convertValues(source["prompt"], SyncPrompt);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
+	
+	
 	export class cloudMeta {
 	    id: string;
 	    name: string;
@@ -472,6 +570,9 @@ export namespace main {
 	    sha256: string;
 	    meta: number[];
 	    lockedBy: string;
+	    updatedAt: number;
+	    size: number;
+	    deviceName: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new cloudMeta(source);
@@ -485,6 +586,9 @@ export namespace main {
 	        this.sha256 = source["sha256"];
 	        this.meta = source["meta"];
 	        this.lockedBy = source["lockedBy"];
+	        this.updatedAt = source["updatedAt"];
+	        this.size = source["size"];
+	        this.deviceName = source["deviceName"];
 	    }
 	}
 

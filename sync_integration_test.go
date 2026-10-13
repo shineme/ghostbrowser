@@ -27,9 +27,9 @@ func TestPHPSyncRoundTrip(t *testing.T) {
 	project, _ := os.Getwd()
 	root := t.TempDir()
 	port := freePort()
-	base := "http://127.0.0.1:" + itoa(port)
+	base := "http://127.0.0.1:" + itoa(port) + "/ghostsync.php"
 	token := strings.Repeat("test-private-token-", 4)
-	cmd := exec.Command(php, "-d", "extension_dir="+filepath.Join(filepath.Dir(php), "ext"), "-d", "extension=pdo_sqlite", "-S", "127.0.0.1:"+itoa(port), "-t", filepath.Join(project, "cloud-server", "public"), filepath.Join(project, "cloud-server", "router.php"))
+	cmd := exec.Command(php, "-S", "127.0.0.1:"+itoa(port), "-t", filepath.Join(project, "cloud-server"))
 	cmd.Env = append(os.Environ(), "GHOST_SYNC_TOKEN="+token, "GHOST_SYNC_DATA_DIR="+filepath.Join(root, "server"))
 	var log bytes.Buffer
 	cmd.Stdout = &log
