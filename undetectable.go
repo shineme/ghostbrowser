@@ -59,7 +59,7 @@ func kitPath(st Settings) (string, error) {
 		kit = findUndetectableKit()
 	}
 	if kit == "" {
-		return "", fmt.Errorf("请选择 undetectable-kit 目录")
+		return "", fmt.Errorf("缺少定制 Chromium 与指纹包，请在设置页点「重新检测并安装环境」")
 	}
 	kit, err := filepath.Abs(kit)
 	if err != nil {
@@ -69,6 +69,20 @@ func kitPath(st Settings) (string, error) {
 		return "", fmt.Errorf("指纹库: %w", err)
 	}
 	return kit, nil
+}
+
+// launchHint explains why a launch could not proceed when the environment is
+// missing or still being installed, instead of failing silently.
+func launchHint(err error) error {
+	st := env.snapshot()
+	switch st.Phase {
+	case "downloading", "verifying", "extracting", "checking":
+		return fmt.Errorf("%w（环境正在自动安装：%s，可在设置页查看进度）", err, st.Message)
+	case "failed":
+		return fmt.Errorf("%w（自动安装失败：%s；在设置页点「重新检测并安装」重试）", err, st.Error)
+	default:
+		return fmt.Errorf("%w（在设置页点「重新检测并安装环境」可自动下载）", err)
+	}
 }
 
 func readLibrary(st Settings) ([]struct {
@@ -149,6 +163,10 @@ func (s *Store) nativePreset(sourceID string) (*NativeProfile, Fingerprint, erro
 
 func (a *App) UseUndetectableKit() (Settings, error) {
 	st := a.store.GetSettings()
+	if envReady() {
+		out := a.SaveSettings(applyToSettings(st))
+		return out, nil
+	}
 	kit, err := kitPath(st)
 	if err != nil {
 		return st, err
@@ -186,6 +204,11 @@ func (a *App) CreateNativeProfile(sourceID, name string) (Profile, error) {
 var uaChromeVersion = regexp.MustCompile(`Chrome/(\d+\.\d+\.\d+\.\d+)`)
 
 func (s *Store) nativeSpec(p *Profile, st Settings) (*undetectable.Spec, error) {
+	// The kit may have been installed after these paths were saved, so prefer
+	// whatever is actually on disk now.
+	if !fileExists(st.KernelPath) || !fileExists(filepath.Join(st.UndetectableKit, "fingerprints", "library.json")) {
+		st = applyToSettings(st)
+	}
 	kit, err := kitPath(st)
 	if err != nil {
 		return nil, err
@@ -287,6 +310,9 @@ func (s *Store) nativeSpec(p *Profile, st Settings) (*undetectable.Spec, error) 
 func (s *Store) launchUndetectable(p *Profile, st Settings) (*RunState, error) {
 	spec, err := s.nativeSpec(p, st)
 	if err != nil {
+		if !envReady() {
+			return nil, launchHint(err)
+		}
 		return nil, err
 	}
 	session, err := spec.Start(0)

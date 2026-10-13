@@ -539,3 +539,14 @@ a { color: #aab6ff; }
 .sync-countdown { height: 3px; border-radius: 3px; background: rgba(255,255,255,.06); overflow: hidden; margin-bottom: 10px; }
 .sync-countdown i { display: block; height: 100%; background: linear-gradient(90deg, #7c8cff, #b37bff); animation: sync-count linear forwards; transform-origin: left; }
 @keyframes sync-count { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+/* first-run environment bootstrap */
+.env-steps { display: grid; gap: 8px; margin-bottom: 16px; }
+.env-step { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--txt-3); }
+.env-step .n { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; border: 1px solid var(--hair-2); }
+.env-step.now { color: var(--txt); }
+.env-step.now .n { border-color: var(--a1); background: rgba(124,140,255,.14); color: #c9d1ff; }
+.env-step em { margin-left: auto; font-style: normal; font-size: 11.5px; }
+.env-bar { height: 4px; border-radius: 4px; background: rgba(255,255,255,.06); overflow: hidden; }
+.env-bar i { display: block; height: 100%; border-radius: 4px; background: var(--spectral); transition: width 260ms var(--ease-out); }
+.env-meta { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font-size: 11.5px; color: var(--txt-3); }

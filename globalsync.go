@@ -216,9 +216,7 @@ func (s *Store) PullGlobal() error {
 		ns.UndetectableKit = st.UndetectableKit
 	}
 	ns.ProfilesDir = st.ProfilesDir // where this computer keeps its browser data
-	if ns.KernelMode == "undetectable" && ns.UndetectableKit == "" {
-		ns.KernelMode = st.KernelMode
-	}
+	ns.KernelMode = "undetectable"
 	s.mu.Lock()
 	s.Settings = ns
 	s.Proxies = map[string]*Proxy{}

@@ -38,7 +38,7 @@ const mock = {
     { id: 'px3', name: 'JP Mobile', type: 'http', host: '133.18.2.40', port: 8000, user: 'a', pass: 'b', changeIpUrl: 'https://example/rotate', ip: '', country: '', city: '', timezone: '', lat: 0, lon: 0, latency: 0, status: 'fail', checkedAt: 0 },
   ] as any[],
   running: [] as any[],
-  settings: { kernelPath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', kernelMode: 'stock', profilesDir: 'C:\\Users\\me\\AppData\\Roaming\\GhostBrowser\\profiles', apiPort: 25325, apiEnabled: true, defaultOS: 'windows', syncServer: '', syncToken: '', syncPassword: '', deviceName: 'DESKTOP-01', deviceId: 'abc', theme: 'dark', syncPromptSecs: 3, syncPromptAction: 'pull' } as any,
+  settings: { kernelPath: '', kernelMode: 'undetectable', undetectableKit: 'undetectable-kit', profilesDir: 'C:\\Users\\me\\AppData\\Roaming\\GhostBrowser\\profiles', apiPort: 25325, apiEnabled: true, defaultOS: 'windows', syncServer: '', syncToken: '', syncPassword: '', deviceName: 'DESKTOP-01', deviceId: 'abc', theme: 'dark', syncPromptSecs: 3, syncPromptAction: 'pull' } as any,
 };
 ['Shopify-Store-A', 'FB-Ads-01', 'FB-Ads-02', 'Amazon-Seller-EU', 'TikTok-Shop', 'Gmail-Warmup'].forEach((n, i) => {
   mock.profiles.push({ id: rid(), name: n, group: i < 3 ? '广告投放' : '电商', tags: i % 2 ? ['养号'] : ['主力'], notes: '', storage: i % 3 === 0 ? 'cloud' : 'local', proxyId: i % 2 ? 'px2' : 'px1', startUrls: [], cookies: '', fingerprint: mockFP(i === 3 ? 'macos' : 'windows'), createdAt: Date.now() / 1000 - i * 3600, lastRun: i < 4 ? Date.now() / 1000 - i * 5000 : 0, cloudVersion: i % 3 === 0 ? 3 : 0, syncedAt: 0 });
@@ -125,6 +125,9 @@ const M = {
   PullProfile: async (_id: string) => { await wait(900); },
   ListCloud: async () => mock.profiles.filter(p => p.storage === 'cloud').map(p => ({ id: p.id, name: p.name, version: p.cloudVersion, sha256: 'e3b0c442…', meta: null, lockedBy: '' })),
   DataDir: async () => 'C:\\Users\\me\\AppData\\Roaming\\GhostBrowser',
+  EnvStatus: async (): Promise<any> => ({ ready: true, kitDir: 'undetectable-kit', chromeExe: 'undetectable-kit\\runtime\\chrome\\chrome.exe', phase: 'ready', pct: 100, done: 0, total: 0, speedBps: 0, message: '环境就绪', updatedAt: Math.floor(Date.now() / 1000), manifestFromServer: false }),
+  EnvRecheck: async (_force: boolean): Promise<any> => ({ ready: true, kitDir: 'undetectable-kit', chromeExe: 'undetectable-kit\\runtime\\chrome\\chrome.exe', phase: 'ready', pct: 100, done: 0, total: 0, speedBps: 0, message: '环境就绪', updatedAt: Math.floor(Date.now() / 1000), manifestFromServer: false }),
+  EnvCancel: async () => {},
 };
 
 export const api: typeof M = inWails ? (Go as any) : M;

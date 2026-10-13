@@ -47,13 +47,13 @@ func NewStore() *Store {
 		s.Settings.APIPort = 25325
 		s.Settings.APIEnabled = true
 	}
-	if s.Settings.KernelMode == "" {
-		s.Settings.KernelMode = "stock"
-		if kit := findUndetectableKit(); kit != "" {
-			s.Settings.UndetectableKit = kit
-			s.Settings.KernelMode = "undetectable"
-			s.Settings.KernelPath = filepath.Join(kit, "runtime", "chrome", "chrome.exe")
-		}
+	// The custom Chromium is the only kernel; older builds could pick stock or
+	// custom, so any stored mode other than undetectable is migrated here.
+	if s.Settings.KernelMode != "undetectable" {
+		s.Settings.KernelMode = "undetectable"
+	}
+	if kit := findUndetectableKit(); kit != "" && s.Settings.UndetectableKit == "" {
+		s.Settings.UndetectableKit = kit
 	}
 	if s.Settings.DefaultOS == "" {
 		s.Settings.DefaultOS = "windows"

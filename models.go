@@ -1,9 +1,7 @@
 package main
 
-// Fingerprint is the full per-profile fingerprint config.
-// In "stock" kernel mode it is applied by a generated extension + launch flags.
-// In "custom" kernel mode it is written to fingerprint.json and passed to your
-// own patched Chromium via --fingerprint-config=<path>.
+// Fingerprint is the full per-profile fingerprint config. It is written to the
+// native startInfo blob that the bundled custom Chromium reads at launch.
 type Fingerprint struct {
 	OS              string   `json:"os"` // windows | macos | linux
 	OSVersion       string   `json:"osVersion"`
@@ -90,7 +88,7 @@ type Profile struct {
 type Settings struct {
 	UndetectableKit string `json:"undetectableKit"`
 	KernelPath      string `json:"kernelPath"`
-	KernelMode      string `json:"kernelMode"` // stock | custom | undetectable
+	KernelMode      string `json:"kernelMode"` // always undetectable
 	ProfilesDir     string `json:"profilesDir"`
 	APIPort         int    `json:"apiPort"`
 	APIEnabled      bool   `json:"apiEnabled"`

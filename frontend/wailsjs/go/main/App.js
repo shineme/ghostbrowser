@@ -58,6 +58,18 @@ export function DevicePresets(arg1) {
   return window['go']['main']['App']['DevicePresets'](arg1);
 }
 
+export function EnvCancel() {
+  return window['go']['main']['App']['EnvCancel']();
+}
+
+export function EnvRecheck(arg1) {
+  return window['go']['main']['App']['EnvRecheck'](arg1);
+}
+
+export function EnvStatus() {
+  return window['go']['main']['App']['EnvStatus']();
+}
+
 export function ExportCookies(arg1) {
   return window['go']['main']['App']['ExportCookies'](arg1);
 }

@@ -36,6 +36,42 @@ export namespace main {
 	        this.custom = source["custom"];
 	    }
 	}
+	export class EnvStatus {
+	    ready: boolean;
+	    kitDir: string;
+	    chromeExe: string;
+	    phase: string;
+	    kind?: string;
+	    pct: number;
+	    done: number;
+	    total: number;
+	    speedBps: number;
+	    message?: string;
+	    error?: string;
+	    updatedAt: number;
+	    manifestFromServer: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new EnvStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ready = source["ready"];
+	        this.kitDir = source["kitDir"];
+	        this.chromeExe = source["chromeExe"];
+	        this.phase = source["phase"];
+	        this.kind = source["kind"];
+	        this.pct = source["pct"];
+	        this.done = source["done"];
+	        this.total = source["total"];
+	        this.speedBps = source["speedBps"];
+	        this.message = source["message"];
+	        this.error = source["error"];
+	        this.updatedAt = source["updatedAt"];
+	        this.manifestFromServer = source["manifestFromServer"];
+	    }
+	}
 	export class FPCatalog {
 	    osVersions: string[];
 	    browserMajors: string[];

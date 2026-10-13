@@ -25,6 +25,17 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.store = NewStore()
 	userLib.open(a.store.dir)
+	env.emit = func(s EnvStatus) { wruntime.EventsEmit(a.ctx, "env:setup", s) }
+	// The EXE ships alone: install the custom Chromium and fingerprint kit on
+	// first run, then point the store at whatever ended up on disk.
+	st := applyToSettings(a.store.GetSettings())
+	if st.KernelPath != a.store.GetSettings().KernelPath || st.UndetectableKit != a.store.GetSettings().UndetectableKit {
+		a.store.PutSettings(st)
+	}
+	go func() {
+		env.Ensure(false)
+		a.store.PutSettings(applyToSettings(a.store.GetSettings()))
+	}()
 	globalAuto = &autoSyncer{s: a.store, busy: map[string]bool{}, emit: func(e SyncEvent) { wruntime.EventsEmit(a.ctx, "sync:event", e) }}
 	runReg.onExit = func(id string) {
 		wruntime.EventsEmit(a.ctx, "profile:exit", id)
@@ -366,28 +377,68 @@ func (a *App) PickFolder() string {
 	return f
 }
 
-var verRe = regexp.MustCompile(`^(\d+)\.\d+\.\d+\.\d+$`)
+// ---------- environment ----------
 
-// KernelMajor detects the Chrome major version from the version folder that
-// sits next to chrome.exe on Windows; falls back to 141.
-func (a *App) KernelMajor() string {
-	if a.store.GetSettings().KernelMode == "undetectable" {
-		return "153"
-	}
-	k := a.store.GetSettings().KernelPath
-	if k != "" {
-		if ents, err := os.ReadDir(filepath.Dir(k)); err == nil {
-			vs := []string{}
-			for _, e := range ents {
-				if m := verRe.FindStringSubmatch(e.Name()); m != nil {
+// EnvStatus reports the last check-and-install state for the settings page.
+func (a *App) EnvStatus() EnvStatus { return env.snapshot() }
+
+// EnvRecheck downloads anything missing right away and rebinds the settings to
+// the installed kit. force reinstalls both packages even when they look present.
+func (a *App) EnvRecheck(force bool) EnvStatus {
+	go func() {
+		env.Ensure(force)
+		a.store.PutSettings(applyToSettings(a.store.GetSettings()))
+		wruntime.EventsEmit(a.ctx, "env:settings", a.store.GetSettings())
+	}()
+	return env.snapshot()
+}
+
+// EnvCancel stops an in-flight download.
+func (a *App) EnvCancel() { env.Cancel() }
+
+var verRe = regexp.MustCompile(`^(\d+)\.\d+\.\d+\.\d+`)
+
+// chromeMajorFrom returns the kernel's Chrome major version. A normal Chrome
+// install keeps versions in sibling folders; the delivered package is flat and
+// only carries <version>.manifest, so both are checked.
+func chromeMajorFrom(dir string) string {
+	vs := []string{}
+	if ents, err := os.ReadDir(dir); err == nil {
+		for _, e := range ents {
+			name := e.Name()
+			if m := verRe.FindStringSubmatch(name); m != nil {
+				if e.IsDir() {
+					vs = append(vs, m[1])
+					continue
+				}
+				if strings.HasSuffix(name, ".manifest") {
 					vs = append(vs, m[1])
 				}
 			}
-			sort.Strings(vs)
-			if len(vs) > 0 {
-				return vs[len(vs)-1]
-			}
 		}
+	}
+	sort.Strings(vs)
+	if len(vs) > 0 {
+		return vs[len(vs)-1]
+	}
+	return ""
+}
+
+// KernelMajor detects the Chrome major version from the version folder that
+// sits next to chrome.exe; falls back to 153 for the bundled kernel and 141
+// otherwise.
+func (a *App) KernelMajor() string {
+	st := a.store.GetSettings()
+	if k := st.KernelPath; k != "" {
+		if m := chromeMajorFrom(filepath.Dir(k)); m != "" {
+			return m
+		}
+	}
+	if m := chromeMajorFrom(filepath.Dir(defaultKernelPath(st))); m != "" {
+		return m
+	}
+	if st.KernelMode == "undetectable" {
+		return "153"
 	}
 	return "141"
 }

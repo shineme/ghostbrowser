@@ -9,6 +9,7 @@ import { ProxyView } from './ProxyView';
 import { SettingsView } from './SettingsView';
 import { CloudView } from './CloudView';
 import { SyncPrompt } from './SyncPrompt';
+import { EnvSetup } from './EnvSetup';
 import { NativeTools } from './NativeTools';
 
 type Tab = 'profiles' | 'proxies' | 'cloud' | 'settings';
@@ -92,7 +93,7 @@ function Shell() {
         <div className="status-card spot">
           <div className="row1"><span className="live" /> 本地 API 运行中</div>
           <div className="row2"><span>端口</span><b className="num">:{settings?.apiPort ?? '—'}</b></div>
-          <div className="row2"><span>内核</span><b>{settings?.kernelMode === 'custom' ? '自研内核' : '标准 Chrome'}</b></div>
+          <div className="row2"><span>内核</span><b>定制 Chromium</b></div>
           <div className="row2"><span>运行中</span><b className="num">{running.size} / {profiles.length}</b></div>
         </div>
       </aside>
@@ -290,4 +291,4 @@ const BulkModal: React.FC<{ proxies: Proxy[]; onClose: () => void; onDone: () =>
 
 const osLabel = (o: string) => ({ windows: 'Windows', macos: 'macOS', linux: 'Linux' } as any)[o] || o;
 
-export default function App() { return <ToastHost><Shell /><SyncPrompt /><Splash /></ToastHost>; }
+export default function App() { return <ToastHost><Shell /><SyncPrompt /><EnvSetup onReady={() => {}} /><Splash /></ToastHost>; }

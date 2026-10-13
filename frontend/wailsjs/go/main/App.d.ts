@@ -30,6 +30,12 @@ export function DeleteProxy(arg1:string):Promise<void>;
 
 export function DevicePresets(arg1:string):Promise<Array<main.DevicePreset>>;
 
+export function EnvCancel():Promise<void>;
+
+export function EnvRecheck(arg1:boolean):Promise<main.EnvStatus>;
+
+export function EnvStatus():Promise<main.EnvStatus>;
+
 export function ExportCookies(arg1:string):Promise<string>;
 
 export function ExportNativeJSON(arg1:string):Promise<string>;

@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { api, Settings } from './api';
 import { Icon, Field, Toggle, useToast } from './ui';
+import type { EnvStatus } from './EnvSetup';
+
+const mb = (b: number) => b ? `${(b / 1048576).toFixed(b > 1e8 ? 0 : 1)} MB` : '';
 
 export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings) => void }> = ({ settings, onSaved }) => {
   const toast = useToast();
@@ -12,29 +15,58 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
   const refreshDefault = () => api.DefaultKernelPath().then(setDefaultKernel).catch(() => setDefaultKernel(''));
   useEffect(() => { refreshDefault(); }, []);
   const save = async () => { const out = await api.SaveSettings(s); onSaved(out); refreshDefault(); };
-  const resetKernel = async () => { const f = await api.DefaultKernelPath(); if (f) set({ kernelPath: f }); else toast('没有检测到默认浏览器，请点击“浏览”手动指定', 'bad'); };
+  const resetKernel = async () => { const f = await api.DefaultKernelPath(); if (f) set({ kernelPath: f }); else toast('未找到已安装的定制 Chromium，请点击“浏览”手动指定', 'bad'); };
   const useKit = async () => { try { const out = await api.UseUndetectableKit(); setS(out); onSaved(out); refreshDefault(); toast('已启用定制 Chromium'); } catch (e) { toast(String(e), 'bad'); } };
   const pickKernel = async () => { const f = await api.PickKernel(); if (f) set({ kernelPath: f }); };
   const pickFolder = async () => { const f = await api.PickFolder(); if (f) set({ profilesDir: f }); };
   const test = async () => { setTesting(true); try { await api.TestSync(); toast('同步服务器连接正常', 'ok'); } catch (e: any) { toast(String(e?.message || e), 'bad'); } finally { setTesting(false); } };
 
+  const [envS, setEnvS] = useState<EnvStatus | null>(null);
+  useEffect(() => { api.EnvStatus().then((x: any) => setEnvS(x)).catch(() => {}); return () => {}; }, []);
+  const recheck = async (force: boolean) => {
+    try {
+      const x = await api.EnvRecheck(force);
+      setEnvS(x as any);
+      toast(force ? '正在重新下载并安装环境…' : '正在检测环境…');
+    } catch (e: any) { toast(String(e?.message || e), 'bad'); }
+  };
+
+  const envBusy = envS && ['checking', 'downloading', 'verifying', 'extracting'].includes(envS.phase);
+
   return (
     <div style={{ maxWidth: 780 }}>
       <div className="panel pad setting-card spot rise" style={{ ['--i' as any]: 0 }}>
-        <div className="head"><span className="ic"><Icon.cpu /></span><div><h4>浏览器内核</h4><span>选择指纹在哪一层生效</span></div></div>
-        <div className="choice three">
-          <button className={s.kernelMode === 'stock' || !s.kernelMode ? 'on' : ''} onClick={() => set({ kernelMode: 'stock' })}><b><Icon.bolt s={15} />标准 Chrome<span className="radio" /></b><small>MV3 扩展在页面主环境覆盖指纹，即装即用</small></button>
-          <button className={s.kernelMode === 'undetectable' ? 'on' : ''} onClick={() => set({ kernelMode: 'undetectable' })}><b><Icon.layers s={15} />定制 Chromium<span className="radio" /></b><small>本地指纹库 + 原生模板，需兼容内核</small></button>
-          <button className={s.kernelMode === 'custom' ? 'on' : ''} onClick={() => set({ kernelMode: 'custom' })}><b><Icon.shield s={15} />自研补丁内核<span className="radio" /></b><small>fingerprint.json 直接交给 C++ 层</small></button>
+        <div className="head"><span className="ic"><Icon.cpu /></span><div><h4>浏览器内核</h4><span>定制 Chromium + 原生指纹模板</span></div></div>
+        <div className="choice">
+          <button className="on" onClick={() => set({ kernelMode: 'undetectable' })}><b><Icon.layers s={15} />定制 Chromium<span className="radio" /></b><small>本地指纹库 + 原生模板，环境缺失时自动下载安装</small></button>
         </div>
+
+        <div className={`geo-card ${envS?.ready ? '' : envS?.phase === 'failed' ? 'bad' : 'warn'}`}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className={`badge ${envS?.ready ? 'ok' : envS?.phase === 'failed' ? 'fail' : 'unknown'}`}><span className="d" />{envS?.ready ? '环境就绪' : envS?.phase === 'failed' ? '安装失败' : envBusy ? '安装中' : '待安装'}</span>
+            <b style={{ fontSize: 12.5 }}>{envS?.message || '尚未检测'}</b>
+          </div>
+          {envBusy && envS!.total > 0 && <div className="env-bar" style={{ marginTop: 8 }}><i style={{ width: `${Math.max(envS!.pct, 1)}%` }} /></div>}
+          {envBusy && <div className="env-meta num"><span>{mb(envS!.done)}{envS!.total ? ` / ${mb(envS!.total)}` : ''}</span><span>{envS!.speedBps ? `${(envS!.speedBps / 1048576).toFixed(1)} MB/s` : ''}</span></div>}
+          {envS?.error && <div className="sub" style={{ color: '#ffb3bc', marginTop: 4, wordBreak: 'break-all' }}>{envS.error}</div>}
+          <div className="sub" style={{ marginTop: 4 }}>内核：<code className="mono">{envS?.chromeExe || defaultKernel || '未安装'}</code></div>
+          <div className="sub" style={{ marginTop: 2 }}>校验：{envS?.manifestFromServer ? '服务器 manifest.json' : 'EXE 内置校验值'}{envS?.kitDir ? ` · ${envS.kitDir}` : ''}</div>
+        </div>
+
+        <div className="row" style={{ marginTop: 10, gap: 10 }}>
+          <button className="btn" disabled={!!envBusy} onClick={() => recheck(false)}><Icon.refresh s={14} /> 重新检测并安装</button>
+          <button className="btn ghost" disabled={!!envBusy} onClick={() => recheck(true)}><Icon.download s={14} /> 强制重新下载</button>
+          {envBusy && <button className="btn ghost" onClick={() => api.EnvCancel()}>取消</button>}
+        </div>
+
         <Field label="浏览器 EXE 路径" hint={`默认路径：${defaultKernel || '启动时自动检测，也可以手动选择'}`}>
-          <div className="row"><input type="text" value={s.kernelPath} onChange={e => set({ kernelPath: e.target.value })} placeholder="选择 chrome.exe 或 msedge.exe" /><button className="btn" style={{ flex: 'none' }} onClick={pickKernel}><Icon.folder s={15} /> 浏览</button><button className="btn ghost" style={{ flex: 'none' }} onClick={resetKernel}><Icon.refresh s={14} /> 恢复默认</button></div>
+          <div className="row"><input type="text" value={s.kernelPath} onChange={e => set({ kernelPath: e.target.value })} placeholder="定制 Chromium 的 chrome.exe" /><button className="btn" style={{ flex: 'none' }} onClick={pickKernel}><Icon.folder s={15} /> 浏览</button><button className="btn ghost" style={{ flex: 'none' }} onClick={resetKernel}><Icon.refresh s={14} /> 恢复默认</button></div>
         </Field>
-        {s.kernelMode === 'undetectable' && <div className="rise">
+        <div className="rise">
           <Field label="本地指纹包目录" hint="包含 runtime/chrome 和 fingerprints/library.json"><input type="text" value={s.undetectableKit || ''} onChange={e => set({ undetectableKit: e.target.value })} placeholder="项目目录\\undetectable-kit" /></Field>
-          <button className="btn" onClick={useKit}><Icon.layers s={14} /> 使用项目自带 Chromium 与指纹库</button>
-          <div className="sub" style={{ marginTop: 10 }}>普通 Chrome / Edge 不能运行原生模板。关闭 GhostBrowser 会停止它启动的环境，当前内置模板已验证 Windows。</div>
-        </div>}
+          <button className="btn" onClick={useKit}><Icon.layers s={14} /> 使用当前已安装的 Chromium 与指纹库</button>
+          <div className="sub" style={{ marginTop: 10 }}>标准 Chrome / Edge 无法运行原生模板。关闭 GhostBrowser 会停止它启动的环境，内置模板已验证 Windows。</div>
+        </div>
       </div>
 
       <div className="panel pad setting-card spot rise" style={{ ['--i' as any]: 1 }}>
