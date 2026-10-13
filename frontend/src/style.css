@@ -501,3 +501,13 @@ a { color: #aab6ff; }
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
   .aurora { display: none; }
 }
+
+/* searchable selects + language chips */
+.ssel { display: flex; flex-direction: column; gap: 6px; }
+.ssel-q { font-size: 12.5px; padding-top: 7px !important; padding-bottom: 7px !important; }
+.langpick .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; min-height: 28px; align-items: center; }
+.langpick .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 999px; background: rgba(139,124,255,.12); border: 1px solid rgba(139,124,255,.28); font-size: 12px; animation: rise .25s var(--ease-out, ease) backwards; }
+.langpick .chip b { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+.langpick .chip small { color: var(--txt-3); }
+.langpick .chip button { background: none; border: 0; color: var(--txt-2); cursor: pointer; padding: 0 4px; font-size: 14px; line-height: 1; border-radius: 6px; }
+.langpick .chip button:hover { color: var(--txt); background: rgba(255,255,255,.08); }

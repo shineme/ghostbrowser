@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { CountrySelect, LanguagePicker, TimezoneSelect, countryOfTz } from './locales';
 import { api, Profile, Proxy, Fingerprint } from './api';
 import { Field, Toggle, Icon, flag, useToast, useExit, Segmented, Avatar } from './ui';
 
 const OSES = [['windows', 'Windows'], ['macos', 'macOS'], ['linux', 'Linux']];
-const TZS = ['America/New_York', 'America/Chicago', 'America/Los_Angeles', 'Europe/London', 'Europe/Berlin', 'Europe/Paris', 'Europe/Moscow', 'Asia/Shanghai', 'Asia/Hong_Kong', 'Asia/Tokyo', 'Asia/Singapore', 'Australia/Sydney'];
+
 
 export const ProfileDrawer: React.FC<{
   profile: Profile | null; proxies: Proxy[]; onClose: () => void; onSaved: () => void;
@@ -116,19 +117,22 @@ export const ProfileDrawer: React.FC<{
           </div>}
 
           {tab === 'adv' && native && <div className="tabpane">
-            <Field label="时区"><input type="text" value={fp.timezone} onChange={e => setFP({ timezone: e.target.value, timezoneFromIP: false })} /></Field>
-            <Field label="语言（逗号分隔）"><input type="text" value={(fp.languages || []).join(', ')} onChange={e => setFP({ languages: e.target.value.split(',').map(s => s.trim()).filter(Boolean), languageFromIP: false })} /></Field>
+            <Field label="国家/地区预设" hint="一键填入该国家的时区、语言和地理坐标"><CountrySelect value={countryOfTz(fp.timezone)} onChange={c => setFP({ timezone: c.tz, languages: c.langs, latitude: c.lat, longitude: c.lon, timezoneFromIP: false, languageFromIP: false, geoFromIP: false })} /></Field>
+            <Field label="时区"><TimezoneSelect value={fp.timezone} onChange={v => setFP({ timezone: v, timezoneFromIP: false })} /></Field>
+            <Field label="语言（按优先级）"><LanguagePicker value={fp.languages || []} onChange={v => setFP({ languages: v, languageFromIP: false })} /></Field>
             <Field label="二进制模板"><select value={p.native?.templateKey} onChange={e => setP({ ...p, native: { ...p.native!, templateKey: e.target.value } as any })}><option value="windows-intel-a">Windows Intel · A</option><option value="windows-intel-a2">Windows Intel · A2</option><option value="windows-intel-b">Windows Intel · B</option></select></Field>
             <div className="sub">字体、媒体设备、语音、WebGL 参数和未映射的噪声开关继承模板。高级配置可在「指纹库 / JSON」导出启动 JSON，修改后导入为新环境。此模式直接使用内核和 CDP，需保持 GhostBrowser 运行。</div>
           </div>}
 
           {tab === 'adv' && !native && <div className="tabpane">
             <div className="section-title">地区 — 跟随代理出口 IP</div>
+            <Field label="国家/地区预设" hint="一键填入该国家的时区、语言和地理坐标"><CountrySelect value={countryOfTz(fp.timezone)} onChange={c => setFP({ timezone: c.tz, languages: c.langs, latitude: c.lat, longitude: c.lon, timezoneFromIP: false, languageFromIP: false, geoFromIP: false })} /></Field>
             <Toggle on={fp.timezoneFromIP} onChange={v => setFP({ timezoneFromIP: v })} label="时区跟随 IP" hint="关闭则使用下方手动时区" />
-            {!fp.timezoneFromIP && <Field label="时区"><select value={fp.timezone} onChange={e => setFP({ timezone: e.target.value })}>{TZS.map(t => <option key={t} value={t}>{t}</option>)}</select></Field>}
+            {!fp.timezoneFromIP && <Field label="时区"><TimezoneSelect value={fp.timezone} onChange={v => setFP({ timezone: v })} /></Field>}
             <Toggle on={fp.languageFromIP} onChange={v => setFP({ languageFromIP: v })} label="语言跟随 IP" hint="按出口国家设置 Accept-Language" />
-            {!fp.languageFromIP && <Field label="语言 (逗号分隔)"><input type="text" value={(fp.languages || []).join(', ')} onChange={e => setFP({ languages: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} /></Field>}
+            {!fp.languageFromIP && <Field label="语言（按优先级）"><LanguagePicker value={fp.languages || []} onChange={v => setFP({ languages: v })} /></Field>}
             <Toggle on={fp.geoFromIP} onChange={v => setFP({ geoFromIP: v })} label="地理定位跟随 IP" />
+            {!fp.geoFromIP && <div className="grid2"><Field label="纬度"><input type="number" step="0.0001" value={fp.latitude} onChange={e => setFP({ latitude: +e.target.value })} /></Field><Field label="经度"><input type="number" step="0.0001" value={fp.longitude} onChange={e => setFP({ longitude: +e.target.value })} /></Field></div>}
 
             <div className="section-title">噪声 — 让每个环境的指纹都独一无二</div>
             <Toggle on={fp.canvasNoise} onChange={v => setFP({ canvasNoise: v })} label="Canvas 噪声" hint="按环境种子注入稳定噪声" />
