@@ -15,6 +15,23 @@ export const ProfileDrawer: React.FC<{
   profile: Profile | null; proxies: Proxy[]; onClose: () => void; onSaved: () => void;
 }> = ({ profile, proxies, onClose, onSaved }) => {
   const toast = useToast();
+  const [pxText, setPxText] = useState('');
+  const [pxBusy, setPxBusy] = useState(false);
+  const [pxInfo, setPxInfo] = useState('');
+  const [extraProxies, setExtraProxies] = useState<Proxy[]>([]);
+  const quickProxy = async () => {
+    setPxBusy(true); setPxInfo('');
+    try {
+      const pv: any[] = await api.PreviewProxies(pxText, 'auto') as any;
+      const hit = pv.find(r => r.ok);
+      if (!hit) { setPxInfo(`无法识别：${pv[0]?.error || '格式不对'}`); return; }
+      const same = proxies.find(x => x.host === hit.proxy.host && x.port === hit.proxy.port && (x.user || '') === (hit.proxy.user || ''));
+      const saved = same || (await api.ImportProxyList([hit.proxy], ''))[0];
+      const r = await api.CheckProxy(saved.id);
+      setExtraProxies(x => [r, ...x]); setP(cur => ({ ...cur, proxyId: r.id })); setPxText('');
+      setPxInfo(r.status === 'ok' ? `✓ ${r.type.toUpperCase()} · ${r.country} ${r.region || ''} ${r.city || ''} · ${r.ipType === 'hosting' ? '机房' : r.ipType === 'mobile' ? '移动' : '住宅'} IP · ${r.latency} ms${same ? '（已在代理列表中）' : '，已加入代理列表'}` : `✗ 不可用：${r.error || '连接失败'}（已加入代理列表，可稍后重试）`);
+    } catch (e: any) { setPxInfo(String(e?.message || e)); } finally { setPxBusy(false); }
+  };
   const [tab, setTab] = useState<'basic' | 'fp' | 'adv'>('basic');
   const [p, setP] = useState<Profile>(() => profile ? JSON.parse(JSON.stringify(profile)) : blank());
   const [gpus, setGpus] = useState<{ vendor: string; renderer: string }[]>([]);
@@ -117,8 +134,13 @@ export const ProfileDrawer: React.FC<{
             <Field label="代理">
               <select value={p.proxyId} onChange={e => setP({ ...p, proxyId: e.target.value })}>
                 <option value="">不使用代理（直连）</option>
-                {proxies.map(px => <option key={px.id} value={px.id}>{flag(px.country)} · {px.name} · {px.type}{px.status === 'ok' ? ` · ${px.city || px.ip}` : ''}</option>)}
+                {[...extraProxies.filter(x => !proxies.some(y => y.id === x.id)), ...proxies].map(px => <option key={px.id} value={px.id}>{flag(px.country)} · {px.name} · {px.type}{px.status === 'ok' ? ` · ${px.city || px.ip}` : ''}</option>)}
               </select>
+              <div className="combo-row" style={{ marginTop: 6 }}>
+                <input type="text" value={pxText} onChange={e => setPxText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') quickProxy(); }} placeholder="或直接粘贴一个代理，自动识别格式并检测，如 user:pass@1.2.3.4:8080" />
+                <button type="button" className="btn sm combo-btn" disabled={pxBusy || !pxText.trim()} onClick={quickProxy}>{pxBusy ? '检测中…' : '识别并使用'}</button>
+              </div>
+              {pxInfo && <div className="sub" style={{ marginTop: 4 }}>{pxInfo}</div>}
             </Field>
             <Field label="启动页 (每行一个)"><textarea value={(p.startUrls || []).join('\n')} onChange={e => setP({ ...p, startUrls: e.target.value.split('\n') })} placeholder="https://facebook.com" /></Field>
             <Field label="导入 Cookies (JSON, 下次启动时写入)" hint="支持 Cookie-Editor / EditThisCookie 的导出格式"><textarea value={p.cookies} onChange={e => setP({ ...p, cookies: e.target.value })} placeholder="[ { &quot;name&quot;: …, &quot;domain&quot;: … } ]" /></Field>
@@ -156,7 +178,7 @@ export const ProfileDrawer: React.FC<{
                   onChange={v => setFP({ webglRenderer: v })} onSave={r => libAdd('gpus', `${fp.webglVendor}\x1f${r}`)} onRemove={r => libRemove('gpus', `${fp.webglVendor}\x1f${r}`)} placeholder="如 ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 ...)" />
               </Field>
             </div>
-            {!native && <div className="row" style={{ gap: 8, marginTop: 6 }}>
+            {!native && <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
               <button className="btn sm" onClick={savePreset}><Icon.check s={14} /> 把当前机型存为我的设备预设</button>
               {device.startsWith('my-') && <button className="btn sm" onClick={delPreset}>删除这个我的预设</button>}
             </div>}

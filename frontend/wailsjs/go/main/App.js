@@ -6,6 +6,10 @@ export function CheckAllProxies() {
   return window['go']['main']['App']['CheckAllProxies']();
 }
 
+export function CheckProxies(arg1) {
+  return window['go']['main']['App']['CheckProxies'](arg1);
+}
+
 export function CheckProxy(arg1) {
   return window['go']['main']['App']['CheckProxy'](arg1);
 }
@@ -42,6 +46,10 @@ export function DeleteProfiles(arg1) {
   return window['go']['main']['App']['DeleteProfiles'](arg1);
 }
 
+export function DeleteProxies(arg1) {
+  return window['go']['main']['App']['DeleteProxies'](arg1);
+}
+
 export function DeleteProxy(arg1) {
   return window['go']['main']['App']['DeleteProxy'](arg1);
 }
@@ -76,6 +84,10 @@ export function ImportNativeJSON(arg1) {
 
 export function ImportProxies(arg1) {
   return window['go']['main']['App']['ImportProxies'](arg1);
+}
+
+export function ImportProxyList(arg1, arg2) {
+  return window['go']['main']['App']['ImportProxyList'](arg1, arg2);
 }
 
 export function KernelMajor() {
@@ -126,6 +138,10 @@ export function PickKernel() {
   return window['go']['main']['App']['PickKernel']();
 }
 
+export function PreviewProxies(arg1, arg2) {
+  return window['go']['main']['App']['PreviewProxies'](arg1, arg2);
+}
+
 export function PullProfile(arg1) {
   return window['go']['main']['App']['PullProfile'](arg1);
 }
@@ -156,6 +172,10 @@ export function SaveSettings(arg1) {
 
 export function ScreenOptions(arg1) {
   return window['go']['main']['App']['ScreenOptions'](arg1);
+}
+
+export function SpeedTestProxies(arg1) {
+  return window['go']['main']['App']['SpeedTestProxies'](arg1);
 }
 
 export function StartProfile(arg1) {

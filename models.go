@@ -46,6 +46,8 @@ type Proxy struct {
 	User     string `json:"user"`
 	Pass     string `json:"pass"`
 	ChangeIP string `json:"changeIpUrl"`
+	Tag      string `json:"tag"`                   // batch label set on import, searchable
+	Guessed  bool   `json:"typeGuessed,omitempty"` // protocol inferred; the first check confirms it
 	// last check result
 	IP       string  `json:"ip"`
 	Country  string  `json:"country"`
@@ -53,7 +55,14 @@ type Proxy struct {
 	Timezone string  `json:"timezone"`
 	Lat      float64 `json:"lat"`
 	Lon      float64 `json:"lon"`
-	Latency  int64   `json:"latency"`
+	Latency  int64   `json:"latency"`   // warm round trip through the proxy, ms
+	Connect  int64   `json:"connectMs"` // first request incl. proxy handshake, ms
+	Region   string  `json:"region"`
+	ISP      string  `json:"isp"`
+	IPType   string  `json:"ipType"` // residential | hosting | mobile
+	Speed    int64   `json:"speedKbps"`
+	SpeedAt  int64   `json:"speedAt"`
+	Error    string  `json:"error"`
 	Status   string  `json:"status"` // unknown | ok | fail
 	Checked  int64   `json:"checkedAt"`
 }

@@ -2,12 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -189,12 +189,41 @@ func (a *App) ParseProxy(line string) (Proxy, error) { return ParseProxy(line) }
 
 func (a *App) ImportProxies(text string) []Proxy {
 	out := []Proxy{}
-	for _, line := range strings.Split(text, "\n") {
-		if p, err := ParseProxy(line); err == nil {
-			out = append(out, a.store.PutProxy(p))
+	for _, pv := range PreviewProxyText(text, "http", a.store.ListProxies()) {
+		if pv.OK && !pv.Dup {
+			out = append(out, a.store.PutProxy(pv.Proxy))
 		}
 	}
 	return out
+}
+
+// PreviewProxies parses pasted text and marks duplicates, without saving.
+func (a *App) PreviewProxies(text, defType string) []ProxyPreview {
+	return PreviewProxyText(text, defType, a.store.ListProxies())
+}
+
+// ImportProxyList saves parsed proxies; tag labels the batch, and when it is
+// set the names become "tag #n".
+func (a *App) ImportProxyList(list []Proxy, tag string) []Proxy {
+	tag = strings.TrimSpace(tag)
+	out := []Proxy{}
+	for i, p := range list {
+		p.ID, p.Status = "", "unknown"
+		if tag != "" {
+			p.Tag = tag
+			if p.Name == fmt.Sprintf("%s:%d", p.Host, p.Port) {
+				p.Name = fmt.Sprintf("%s #%d", tag, i+1)
+			}
+		}
+		out = append(out, a.store.PutProxy(p))
+	}
+	return out
+}
+
+func (a *App) emitProxy(p Proxy) {
+	if a.ctx != nil {
+		wruntime.EventsEmit(a.ctx, "proxy:checked", p)
+	}
 }
 
 func (a *App) CheckProxy(id string) Proxy {
@@ -202,26 +231,66 @@ func (a *App) CheckProxy(id string) Proxy {
 	if !ok {
 		return Proxy{}
 	}
-	return a.store.PutProxy(CheckProxy(*p))
+	r := a.store.PutProxy(CheckProxy(*p))
+	a.emitProxy(r)
+	return r
 }
 
 func (a *App) CheckProxyDraft(p Proxy) Proxy { return CheckProxy(p) }
 
-func (a *App) CheckAllProxies() []Proxy {
-	list := a.store.ListProxies()
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 8)
-	for _, p := range list {
-		wg.Add(1)
-		go func(p Proxy) {
-			defer wg.Done()
-			sem <- struct{}{}
-			a.store.PutProxy(CheckProxy(p))
-			<-sem
-		}(p)
-	}
-	wg.Wait()
+// CheckProxies checks the given proxies (all when ids is empty), 16 at a time,
+// emitting "proxy:checked" as each one finishes.
+func (a *App) CheckProxies(ids []string) []Proxy {
+	runPool(a.pickProxies(ids), 16, func(p Proxy) {
+		r := CheckProxy(p)
+		if cur, ok := a.store.GetProxy(p.ID); ok { // keep edits made meanwhile
+			r.Name, r.Tag, r.ChangeIP, r.Speed, r.SpeedAt = cur.Name, cur.Tag, cur.ChangeIP, cur.Speed, cur.SpeedAt
+		}
+		a.emitProxy(a.store.PutProxy(r))
+	})
 	return a.store.ListProxies()
+}
+
+func (a *App) CheckAllProxies() []Proxy { return a.CheckProxies(nil) }
+
+// SpeedTestProxies measures download speed through each proxy, 4 at a time.
+func (a *App) SpeedTestProxies(ids []string) []Proxy {
+	runPool(a.pickProxies(ids), 4, func(p Proxy) {
+		r := SpeedTestProxy(p)
+		if cur, ok := a.store.GetProxy(p.ID); ok {
+			c := *cur
+			c.Speed, c.SpeedAt = r.Speed, r.SpeedAt
+			if r.Speed == 0 {
+				c.Error = r.Error
+			}
+			a.emitProxy(a.store.PutProxy(c))
+		}
+	})
+	return a.store.ListProxies()
+}
+
+func (a *App) DeleteProxies(ids []string) {
+	for _, id := range ids {
+		a.store.DeleteProxy(id)
+	}
+}
+
+func (a *App) pickProxies(ids []string) []Proxy {
+	all := a.store.ListProxies()
+	if len(ids) == 0 {
+		return all
+	}
+	want := map[string]bool{}
+	for _, id := range ids {
+		want[id] = true
+	}
+	out := []Proxy{}
+	for _, p := range all {
+		if want[p.ID] {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // ---------- settings ----------

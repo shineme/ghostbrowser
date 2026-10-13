@@ -4,6 +4,8 @@ import {main} from '../models';
 
 export function CheckAllProxies():Promise<Array<main.Proxy>>;
 
+export function CheckProxies(arg1:Array<string>):Promise<Array<main.Proxy>>;
+
 export function CheckProxy(arg1:string):Promise<main.Proxy>;
 
 export function CheckProxyDraft(arg1:main.Proxy):Promise<main.Proxy>;
@@ -22,6 +24,8 @@ export function DeleteDevicePreset(arg1:string):Promise<void>;
 
 export function DeleteProfiles(arg1:Array<string>):Promise<void>;
 
+export function DeleteProxies(arg1:Array<string>):Promise<void>;
+
 export function DeleteProxy(arg1:string):Promise<void>;
 
 export function DevicePresets(arg1:string):Promise<Array<main.DevicePreset>>;
@@ -39,6 +43,8 @@ export function GetSettings():Promise<main.Settings>;
 export function ImportNativeJSON(arg1:string):Promise<main.Profile>;
 
 export function ImportProxies(arg1:string):Promise<Array<main.Proxy>>;
+
+export function ImportProxyList(arg1:Array<main.Proxy>,arg2:string):Promise<Array<main.Proxy>>;
 
 export function KernelMajor():Promise<string>;
 
@@ -64,6 +70,8 @@ export function PickFolder():Promise<string>;
 
 export function PickKernel():Promise<string>;
 
+export function PreviewProxies(arg1:string,arg2:string):Promise<Array<main.ProxyPreview>>;
+
 export function PullProfile(arg1:string):Promise<void>;
 
 export function PushProfile(arg1:string):Promise<void>;
@@ -79,6 +87,8 @@ export function SaveProxy(arg1:main.Proxy):Promise<main.Proxy>;
 export function SaveSettings(arg1:main.Settings):Promise<main.Settings>;
 
 export function ScreenOptions(arg1:string):Promise<Array<string>>;
+
+export function SpeedTestProxies(arg1:Array<string>):Promise<Array<main.Proxy>>;
 
 export function StartProfile(arg1:string):Promise<main.RunState>;
 

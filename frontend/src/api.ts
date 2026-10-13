@@ -98,6 +98,16 @@ const M = {
   CheckProxy: async (id: string) => { await wait(900); const p = mock.proxies.find(x => x.id === id); p.status = 'ok'; p.latency = 140; p.ip = p.host; p.country = p.country || 'US'; return p; },
   CheckProxyDraft: async (p: any) => { await wait(900); return { ...p, status: 'ok', ip: p.host, country: 'US', city: 'Ashburn', timezone: 'America/New_York', latency: 150 }; },
   CheckAllProxies: async () => { await wait(1400); return mock.proxies; },
+  CheckProxies: async (ids: string[]) => { await wait(1200); for (const p of mock.proxies) if (!ids.length || ids.includes(p.id)) Object.assign(p, { status: 'ok', latency: 120 + Math.round(Math.random() * 300), connectMs: 600, ip: p.host, country: p.country || 'US', city: 'Los Angeles', region: 'California', isp: 'Comcast Cable', ipType: 'residential', checkedAt: Date.now() / 1000 }); return mock.proxies; },
+  SpeedTestProxies: async (ids: string[]) => { await wait(1500); for (const p of mock.proxies) if (!ids.length || ids.includes(p.id)) Object.assign(p, { speedKbps: 8000 + Math.round(Math.random() * 40000), speedAt: Date.now() / 1000 }); return mock.proxies; },
+  DeleteProxies: async (ids: string[]) => { mock.proxies = mock.proxies.filter(p => !ids.includes(p.id)); },
+  PreviewProxies: async (text: string, def: string) => text.split('\n').map((raw, i) => ({ raw: raw.trim(), line: i + 1 })).filter(x => x.raw && !x.raw.startsWith('#')).map(({ raw, line }) => {
+    const m = /^(?:(\w+):\/\/)?(?:([^:@]+):([^@]+)@)?([\w.-]+):(\d+)(?::([^:]+):(.+))?$/.exec(raw);
+    if (!m) return { line, raw, ok: false, error: '无法识别格式', dup: false, proxy: {} as any };
+    const port = +m[5]; const type = m[1] || (def === 'auto' ? (port === 1080 ? 'socks5' : 'http') : def);
+    return { line, raw, ok: true, error: '', dup: mock.proxies.some(p => p.host === m[4] && p.port === port), proxy: { type, host: m[4], port, user: m[2] || m[6] || '', pass: m[3] || m[7] || '', name: `${m[4]}:${port}`, typeGuessed: !m[1] && def === 'auto' } as any };
+  }),
+  ImportProxyList: async (list: any[], tag: string) => list.map((p, i) => { const x = { ...p, id: rid(), status: 'unknown', tag, name: tag ? `${tag} #${i + 1}` : p.name }; mock.proxies.push(x); return x; }),
   GetSettings: async () => ({ ...mock.settings }),
   SaveSettings: async (s: any) => (mock.settings = s),
   DefaultKernelPath: async () => mock.settings.undetectableKit ? `${mock.settings.undetectableKit}\\runtime\\chrome\\chrome.exe` : mock.settings.kernelPath,
