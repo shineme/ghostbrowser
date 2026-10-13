@@ -54,6 +54,10 @@ export function ExportNativeJSON(arg1) {
   return window['go']['main']['App']['ExportNativeJSON'](arg1);
 }
 
+export function FingerprintCatalog(arg1) {
+  return window['go']['main']['App']['FingerprintCatalog'](arg1);
+}
+
 export function GPUOptions(arg1) {
   return window['go']['main']['App']['GPUOptions'](arg1);
 }

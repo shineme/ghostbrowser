@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"sort"
 	"strings"
 )
 
@@ -267,4 +268,64 @@ func gpuTierCores(r string) []int {
 		}
 	}
 	return []int{4, 4, 6, 8, 8, 12}
+}
+
+// FPCatalog is everything the editor's dropdowns need for one OS, so every
+// choice the user makes stays inside what that OS really reports.
+type FPCatalog struct {
+	OSVersions    []string            `json:"osVersions"`
+	BrowserMajors []string            `json:"browserMajors"`
+	UserAgents    []string            `json:"userAgents"`
+	Platforms     []string            `json:"platforms"`
+	Vendors       []string            `json:"vendors"`
+	GPUs          []map[string]string `json:"gpus"`
+	Fonts         []string            `json:"fonts"`
+}
+
+var osVersionsByOS = map[string][]string{
+	"windows": {"11", "10"},
+	"macos":   {"15.5", "15.3", "14.7", "13.7"},
+	"linux":   {"x86_64"},
+}
+
+func FingerprintCatalog(osName, kernelMajor string) FPCatalog {
+	if _, ok := osVersionsByOS[osName]; !ok {
+		osName = "windows"
+	}
+	majors := append([]string{}, browserMajors...)
+	if kernelMajor != "" {
+		found := false
+		for _, m := range majors {
+			found = found || m == kernelMajor
+		}
+		if !found {
+			majors = append(majors, kernelMajor)
+		}
+	}
+	sort.Slice(majors, func(i, j int) bool {
+		return len(majors[i]) > len(majors[j]) || (len(majors[i]) == len(majors[j]) && majors[i] > majors[j])
+	})
+	c := FPCatalog{OSVersions: osVersionsByOS[osName], BrowserMajors: majors}
+	for _, m := range majors {
+		ua, pf := buildUA(osName, "", m)
+		c.UserAgents = append(c.UserAgents, ua)
+		c.Platforms = []string{pf}
+	}
+	seen := map[string]bool{}
+	for _, g := range pickGPUs(osName) {
+		if !seen[g.vendor] {
+			seen[g.vendor] = true
+			c.Vendors = append(c.Vendors, g.vendor)
+		}
+		c.GPUs = append(c.GPUs, map[string]string{"vendor": g.vendor, "renderer": g.renderer})
+	}
+	switch osName {
+	case "macos":
+		c.Fonts = macFonts
+	case "linux":
+		c.Fonts = linuxFonts
+	default:
+		c.Fonts = winFonts
+	}
+	return c
 }

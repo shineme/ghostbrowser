@@ -34,6 +34,30 @@ export namespace main {
 	        this.maxTouchPoints = source["maxTouchPoints"];
 	    }
 	}
+	export class FPCatalog {
+	    osVersions: string[];
+	    browserMajors: string[];
+	    userAgents: string[];
+	    platforms: string[];
+	    vendors: string[];
+	    gpus: any[];
+	    fonts: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new FPCatalog(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.osVersions = source["osVersions"];
+	        this.browserMajors = source["browserMajors"];
+	        this.userAgents = source["userAgents"];
+	        this.platforms = source["platforms"];
+	        this.vendors = source["vendors"];
+	        this.gpus = source["gpus"];
+	        this.fonts = source["fonts"];
+	    }
+	}
 	export class Fingerprint {
 	    os: string;
 	    osVersion: string;

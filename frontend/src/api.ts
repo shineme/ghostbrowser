@@ -60,6 +60,18 @@ const M = {
   },
   CloneProfile: async (id: string) => { const p = mock.profiles.find(x => x.id === id); const c = { ...p, id: rid(), name: p.name + ' (copy)', fingerprint: mockFP(p.fingerprint.os) }; mock.profiles.unshift(c); return c; },
   NewFingerprint: async (os: string) => mockFP(os),
+  FingerprintCatalog: async (os: string): Promise<any> => {
+    const majors = ['142', '141', '140', '139', '138'];
+    const tok = os === 'macos' ? 'Macintosh; Intel Mac OS X 10_15_7' : os === 'linux' ? 'X11; Linux x86_64' : 'Windows NT 10.0; Win64; x64';
+    return {
+      osVersions: os === 'macos' ? ['15.5', '15.3', '14.7', '13.7'] : os === 'linux' ? ['x86_64'] : ['11', '10'], browserMajors: majors,
+      userAgents: majors.map(m => `Mozilla/5.0 (${tok}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${m}.0.0.0 Safari/537.36`),
+      platforms: [os === 'macos' ? 'MacIntel' : os === 'linux' ? 'Linux x86_64' : 'Win32'],
+      vendors: os === 'macos' ? ['Google Inc. (Apple)'] : ['Google Inc. (NVIDIA)', 'Google Inc. (Intel)'],
+      gpus: os === 'macos' ? [{ vendor: 'Google Inc. (Apple)', renderer: 'ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)' }] : [{ vendor: 'Google Inc. (NVIDIA)', renderer: 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002504) Direct3D11 vs_5_0 ps_5_0, D3D11)' }, { vendor: 'Google Inc. (Intel)', renderer: 'ANGLE (Intel, Intel(R) Iris(R) Xe Graphics (0x00009A49) Direct3D11 vs_5_0 ps_5_0, D3D11)' }],
+      fonts: os === 'macos' ? ['Helvetica', 'Helvetica Neue', 'Menlo', 'PingFang SC'] : ['Arial', 'Calibri', 'Consolas', 'Microsoft YaHei', 'Segoe UI'],
+    };
+  },
   DevicePresets: async (os: string): Promise<any[]> => [
     { id: 'win-001', name: 'Win11 · RTX 4060 · 1920x1080', os: 'windows', osVersion: '11', webglVendor: 'Google Inc. (NVIDIA)', webglRenderer: 'ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 (0x00002882) Direct3D11 vs_5_0 ps_5_0, D3D11)', screenWidth: 1920, screenHeight: 1080, pixelRatio: 1, hardwareConcurrency: 12, deviceMemory: 8, maxTouchPoints: 0 },
     { id: 'mac-001', name: 'macOS 15.3 · Apple M3 Pro · 1512x982', os: 'macos', osVersion: '15.3', webglVendor: 'Google Inc. (Apple)', webglRenderer: 'ANGLE (Apple, ANGLE Metal Renderer: Apple M3 Pro, Unspecified Version)', screenWidth: 1512, screenHeight: 982, pixelRatio: 2, hardwareConcurrency: 12, deviceMemory: 8, maxTouchPoints: 0 },

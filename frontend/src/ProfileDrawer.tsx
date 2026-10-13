@@ -1,8 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { SearchSelect, CountrySelect, LanguagePicker, TimezoneSelect, countryOfTz } from './locales';
+import { SearchSelect, FontPicker, CountrySelect, LanguagePicker, TimezoneSelect, countryOfTz } from './locales';
 import { api, Profile, Proxy, Fingerprint } from './api';
 import { Field, Toggle, Icon, flag, useToast, useExit, Segmented, Avatar } from './ui';
 
+type FPCatalog = { osVersions: string[]; browserMajors: string[]; userAgents: string[]; platforms: string[]; vendors: string[]; gpus: { vendor: string; renderer: string }[]; fonts: string[] };
+const EMPTY_CAT: FPCatalog = { osVersions: [], browserMajors: [], userAgents: [], platforms: [], vendors: [], gpus: [], fonts: [] };
+// Keep the current value visible even when it is outside the catalog (e.g. an imported profile).
+const opt = <T,>(list: T[], cur: T): T[] => (cur === '' || cur === undefined || cur === null || list.includes(cur)) ? list : [cur, ...list];
+const osVerLabel = (os: string, v: string) => os === 'windows' ? `Windows ${v}` : os === 'macos' ? `macOS ${v}` : `Linux ${v}`;
 const OSES = [['windows', 'Windows'], ['macos', 'macOS'], ['linux', 'Linux']];
 
 
@@ -15,6 +20,7 @@ export const ProfileDrawer: React.FC<{
   const [gpus, setGpus] = useState<{ vendor: string; renderer: string }[]>([]);
   const [devices, setDevices] = useState<any[]>([]);
   const [device, setDevice] = useState('');
+  const [cat, setCat] = useState<FPCatalog>(EMPTY_CAT);
   const [screens, setScreens] = useState<string[]>([]);
   const fp = p.fingerprint;
   const [out, close] = useExit(onClose);
@@ -23,6 +29,7 @@ export const ProfileDrawer: React.FC<{
 
   useEffect(() => {
     api.GPUOptions(fp.os).then(setGpus);
+    api.FingerprintCatalog(fp.os).then(c => setCat({ ...EMPTY_CAT, ...(c as any) })).catch(() => setCat(EMPTY_CAT));
     api.DevicePresets(fp.os).then(d => setDevices(d || [])).catch(() => setDevices([]));
     api.ScreenOptions(fp.os).then(setScreens);
   }, [fp.os]);
@@ -34,6 +41,10 @@ export const ProfileDrawer: React.FC<{
     setFP({ osVersion: d.osVersion, webglVendor: d.webglVendor, webglRenderer: d.webglRenderer, screenWidth: d.screenWidth, screenHeight: d.screenHeight, pixelRatio: d.pixelRatio, hardwareConcurrency: d.hardwareConcurrency, deviceMemory: d.deviceMemory, maxTouchPoints: d.maxTouchPoints });
     setFlash(x => x + 1);
   };
+  // Linked edits: UA and browser major always move together; renderer always belongs to the vendor.
+  const setMajor = (m: string) => setFP({ browserVersion: m, userAgent: cat.userAgents.find(u => u.includes(`Chrome/${m}.`)) || fp.userAgent });
+  const setUA = (ua: string) => { const m = /Chrome\/(\d+)\./.exec(ua); setFP({ userAgent: ua, ...(m ? { browserVersion: m[1] } : {}) }); };
+  const setVendor = (v: string) => { const g = cat.gpus.find(x => x.vendor === v); setFP({ webglVendor: v, webglRenderer: g ? g.renderer : fp.webglRenderer }); };
   const regen = async () => { const f = await api.NewFingerprint(fp.os); setFP(f as any); setFlash(x => x + 1); toast('已生成新指纹'); };
   const changeOS = async (os: string) => { const f = await api.NewFingerprint(os); setFP(f as any); setFlash(x => x + 1); };
 
@@ -104,26 +115,27 @@ export const ProfileDrawer: React.FC<{
             {!native && devices.length > 0 && <Field label={`设备预设（${devices.length} 台 ${OSES.find(o => o[0] === fp.os)?.[1] || ''} 整机）`} hint="选择一台真实机型，显卡、分辨率、CPU、内存一次填好"><SearchSelect value={device} options={devices.map(d => [d.id, d.name])} onChange={applyDevice} placeholder="搜索机型，如 4060 / M3 / Iris" /></Field>}
             <div className="grid3">
               <Field label="操作系统"><select value={fp.os} onChange={e => changeOS(e.target.value)}>{OSES.filter(([v]) => !native || v === 'windows').map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
-              <Field label="系统版本"><input type="text" value={fp.osVersion} onChange={e => setFP({ osVersion: e.target.value })} /></Field>
-              <Field label="浏览器大版本"><input type="text" value={fp.browserVersion} onChange={e => setFP({ browserVersion: e.target.value })} /></Field>
+              <Field label="系统版本"><select value={fp.osVersion} onChange={e => setFP({ osVersion: e.target.value })}>{opt(cat.osVersions, fp.osVersion).map(v => <option key={v} value={v}>{osVerLabel(fp.os, v)}</option>)}</select></Field>
+              <Field label="浏览器大版本"><select value={fp.browserVersion} onChange={e => setMajor(e.target.value)}>{opt(cat.browserMajors, fp.browserVersion).map(v => <option key={v} value={v}>Chrome {v}</option>)}</select></Field>
             </div>
-            <Field label="User-Agent"><textarea style={{ minHeight: 54 }} value={fp.userAgent} onChange={e => setFP({ userAgent: e.target.value })} /></Field>
+            <Field label="User-Agent" hint={`只列出 ${OSES.find(o => o[0] === fp.os)?.[1]} 的 UA；选中后浏览器大版本同步`}>
+              <select value={fp.userAgent} onChange={e => setUA(e.target.value)}>{opt(cat.userAgents, fp.userAgent).map(v => <option key={v} value={v}>{v}</option>)}</select>
+            </Field>
             <div className="grid2">
-              <Field label="平台 (navigator.platform)"><input type="text" value={fp.platform} onChange={e => setFP({ platform: e.target.value })} /></Field>
+              <Field label="平台 (navigator.platform)"><select value={fp.platform} onChange={e => setFP({ platform: e.target.value })}>{opt(cat.platforms, fp.platform).map(v => <option key={v} value={v}>{v}</option>)}</select></Field>
               <Field label="分辨率"><select value={scr} onChange={e => setScr(e.target.value)}>{screens.map(s => <option key={s} value={s}>{s.replace('@', '  @')}</option>)}{!screens.includes(scr) && <option value={scr}>{scr}</option>}</select></Field>
             </div>
             <div className="grid3">
-              <Field label="CPU 核心数"><select value={fp.hardwareConcurrency} onChange={e => setFP({ hardwareConcurrency: +e.target.value })}>{[2, 4, 6, 8, 12, 16, 24].map(n => <option key={n} value={n}>{n}</option>)}</select></Field>
-              <Field label="内存 (GB)"><select value={fp.deviceMemory} onChange={e => setFP({ deviceMemory: +e.target.value })}>{[2, 4, 8, 16, 32].map(n => <option key={n} value={n}>{n}</option>)}</select></Field>
-              <Field label={native ? '触控点（继承模板）' : '触控点'}><input disabled={native} type="number" value={fp.maxTouchPoints} onChange={e => setFP({ maxTouchPoints: +e.target.value })} /></Field>
+              <Field label="CPU 核心数"><select value={fp.hardwareConcurrency} onChange={e => setFP({ hardwareConcurrency: +e.target.value })}>{opt([2, 4, 6, 8, 10, 12, 14, 16, 20, 24, 32], fp.hardwareConcurrency).map(n => <option key={n} value={n}>{n}</option>)}</select></Field>
+              <Field label="内存 (GB)" hint="Chrome 上报最高 8"><select value={fp.deviceMemory} onChange={e => setFP({ deviceMemory: +e.target.value })}>{opt([2, 4, 8], fp.deviceMemory).map(n => <option key={n} value={n}>{n}</option>)}</select></Field>
+              <Field label={native ? '触控点（继承模板）' : '触控点'}><select disabled={native} value={fp.maxTouchPoints} onChange={e => setFP({ maxTouchPoints: +e.target.value })}>{opt(fp.os === 'windows' ? [0, 10] : [0], fp.maxTouchPoints).map(n => <option key={n} value={n}>{n === 0 ? '0（无触屏）' : `${n}（触屏）`}</option>)}</select></Field>
             </div>
-            <Field label="WebGL 显卡">
-              <select value={fp.webglRenderer} onChange={e => { const g = gpus.find(x => x.renderer === e.target.value); if (g) setFP({ webglVendor: g.vendor, webglRenderer: g.renderer }); }}>
-                {gpus.map(g => <option key={g.renderer} value={g.renderer}>{g.renderer}</option>)}
-                {!gpus.find(g => g.renderer === fp.webglRenderer) && <option value={fp.webglRenderer}>{fp.webglRenderer}</option>}
-              </select>
-            </Field>
-            <div className="kv"><span className="k">WebGL Vendor</span><span className="v">{fp.webglVendor}</span></div>
+            <div className="grid2">
+              <Field label="WebGL Vendor"><select value={fp.webglVendor} onChange={e => setVendor(e.target.value)}>{opt(cat.vendors, fp.webglVendor).map(v => <option key={v} value={v}>{v}</option>)}</select></Field>
+              <Field label="WebGL 显卡" hint="只列出所选 Vendor 的显卡">
+                <SearchSelect value={fp.webglRenderer} options={cat.gpus.filter(g => g.vendor === fp.webglVendor).map(g => [g.renderer, g.renderer] as [string, string])} onChange={v => setFP({ webglRenderer: v })} placeholder="搜索显卡，如 4060 / Iris / M3" />
+              </Field>
+            </div>
           </div>}
 
           {tab === 'adv' && native && <div className="tabpane">
@@ -155,7 +167,9 @@ export const ProfileDrawer: React.FC<{
             <Field label="WebRTC"><select value={fp.webrtc} onChange={e => setFP({ webrtc: e.target.value })}><option value="proxy">替换为代理 IP（推荐）</option><option value="disabled">完全禁用</option><option value="real">真实（不推荐）</option></select></Field>
             <Toggle on={fp.hideMediaDevices} onChange={v => setFP({ hideMediaDevices: v })} label="隐藏媒体设备" />
             <Toggle on={fp.doNotTrack} onChange={v => setFP({ doNotTrack: v })} label="Do Not Track" />
-            <div className="kv"><span className="k">字体数量</span><span className="v">{(fp.fonts || []).length} 种</span></div>
+            <Field label={`字体（${(fp.fonts || []).length} / ${cat.fonts.length} 种 ${OSES.find(o => o[0] === fp.os)?.[1]} 字体）`} hint="只列出该系统自带字体">
+              <FontPicker value={fp.fonts || []} all={cat.fonts} onChange={v => setFP({ fonts: v })} />
+            </Field>
           </div>}
         </div>
 

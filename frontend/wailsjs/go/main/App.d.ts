@@ -28,6 +28,8 @@ export function ExportCookies(arg1:string):Promise<string>;
 
 export function ExportNativeJSON(arg1:string):Promise<string>;
 
+export function FingerprintCatalog(arg1:string):Promise<main.FPCatalog>;
+
 export function GPUOptions(arg1:string):Promise<Array<Record<string, string>>>;
 
 export function GetSettings():Promise<main.Settings>;

@@ -127,4 +127,23 @@ export const LanguagePicker: React.FC<{ value: string[]; onChange: (v: string[])
   </div>;
 };
 
+/** Font picker: chips for chosen fonts, dropdown to add any font of this OS, quick all / random. */
+export const FontPicker: React.FC<{ value: string[]; all: string[]; onChange: (v: string[]) => void }> = ({ value, all, onChange }) => {
+  const opts = useMemo(() => all.filter(f => !value.includes(f)).map(f => [f, f] as [string, string]), [all, value]);
+  const random = () => onChange(all.filter((_, i) => i < 12 || Math.random() > 0.18));
+  return <div className="langpick">
+    <div className="row" style={{ gap: 6, marginBottom: 8 }}>
+      <button type="button" className="btn sm" onClick={() => onChange([...all])}>全部</button>
+      <button type="button" className="btn sm" onClick={random}>随机子集</button>
+      <button type="button" className="btn sm" onClick={() => onChange([])}>清空</button>
+    </div>
+    <div className="chips" style={{ maxHeight: 150, overflowY: 'auto' }}>
+      {value.length === 0 && <span className="sub">未选择字体</span>}
+      {value.map(f => <span key={f} className="chip" style={{ fontFamily: `'${f}'` }}><b style={{ fontFamily: 'inherit', fontWeight: 500 }}>{f}</b>
+        <button type="button" onClick={() => onChange(value.filter(x => x !== f))} title="移除">×</button></span>)}
+    </div>
+    <SearchSelect value="" options={opts} onChange={v => v && onChange([...value, v])} placeholder="搜索并添加字体" />
+  </div>;
+};
+
 export const countryOfTz = (tz: string) => COUNTRIES.find(c => c.tz === tz)?.cc || '';

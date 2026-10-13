@@ -120,6 +120,11 @@ func (a *App) GPUOptions(osName string) []map[string]string {
 }
 func (a *App) ScreenOptions(osName string) []string { return ScreenOptions(osName) }
 
+// FingerprintCatalog feeds the editor's linked dropdowns for one OS.
+func (a *App) FingerprintCatalog(osName string) FPCatalog {
+	return FingerprintCatalog(osName, a.KernelMajor())
+}
+
 // DevicePresets returns GhostBrowser's own device library for one OS ("" = all).
 func (a *App) DevicePresets(osName string) []DevicePreset { return DevicePresetsFor(osName) }
 
