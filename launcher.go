@@ -173,25 +173,59 @@ func (s *Store) Launch(id string) (*RunState, error) {
 	}
 
 	cmd := exec.Command(kernel, args...)
+	logPath := filepath.Join(userDir, "launch.log")
+	logf, _ := os.Create(logPath)
+	if logf != nil {
+		fmt.Fprintf(logf, "kernel: %s\nargs: %q\n\n", kernel, args)
+		cmd.Stdout, cmd.Stderr = logf, logf
+	}
 	if err := cmd.Start(); err != nil {
-		return nil, err
+		if logf != nil {
+			logf.Close()
+		}
+		return nil, fmt.Errorf("无法启动内核 %s: %w", kernel, err)
 	}
 	rs := &RunState{ProfileID: id, PID: cmd.Process.Pid, DebugPort: port,
 		WSURL: fmt.Sprintf("http://127.0.0.1:%d/json/version", port), Started: time.Now().Unix()}
 
+	exited := make(chan error, 1)
+	runReg.add(id, rs, cmd)
+	go func() {
+		err := cmd.Wait()
+		runReg.remove(id)
+		if logf != nil {
+			logf.Close()
+		}
+		exited <- err
+	}()
+
+	// Don't report success until the browser really answers on its debug port.
+	wsCh := make(chan string, 1)
+	go func() {
+		if ws, err := waitDebugger(port, 20*time.Second); err == nil {
+			wsCh <- ws
+		} else {
+			wsCh <- ""
+		}
+	}()
+	var ws string
+	select {
+	case ws = <-wsCh:
+	case err := <-exited:
+		return nil, fmt.Errorf("浏览器进程启动后立即退出（%v）。内核：%s。请检查内核路径是否为真正的 chrome.exe，以及当前注入方式是否匹配该内核；详细输出见 %s%s", err, kernel, logPath, logTail(logPath))
+	}
+	if ws == "" {
+		runReg.stop(id)
+		return nil, fmt.Errorf("浏览器 20 秒内没有打开调试端口 %d，已终止。内核：%s。详细输出见 %s%s", port, kernel, logPath, logTail(logPath))
+	}
+	rs.WSURL = ws
+
 	p.LastRun = time.Now().Unix()
 	s.PutProfile(*p)
-
-	runReg.add(id, rs, cmd)
-	go func() { _ = cmd.Wait(); runReg.remove(id) }()
-
-	if ws, err := waitDebugger(port, 15*time.Second); err == nil {
-		rs.WSURL = ws
-		if strings.TrimSpace(p.Cookies) != "" {
-			if err := importCookies(ws, p.Cookies); err == nil {
-				p.Cookies = ""
-				s.PutProfile(*p)
-			}
+	if strings.TrimSpace(p.Cookies) != "" {
+		if err := importCookies(ws, p.Cookies); err == nil {
+			p.Cookies = ""
+			s.PutProfile(*p)
 		}
 	}
 	return rs, nil
@@ -213,4 +247,17 @@ func firstLang(l []string) string {
 		return l[0]
 	}
 	return "en-US"
+}
+
+// logTail returns the last few lines of a launch log for error messages.
+func logTail(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil || len(b) == 0 {
+		return ""
+	}
+	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
+	if len(lines) > 6 {
+		lines = lines[len(lines)-6:]
+	}
+	return "\n" + strings.Join(lines, "\n")
 }
