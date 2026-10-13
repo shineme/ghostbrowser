@@ -84,6 +84,8 @@ go test -run TestEnsureAgainstRealShop -v .
 - Proxies: bulk import (host:port[:user:pass], user:pass@host:port, scheme://), check exit IP / geo / latency, proxy auth via extension
 - Cloud sync client: zip (caches excluded) -> AES-256-GCM (PBKDF2 key from local sync password) -> PHP server on your VPS
 - Local API on 127.0.0.1:25325: /list, /profile/start?profile=ID (returns CDP port + websocket), /profile/stop?profile=ID, /status
+  - Every call except /status needs the API key from Settings: header `X-API-Key: <key>` or `?key=<key>`
+  - Requests from web pages are refused (loopback Host required; any Origin or cross-site Sec-Fetch-Site is rejected)
 
 ## 云同步 PHP 服务端（已提供）
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
-import { api, onEvent, Proxy } from './api';
+import { api, onEvent, Proxy, Profile } from './api';
 import { Icon, Field, Toggle, ago, useToast, useConfirm, useExit, CC, Latency, StatCard } from './ui';
 import { COUNTRIES } from './locales';
 
@@ -11,7 +11,7 @@ const speedTone = (k?: number) => !k ? '' : k >= 20000 ? 'g' : k >= 5000 ? 'm' :
 // Looks like at least one proxy line: host:port somewhere.
 const looksLikeProxies = (t: string) => /(\d{1,3}(\.\d{1,3}){3}|[a-z0-9-]+\.[a-z]{2,})[\s:,|]+\d{2,5}/i.test(t);
 
-export const ProxyView: React.FC<{ proxies: Proxy[]; reload: () => void }> = ({ proxies, reload }) => {
+export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reload: () => void }> = ({ proxies, profiles = [], reload }) => {
   const toast = useToast();
   const ask = useConfirm();
   const [q, setQ] = useState('');
@@ -70,6 +70,15 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; reload: () => void }> = ({ 
     if (!await ask({ title: `删除${what}？`, body: `共 ${ids.length} 个代理。正在使用它们的环境会改为直连，下次启动时生效。`, ok: '删除', danger: true })) return;
     await api.DeleteProxies(ids); setSel(new Set()); reload(); toast(`已删除 ${ids.length} 个代理`);
   };
+  const [editing, setEditing] = useState<Proxy | null>(null);
+  const [health, setHealth] = useState<{ checked: number; failed: number; at: number } | null>(null);
+  useEffect(() => onEvent('proxy:health', (h: any) => { setHealth(h); reload(); }), [reload]);
+  const rotate = async (p: Proxy) => {
+    mark([p.id], true);
+    try { const r = await api.RotateProxy(p.id); toast(`已换 IP：${r.ip}`, 'ok'); }
+    catch (e: any) { toast(String(e?.message || e), 'bad'); }
+    finally { mark([p.id], false); reload(); }
+  };
   const toggle = (id: string) => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const allSel = list.length > 0 && list.every(p => sel.has(p.id));
 
@@ -85,6 +94,12 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; reload: () => void }> = ({ 
 
   const okCount = all.filter(p => p.status === 'ok').length;
   const failIds = all.filter(p => p.status === 'fail').map(p => p.id);
+  const failSet = new Set(failIds);
+  const hit = profiles.filter(p => failSet.has(p.proxyId));
+  const users: Record<string, number> = {};
+  profiles.forEach(p => { if (p.proxyId) users[p.proxyId] = (users[p.proxyId] || 0) + 1; });
+  const ipCount: Record<string, number> = {};
+  all.forEach(p => { if (p.ip) ipCount[p.ip] = (ipCount[p.ip] || 0) + 1; });
 
   return (
     <>
@@ -94,6 +109,11 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; reload: () => void }> = ({ 
         <StatCard l="不可用 / 未检测" n={all.length - okCount} of={all.length} ic="alert" tone="bad" pct={(all.length - okCount) / all.length * 100} />
         <StatCard l="覆盖国家 / 地区" n={countries.length} ic="shield" tone="cy" pct={60} />
       </div>
+      {failIds.length > 0 && <div className="panel pad" style={{ marginBottom: 10, borderColor: 'rgba(255,107,122,.3)' }}>
+        <b style={{ color: '#ffb3bc' }}>⚠ {failIds.length} 个代理不可用</b>
+        <span className="sub" style={{ marginLeft: 8 }}>{hit.length ? `影响 ${hit.length} 个环境：${hit.slice(0, 6).map(p => p.name).join('、')}${hit.length > 6 ? ' 等' : ''}` : '没有环境在使用它们'}{health ? ` · 自动检测于 ${ago(health.at)}` : ''}</span>
+        <button className="btn sm" style={{ marginLeft: 10 }} onClick={() => { setStatus('fail'); }}>只看不可用</button>
+      </div>}
       <div className="toolbar" style={{ flexWrap: 'wrap' }}>
         <div className="search"><Icon.search /><input type="text" placeholder="搜索名称 / IP / 国家 / 城市 / ISP / 标签" value={q} onChange={e => setQ(e.target.value)} /></div>
         <select value={status} onChange={e => setStatus(e.target.value as any)} style={{ width: 120 }}>
@@ -121,7 +141,7 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; reload: () => void }> = ({ 
               <td><input type="checkbox" checked={sel.has(p.id)} onChange={() => toggle(p.id)} /></td>
               <td><div className="nm">{p.name}</div><div className="sub num">{p.host}:{p.port}{p.user ? ' · 带认证' : ''}{p.tag ? <span className="tag" style={{ marginLeft: 6 }}>{p.tag}</span> : null}</div></td>
               <td><span className="tag num" style={{ textTransform: 'uppercase' }} title={p.typeGuessed ? '协议是按端口推测的，检测后自动确认' : ''}>{p.type}{p.typeGuessed ? '?' : ''}</span></td>
-              <td className="sub num">{p.ip || '—'}</td>
+              <td className="sub num">{p.ip || '—'}{p.ip && ipCount[p.ip] > 1 && <div className="ip-dup" title="多个代理的出口是同一个 IP">⚠ {ipCount[p.ip]} 个代理同一出口</div>}{users[p.id] > 1 && <div className="ip-dup" title="多个环境共用这个代理，容易被平台关联">⚠ {users[p.id]} 个环境在用</div>}</td>
               <td>{p.country ? <div title={p.timezone}><CC cc={p.country} /><span>{cname(p.country)}</span><div className="sub">{[p.region, p.city].filter(Boolean).join(' · ')}</div></div> : <span className="sub">—</span>}</td>
               <td>{p.ipType ? <><span className={`badge ${IPTYPE[p.ipType]?.[1] || ''}`}>{IPTYPE[p.ipType]?.[0] || p.ipType}</span><div className="sub" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.isp}>{p.isp}</div></> : <span className="sub">—</span>}</td>
               <td title={p.connectMs ? `首次连接 ${p.connectMs} ms（含握手）` : ''}><Latency ms={p.status === 'ok' ? p.latency : 0} /></td>
@@ -133,7 +153,9 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; reload: () => void }> = ({ 
                   : <>
                     <button className="btn sm" onClick={() => runCheck([p.id])} title="检测国家、IP 类型和延迟"><Icon.refresh s={13} /> 检测</button>
                     <button className="btn sm" onClick={() => runSpeed([p.id])} title="下载约 5 MB 测速"><Icon.bolt s={13} /></button>
+                    {p.changeIpUrl && <button className="btn sm" onClick={() => rotate(p)} title={p.rotateOnLaunch ? '换 IP（已设置每次启动前自动换）' : '调用换 IP 链接，然后重新检测出口'}><Icon.dice s={13} /> 换IP{p.rotateOnLaunch ? '·自动' : ''}</button>}
                   </>}
+                <button className="btn ghost icon" title="编辑" onClick={() => setEditing(p)}><Icon.edit s={15} /></button>
                 <button className="btn ghost icon danger" onClick={() => delMany([p.id], '这个代理')}><Icon.trash s={15} /></button>
               </div></td>
             </tr>)}
@@ -141,6 +163,7 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; reload: () => void }> = ({ 
         </table>
         {list.length === 0 && <div className="sub" style={{ padding: 24, textAlign: 'center' }}>没有符合筛选条件的代理</div>}
       </div>
+      {editing && <ProxyEditModal p={editing} onClose={() => setEditing(null)} onSaved={reload} />}
       {importText !== null && <ImportModal initial={importText} onClose={() => setImportText(null)} onDone={(ids, check) => { reload(); if (check) runCheck(ids, '导入检测'); }} />}
     </>
   );
@@ -228,6 +251,38 @@ const ImportModal: React.FC<{ initial: string; onClose: () => void; onDone: (ids
           <div className="spacer" /><button className="btn" onClick={() => close()}>取消</button>
           <button className="btn primary" onClick={go} disabled={busy || !good.length}>{busy ? '导入中…' : `导入 ${good.length} 个`}</button>
         </div>
+      </div>
+    </div>
+  );
+};
+
+const ProxyEditModal: React.FC<{ p: Proxy; onClose: () => void; onSaved: () => void }> = ({ p, onClose, onSaved }) => {
+  const toast = useToast();
+  const [v, setV] = useState<Proxy>({ ...p });
+  const [out, close] = useExit(onClose);
+  const set = (x: Partial<Proxy>) => setV(o => ({ ...o, ...x } as Proxy));
+  const save = async () => { await api.SaveProxy(v as any); toast('已保存'); onSaved(); close(); };
+  return (
+    <div className={`overlay center ${out ? 'out' : ''}`} onMouseDown={e => e.target === e.currentTarget && close()}>
+      <div className="modal">
+        <div className="dhead"><div className="glyph"><Icon.globe s={18} /></div><div><h3>编辑代理</h3><div className="sub num">{p.host}:{p.port}</div></div><div style={{ marginLeft: 'auto' }}><button className="btn ghost icon" onClick={() => close()}><Icon.x /></button></div></div>
+        <div className="dbody">
+          <div className="grid2">
+            <Field label="名称"><input type="text" value={v.name} onChange={e => set({ name: e.target.value })} /></Field>
+            <Field label="标签"><input type="text" value={v.tag || ''} onChange={e => set({ tag: e.target.value })} /></Field>
+          </div>
+          <div className="grid2">
+            <Field label="类型"><select value={v.type} onChange={e => set({ type: e.target.value, typeGuessed: false })}><option value="http">HTTP</option><option value="https">HTTPS</option><option value="socks5">SOCKS5</option></select></Field>
+            <Field label="主机:端口"><div className="row"><input type="text" value={v.host} onChange={e => set({ host: e.target.value })} /><input type="number" style={{ width: 90, flex: 'none' }} value={v.port} onChange={e => set({ port: +e.target.value })} /></div></Field>
+          </div>
+          <div className="grid2">
+            <Field label="用户名"><input type="text" value={v.user || ''} onChange={e => set({ user: e.target.value })} /></Field>
+            <Field label="密码"><input type="password" value={v.pass || ''} onChange={e => set({ pass: e.target.value })} /></Field>
+          </div>
+          <Field label="换 IP 链接" hint="服务商提供的 API 地址，打开它就会更换出口 IP"><input type="text" value={v.changeIpUrl || ''} onChange={e => set({ changeIpUrl: e.target.value })} placeholder="https://..." /></Field>
+          <Toggle on={!!v.rotateOnLaunch} onChange={x => set({ rotateOnLaunch: x })} label="每次启动环境前自动换 IP" hint="需要填写换 IP 链接；换 IP 失败不会阻止启动" />
+        </div>
+        <div className="dfoot"><div className="spacer" /><button className="btn" onClick={() => close()}>取消</button><button className="btn primary" onClick={save}><Icon.check s={15} /> 保存</button></div>
       </div>
     </div>
   );

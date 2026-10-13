@@ -128,6 +128,20 @@ const M = {
   EnvStatus: async (): Promise<any> => ({ ready: true, kitDir: 'undetectable-kit', chromeExe: 'undetectable-kit\\runtime\\chrome\\chrome.exe', phase: 'ready', pct: 100, done: 0, total: 0, speedBps: 0, message: '环境就绪', updatedAt: Math.floor(Date.now() / 1000), manifestFromServer: false }),
   EnvRecheck: async (_force: boolean): Promise<any> => ({ ready: true, kitDir: 'undetectable-kit', chromeExe: 'undetectable-kit\\runtime\\chrome\\chrome.exe', phase: 'ready', pct: 100, done: 0, total: 0, speedBps: 0, message: '环境就绪', updatedAt: Math.floor(Date.now() / 1000), manifestFromServer: false }),
   EnvCancel: async () => {},
+  ResetAPIKey: async () => (mock.settings = { ...mock.settings, apiKey: 'gb_' + rid() + rid() }),
+  SyncServerInfo: async (): Promise<any> => ({ features: ['chunks', 'history', 'multiuser'], keepVersions: 3, maxBody: 8388608, usedBytes: 734003200, freeBytes: 21474836480, user: 'owner', protocol: 2 }),
+  CloudHistory: async (_id: string): Promise<any[]> => [{ version: 3, size: 18000, updatedAt: Date.now() / 1000 - 600, deviceName: 'Office-PC', current: true }, { version: 2, size: 17000, updatedAt: Date.now() / 1000 - 86400, deviceName: 'Laptop', current: false }],
+  RestoreVersion: async (_id: string, _v: number) => { await wait(900); },
+  SyncLog: async (): Promise<any[]> => [{ time: Date.now() / 1000 - 120, id: 'x', name: 'Shop US 01', action: 'push', ok: true, error: '', bytes: 2400000, ms: 3200, version: 4 }, { time: Date.now() / 1000 - 3600, id: 'y', name: 'Ads 02', action: 'pull', ok: false, error: 'sync HTTP 413: Request Entity Too Large', bytes: 0, ms: 900, version: 2 }],
+  ClearSyncLog: async () => {},
+  RetrySync: async (_id: string, _a: string) => { await wait(600); },
+  SyncBusy: async (): Promise<string[]> => [],
+  RotateProxy: async (id: string) => { await wait(1500); const p = mock.proxies.find(x => x.id === id); p.ip = `45.${Math.round(Math.random() * 255)}.${Math.round(Math.random() * 255)}.${Math.round(Math.random() * 255)}`; return p; },
+  AssignProxies: async (ids: string[], px: string[], _mode: string) => { ids.forEach((id, i) => { const p = mock.profiles.find(x => x.id === id); if (p) p.proxyId = px.length ? px[i % px.length] : ''; }); return ids.length; },
+  SetProfilesGroup: async (ids: string[], group: string, tag: string) => { ids.forEach(id => { const p = mock.profiles.find(x => x.id === id); if (!p) return; if (group !== '\u0000') p.group = group; if (tag && !(p.tags || []).includes(tag)) p.tags = [...(p.tags || []), tag]; }); return ids.length; },
+  StopProfiles: async (_ids: string[]) => {},
+  PushProfiles: async (ids: string[]): Promise<any> => { await wait(900); return { ok: ids.length, failed: 0, errors: [] }; },
+  FocusProfile: async (_id: string) => {},
 };
 
 export const api: typeof M = inWails ? (Go as any) : M;

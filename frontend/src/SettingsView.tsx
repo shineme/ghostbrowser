@@ -76,12 +76,22 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
         </Field>
         <Toggle on={s.apiEnabled} onChange={v => set({ apiEnabled: v })} label="启用本地自动化 API" hint="供 Puppeteer / Playwright / Selenium 接管 CDP 端口" />
         <Field label="API 端口"><input type="number" value={s.apiPort} onChange={e => set({ apiPort: +e.target.value })} /></Field>
+        {s.apiEnabled && <>
+          <Field label="API Key" hint="请求头 X-API-Key 或网址参数 ?key=。网页无法调用本地 API（会校验 Host、Origin 和 Sec-Fetch-Site）。">
+            <div className="row"><input type="text" className="mono" readOnly value={s.apiKey || ''} onFocus={e => e.target.select()} />
+              <button className="btn" style={{ flex: 'none' }} onClick={() => { navigator.clipboard?.writeText(s.apiKey || ''); toast('已复制 API Key'); }}><Icon.copy s={14} /> 复制</button>
+              <button className="btn ghost" style={{ flex: 'none' }} onClick={async () => { const out = await api.ResetAPIKey(); setS(out); onSaved(out); toast('已生成新的 API Key，旧 Key 立即失效'); }}><Icon.refresh s={14} /> 重新生成</button></div>
+          </Field>
+          <Toggle on={!s.apiKeyOff} onChange={v => set({ apiKeyOff: !v })} label="要求 API Key" hint="关闭后本机任何程序都能直接调用，不建议" />
+        </>}
+        <Field label="代理自动检测间隔（分钟）" hint="后台定期检测全部代理，失效的会标红并提示受影响的环境；0 = 关闭"><input type="number" min={0} max={1440} value={s.proxyCheckMins ?? 0} onChange={e => set({ proxyCheckMins: Math.max(0, Math.min(1440, Math.round(+e.target.value || 0))) })} /></Field>
         <div className="kv" style={{ alignItems: 'center', borderBottom: 0 }}><span className="k">默认操作系统</span><span className="v"><select style={{ width: 160 }} value={s.defaultOS} onChange={e => set({ defaultOS: e.target.value })}><option value="windows">Windows</option><option value="macos">macOS</option><option value="linux">Linux</option></select></span></div>
       </div>
 
       <div className="panel pad setting-card spot rise" style={{ ['--i' as any]: 2 }}>
         <div className="head"><span className="ic"><Icon.cloud /></span><div><h4>云端同步</h4><span>你的 VPS + PHP，端到端加密</span></div></div>
-        <Field label="同步服务器地址" hint="填 ghostsync.php 的完整网址（单文件 PHP，无需伪静态）"><input type="text" value={s.syncServer} onChange={e => set({ syncServer: e.target.value })} placeholder="https://你的域名/ghostsync.php" /></Field>
+        <Field label="同步服务器地址" hint="填 ghostsync.php 的完整网址（单文件 PHP，无需伪静态）"><input type="text" value={s.syncServer} onChange={e => set({ syncServer: e.target.value })} placeholder="https://你的域名/ghostsync.php" />
+          {/^http:\/\//i.test(s.syncServer || '') && !/^http:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/i.test(s.syncServer) && <div className="sub" style={{ color: '#ffcf8a', marginTop: 4 }}>⚠ 正在使用 http：同步包本身是加密的，但访问令牌会明文传输，可能被窃取。建议给域名配置 SSL 后改用 https。</div>}</Field>
         <Field label="访问令牌 (Bearer Token)"><input type="password" value={s.syncToken} onChange={e => set({ syncToken: e.target.value })} /></Field>
         <Field label="同步密码 (端到端加密)" hint="用于派生 AES-256 密钥。只存在本机，绝不上传；忘记将无法解密云端数据。"><input type="password" value={s.syncPassword} onChange={e => set({ syncPassword: e.target.value })} /></Field>
         <Toggle on={!s.autoSyncOff} onChange={v => set({ autoSyncOff: !v })} label="自动同步" hint="启动时对比云端与本地；关闭浏览器后上传环境（含登录状态）；设置、代理列表、指纹库改动后自动上传" />

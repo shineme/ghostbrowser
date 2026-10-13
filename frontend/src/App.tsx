@@ -7,7 +7,7 @@ import { Icon, Field, flag, ago, useToast, useConfirm, useExit, ToastHost, Windo
 import { ProfileDrawer } from './ProfileDrawer';
 import { ProxyView } from './ProxyView';
 import { SettingsView } from './SettingsView';
-import { CloudView } from './CloudView';
+import { CloudView, syncState } from './CloudView';
 import { SyncPrompt } from './SyncPrompt';
 import { EnvSetup } from './EnvSetup';
 import { NativeTools } from './NativeTools';
@@ -108,7 +108,7 @@ function Shell() {
         <div className="content">
           <div key={tab} className="page">
             {tab === 'profiles' && <ProfilesView {...{ profiles, proxyName, running, setRunning, reload }} />}
-            {tab === 'proxies' && <ProxyView proxies={proxies} reload={reload} />}
+            {tab === 'proxies' && <ProxyView proxies={proxies} profiles={profiles} reload={reload} />}
             {tab === 'cloud' && <CloudView profiles={profiles} settings={settings} reload={reload} />}
             {tab === 'settings' && settings && <SettingsView key={settingsRev} settings={settings} onSaved={s => { setSettings(s); toast('设置已保存'); }} />}
           </div>
@@ -134,9 +134,36 @@ const ProfilesView: React.FC<{
   const [nativeTools, setNativeTools] = useState(false);
   const [busy, setBusy] = useState<Set<string>>(new Set());
 
-  const list = useMemo(() => profiles.filter(p =>
-    !q || p.name.toLowerCase().includes(q.toLowerCase()) || (p.group || '').toLowerCase().includes(q.toLowerCase()) || (p.tags || []).some(t => t.toLowerCase().includes(q.toLowerCase()))
-  ), [profiles, q]);
+  const [fGroup, setFGroup] = useState('\u0000');
+  const [fTag, setFTag] = useState('');
+  const [sort, setSort] = useState<'recent' | 'name' | 'created'>('recent');
+  const [modal, setModal] = useState<'' | 'group' | 'assign'>('');
+  const [syncBusy, setSyncBusy] = useState<Set<string>>(new Set());
+  const [runs, setRuns] = useState<Record<string, number>>({});
+  const [, tick] = useState(0);
+  useEffect(() => { api.SyncBusy().then((b: any) => setSyncBusy(new Set(b || []))).catch(() => {}); }, []);
+  useEffect(() => onEvent('sync:event', (e: any) => {
+    if (e.phase === 'busy') setSyncBusy(s => new Set(s).add(e.id));
+    if (e.phase === 'idle') setSyncBusy(s => { const n = new Set(s); n.delete(e.id); return n; });
+  }), []);
+  useEffect(() => { api.Running().then((l: any) => setRuns(Object.fromEntries((l || []).map((r: any) => [r.profileId, r.startedAt])))).catch(() => {}); }, [running]);
+  useEffect(() => { if (!running.size) return; const t = setInterval(() => tick(x => x + 1), 30000); return () => clearInterval(t); }, [running.size]);
+  const groups = useMemo(() => [...new Set(profiles.map(p => p.group || ''))].sort(), [profiles]);
+  const tags = useMemo(() => [...new Set(profiles.flatMap(p => p.tags || []))].sort(), [profiles]);
+  // Profiles that share an exit IP with another profile are easy to link.
+  const ipShare = useMemo(() => {
+    const by: Record<string, number> = {};
+    for (const p of profiles) { const ip = proxyName[p.proxyId]?.ip; if (ip) by[ip] = (by[ip] || 0) + 1; }
+    return by;
+  }, [profiles, proxyName]);
+  const list = useMemo(() => {
+    const ql = q.toLowerCase();
+    const out = profiles.filter(p =>
+      (!q || p.name.toLowerCase().includes(ql) || (p.group || '').toLowerCase().includes(ql) || (p.tags || []).some(t => t.toLowerCase().includes(ql)) || (proxyName[p.proxyId]?.ip || '').includes(q))
+      && (fGroup === '\u0000' || (p.group || '') === fGroup) && (!fTag || (p.tags || []).includes(fTag)));
+    out.sort(sort === 'name' ? (a, b) => a.name.localeCompare(b.name, 'zh') : sort === 'created' ? (a, b) => (b.createdAt || 0) - (a.createdAt || 0) : (a, b) => (b.lastRun || 0) - (a.lastRun || 0));
+    return out;
+  }, [profiles, q, fGroup, fTag, sort, proxyName]);
 
   const toggleSel = (id: string) => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const allSel = list.length > 0 && list.every(p => sel.has(p.id));
@@ -154,6 +181,10 @@ const ProfilesView: React.FC<{
   const del = async (ids: string[]) => { if (!await ask({ title: `删除 ${ids.length} 个环境？`, body: '环境的数据目录（Cookie、缓存、扩展状态）会一并删除，无法恢复。云端副本不受影响。', ok: '删除', danger: true })) return; await api.DeleteProfiles(ids); setSel(new Set()); toast('已删除'); reload(); };
 
   const startBatch = async () => { for (const id of sel) { const p = profiles.find(x => x.id === id); if (p && !running.has(id)) await start(p); } };
+  const stopBatch = async () => { const ids = [...sel].filter(id => running.has(id)); if (!ids.length) return; await api.StopProfiles(ids); setRunning(s => { const n = new Set(s); ids.forEach(id => n.delete(id)); return n; }); toast(`已停止 ${ids.length} 个环境`); };
+  const pushBatch = async () => { const r: any = await api.PushProfiles([...sel]); toast(r.failed ? `上传 ${r.ok} 个，失败 ${r.failed} 个：${(r.errors || [])[0] || ''}` : `已上传 ${r.ok} 个环境`, r.failed ? 'bad' : 'ok'); reload(); };
+  const focus = async (id: string) => { try { await api.FocusProfile(id); } catch (e: any) { toast(String(e?.message || e), 'bad'); } };
+  const runningList = profiles.filter(p => running.has(p.id));
 
   if (profiles.length === 0) return (
     <div className="empty">
@@ -187,11 +218,6 @@ const ProfilesView: React.FC<{
 
       <div className="toolbar">
         <div className="search"><Icon.search /><input ref={searchRef} type="text" placeholder="搜索名称、分组或标签" value={q} onChange={e => setQ(e.target.value)} /><kbd>Ctrl K</kbd></div>
-        {sel.size > 0 && <div className="selbar">已选 <b className="num">{sel.size}</b>
-          <button className="btn sm go" onClick={startBatch}><Icon.play s={12} /> 启动</button>
-          <button className="btn sm danger" onClick={() => del([...sel])}><Icon.trash s={13} /> 删除</button>
-          <button className="btn sm ghost" onClick={() => setSel(new Set())}>取消</button>
-        </div>}
         <div className="spacer" />
         <button className="btn" onClick={() => setBulk(true)}><Icon.layers s={15} /> 批量创建</button>
         <button className="btn" onClick={() => setNativeTools(true)}><Icon.shield s={15} /> 指纹库 / JSON</button>
@@ -199,6 +225,39 @@ const ProfilesView: React.FC<{
           <button className="btn primary" onClick={() => { setEditing(null); setDrawer(true); }}><Icon.plus s={15} /> 新建环境</button>
         </BorderBeam>
       </div>
+      <div className="toolbar" style={{ marginTop: -4, gap: 8 }}>
+        {sel.size > 0 ? <div className="selbar" style={{ borderLeft: 0, paddingLeft: 0, marginLeft: 0 }}>已选 <b className="num">{sel.size}</b>
+          <button className="btn sm go" onClick={startBatch}><Icon.play s={12} /> 启动</button>
+          <button className="btn sm" onClick={stopBatch}><Icon.stop s={12} /> 停止</button>
+          <button className="btn sm" onClick={() => setModal('group')}><Icon.folder s={13} /> 分组/标签</button>
+          <button className="btn sm" onClick={() => setModal('assign')}><Icon.globe s={13} /> 分配代理</button>
+          <button className="btn sm" onClick={pushBatch}><Icon.upload s={13} /> 同步</button>
+          <button className="btn sm danger" onClick={() => del([...sel])}><Icon.trash s={13} /> 删除</button>
+          <button className="btn sm ghost" onClick={() => setSel(new Set())}>取消</button>
+        </div> : <>
+        <select style={{ width: 150 }} value={fGroup} onChange={e => setFGroup(e.target.value)}><option value={'\u0000'}>全部分组</option>{groups.map(g => <option key={g} value={g}>{g || '未分组'}</option>)}</select>
+        {tags.length > 0 && <select style={{ width: 150 }} value={fTag} onChange={e => setFTag(e.target.value)}><option value="">全部标签</option>{tags.map(t => <option key={t} value={t}>{t}</option>)}</select>}
+        <select style={{ width: 150 }} value={sort} onChange={e => setSort(e.target.value as any)}><option value="recent">按最近运行</option><option value="name">按名称</option><option value="created">按创建时间</option></select>
+        {(fGroup !== '\u0000' || fTag) && <button className="btn sm ghost" onClick={() => { setFGroup('\u0000'); setFTag(''); }}>清除筛选</button>}
+        </>}
+        <div className="spacer" />
+        <span className="sub" style={{ color: 'var(--txt-3)' }}>显示 {list.length} / {profiles.length}</span>
+      </div>
+
+      {runningList.length > 0 && <div className="panel pad running-panel">
+        <div className="nm" style={{ fontWeight: 650, marginBottom: 8 }}><Icon.bolt s={14} /> 运行中 <span className="num">{runningList.length}</span></div>
+        <div className="run-grid">
+          {runningList.map(p => { const px = proxyName[p.proxyId]; const st = runs[p.id]; return <div key={p.id} className="run-item">
+            <Avatar seed={p.fingerprint.noiseSeed || p.id} os={p.fingerprint.os} running />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="nm" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+              <div className="sub num">{st ? `已运行 ${dur(st)}` : '启动中'} · {px ? <>{px.country ? <CC cc={px.country} /> : null}{px.ip || px.host}</> : '直连'}</div>
+            </div>
+            <button className="btn sm" title="切到前台" onClick={() => focus(p.id)}><Icon.laptop s={13} /></button>
+            <button className="btn sm stop" title="停止" onClick={() => stop(p)}><Icon.stop s={12} /></button>
+          </div>; })}
+        </div>
+      </div>}
 
       <div className="panel list">
         <table>
@@ -222,8 +281,8 @@ const ProfilesView: React.FC<{
                   </div>
                 </td>
                 <td><div className="os" style={{ fontWeight: 550 }}><OsIcon os={p.fingerprint.os} s={13} />{osLabel(p.fingerprint.os)} <span className="sub" style={{ margin: 0 }}>Chrome {p.fingerprint.browserVersion}</span></div><div className="sub num">{p.fingerprint.screenWidth}×{p.fingerprint.screenHeight} · {p.fingerprint.hardwareConcurrency}C/{p.fingerprint.deviceMemory}G</div></td>
-                <td>{px ? <div><CC cc={px.country} /><span>{px.city || px.name}</span><div className="sub num">{px.ip || px.host}</div></div> : <span className="sub">直连</span>}</td>
-                <td><span className={`badge ${p.storage}`}>{p.storage === 'cloud' ? <><Icon.cloud s={12} /> 云端 <span className="num">v{p.cloudVersion}</span></> : <><Icon.laptop s={12} /> 本地</>}</span></td>
+                <td>{px ? <div><CC cc={px.country} /><span>{px.city || px.name}</span>{px.status === 'fail' && <span className="badge fail" style={{ marginLeft: 6 }}>失效</span>}<div className="sub num">{px.ip || px.host}{px.ip && ipShare[px.ip] > 1 && <span className="ip-dup" title="多个环境使用同一出口 IP，容易被平台关联"> ⚠ {ipShare[px.ip]} 个环境共用此 IP</span>}</div></div> : <span className="sub">直连</span>}</td>
+                <td>{(() => { const [txt, tone] = syncState(p, syncBusy); return <span className={`badge ${tone}`}>{tone === 'local' ? <Icon.laptop s={12} /> : <Icon.cloud s={12} />} {txt}{p.storage === 'cloud' && <span className="num" style={{ marginLeft: 3 }}>v{p.cloudVersion}</span>}</span>; })()}</td>
                 <td><span className="sub">{ago(p.lastRun)}</span></td>
                 <td>
                   <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
@@ -247,7 +306,90 @@ const ProfilesView: React.FC<{
       {drawer && <ProfileDrawer profile={editing} proxies={Object.values(proxyName)} onClose={() => setDrawer(false)} onSaved={reload} />}
       {bulk && <BulkModal proxies={Object.values(proxyName)} onClose={() => setBulk(false)} onDone={reload} />}
       {nativeTools && <NativeTools profiles={profiles} onClose={() => setNativeTools(false)} onChanged={reload} />}
+      {modal === 'group' && <GroupModal ids={[...sel]} groups={groups} onClose={() => setModal('')} onDone={reload} />}
+      {modal === 'assign' && <AssignModal ids={[...sel]} proxies={Object.values(proxyName)} profiles={profiles} onClose={() => setModal('')} onDone={reload} />}
     </>
+  );
+};
+
+const dur = (since: number) => { const m = Math.max(0, Math.floor((Date.now() / 1000 - since) / 60)); return m < 60 ? `${m} 分钟` : `${Math.floor(m / 60)} 小时 ${m % 60} 分`; };
+
+const GroupModal: React.FC<{ ids: string[]; groups: string[]; onClose: () => void; onDone: () => void }> = ({ ids, groups, onClose, onDone }) => {
+  const toast = useToast();
+  const [group, setGroup] = useState('');
+  const [keep, setKeep] = useState(false);
+  const [tag, setTag] = useState('');
+  const [out, close] = useExit(onClose);
+  const go = async () => { const n = await api.SetProfilesGroup(ids, keep ? '\u0000' : group, tag); toast(`已更新 ${n} 个环境`); onDone(); close(); };
+  return (
+    <div className={`overlay center ${out ? 'out' : ''}`} onMouseDown={e => e.target === e.currentTarget && close()}>
+      <div className="modal">
+        <div className="dhead"><div className="glyph"><Icon.folder s={18} /></div><div><h3>分组与标签</h3><div className="sub">应用到选中的 {ids.length} 个环境</div></div><div style={{ marginLeft: 'auto' }}><button className="btn ghost icon" onClick={() => close()}><Icon.x /></button></div></div>
+        <div className="dbody">
+          <Field label="移动到分组" hint="留空 = 未分组">
+            <input type="text" list="gb-groups" value={group} disabled={keep} onChange={e => setGroup(e.target.value)} placeholder="输入或选择分组" />
+            <datalist id="gb-groups">{groups.filter(Boolean).map(g => <option key={g} value={g} />)}</datalist>
+          </Field>
+          <label className="sub" style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 10 }}><input type="checkbox" checked={keep} onChange={e => setKeep(e.target.checked)} /> 不修改分组</label>
+          <Field label="添加标签（可选）"><input type="text" value={tag} onChange={e => setTag(e.target.value)} /></Field>
+        </div>
+        <div className="dfoot"><div className="spacer" /><button className="btn" onClick={() => close()}>取消</button><button className="btn primary" onClick={go}><Icon.check s={15} /> 应用</button></div>
+      </div>
+    </div>
+  );
+};
+
+const AssignModal: React.FC<{ ids: string[]; proxies: Proxy[]; profiles: Profile[]; onClose: () => void; onDone: () => void }> = ({ ids, proxies, profiles, onClose, onDone }) => {
+  const toast = useToast();
+  const [q, setQ] = useState('');
+  const [onlyOk, setOnlyOk] = useState(true);
+  const [onlyFree, setOnlyFree] = useState(false);
+  const [pick, setPick] = useState<Set<string>>(new Set());
+  const [mode, setMode] = useState<'order' | 'random' | 'one'>('order');
+  const [out, close] = useExit(onClose);
+  const used = useMemo(() => new Set(profiles.filter(p => !ids.includes(p.id)).map(p => p.proxyId).filter(Boolean)), [profiles, ids]);
+  const shown = proxies.filter(p => (!onlyOk || p.status === 'ok') && (!onlyFree || !used.has(p.id)) && (!q || `${p.name} ${p.host} ${p.ip} ${p.country} ${p.tag}`.toLowerCase().includes(q.toLowerCase())));
+  const toggle = (id: string) => setPick(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const go = async (direct = false) => {
+    try { const n = await api.AssignProxies(ids, direct ? [] : shown.filter(p => pick.has(p.id)).map(p => p.id), mode); toast(direct ? `${n} 个环境改为直连` : `已为 ${n} 个环境分配代理`); onDone(); close(); }
+    catch (e: any) { toast(String(e?.message || e), 'bad'); }
+  };
+  const nPick = shown.filter(p => pick.has(p.id)).length;
+  return (
+    <div className={`overlay center ${out ? 'out' : ''}`} onMouseDown={e => e.target === e.currentTarget && close()}>
+      <div className="modal" style={{ width: 640 }}>
+        <div className="dhead"><div className="glyph"><Icon.globe s={18} /></div><div><h3>批量分配代理</h3><div className="sub">选中的 {ids.length} 个环境</div></div><div style={{ marginLeft: 'auto' }}><button className="btn ghost icon" onClick={() => close()}><Icon.x /></button></div></div>
+        <div className="dbody">
+          <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+            <input type="text" placeholder="搜索名称、IP、国家、标签" value={q} onChange={e => setQ(e.target.value)} />
+            <button className="btn sm ghost" style={{ flex: 'none' }} onClick={() => setPick(new Set(shown.map(p => p.id)))}>全选</button>
+            <button className="btn sm ghost" style={{ flex: 'none' }} onClick={() => setPick(new Set())}>清空</button>
+          </div>
+          <div className="sub" style={{ display: 'flex', gap: 14, marginBottom: 8 }}>
+            <label style={{ display: 'flex', gap: 5, alignItems: 'center' }}><input type="checkbox" checked={onlyOk} onChange={e => setOnlyOk(e.target.checked)} /> 只显示检测可用</label>
+            <label style={{ display: 'flex', gap: 5, alignItems: 'center' }}><input type="checkbox" checked={onlyFree} onChange={e => setOnlyFree(e.target.checked)} /> 只显示未被其他环境使用</label>
+          </div>
+          <div className="assign-list">
+            {shown.map(p => <div key={p.id} className={`assign-row ${pick.has(p.id) ? 'on' : ''}`} onClick={() => toggle(p.id)}>
+              <Chk on={pick.has(p.id)} onClick={() => {}} />
+              <CC cc={p.country} /><span className="nm" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+              <span className="sub num">{p.ip || `${p.host}:${p.port}`}</span>
+              {used.has(p.id) && <span className="badge warn">已被使用</span>}
+            </div>)}
+            {shown.length === 0 && <div className="sub" style={{ padding: 16, textAlign: 'center' }}>没有符合条件的代理</div>}
+          </div>
+          <Field label="分配方式">
+            <select value={mode} onChange={e => setMode(e.target.value as any)}>
+              <option value="order">按顺序轮流（第 1 个环境用第 1 个代理…）</option>
+              <option value="random">随机（代理够用时不重复）</option>
+              <option value="one">全部使用第一个选中的代理</option>
+            </select>
+          </Field>
+          {nPick > 0 && nPick < ids.length && mode !== 'one' && <div className="sub" style={{ color: '#ffd98a' }}>⚠ 代理数（{nPick}）少于环境数（{ids.length}），会有环境共用同一个代理。</div>}
+        </div>
+        <div className="dfoot"><button className="btn ghost" onClick={() => go(true)}>改为直连</button><div className="spacer" /><button className="btn" onClick={() => close()}>取消</button><button className="btn primary" disabled={!nPick} onClick={() => go()}><Icon.check s={15} /> 分配 {nPick} 个代理</button></div>
+      </div>
+    </div>
   );
 };
 

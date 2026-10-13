@@ -19,12 +19,33 @@
 | 访问令牌 | 第 2 步填入的令牌 |
 | 同步密码 | 自己设一个加密密码。每台电脑都要填同一个；这个密码不会发送到服务器 |
 
-## 上传大小
+## 上传大小（增量同步）
 
-一个环境的上传包最大约 256 MB。如果上传时出现 413 错误，请调大以下限制：
+新版客户端按文件切成最大 4 MB 的加密块上传，只传服务器上还没有的块：
 
-- 宝塔：「PHP 设置 → 配置修改」里的 `upload_max_filesize`、`post_max_size`，都设为 `300M`
-- Nginx：`client_max_body_size 300m;`
+- 首次上传是完整的环境，之后关闭浏览器通常只传几 MB
+- 每次请求最大约 12 MB，PHP 默认的 `post_max_size = 8M` 也能用（客户端会自动按服务器上限缩小批次）
+- 单个环境最大 2 GB（不含缓存）
+- 如果遇到 413，把 Nginx 的 `client_max_body_size` 设为 `20m` 以上，PHP 的 `post_max_size` 设为 `16M` 以上
+- 旧版客户端仍可用整包方式同步（最大约 256 MB，需要 `post_max_size` 和 `client_max_body_size` 约 `300M`）
+
+## 多用户
+
+在文件顶部的 `GHOST_USERS` 里加一行 `'令牌' => '名字'`，就多了一个用户：
+
+- 每个用户的数据放在各自独立的目录，互相看不到
+- 每个令牌至少 32 个字符
+- 用户各自在客户端填自己的令牌和自己的同步密码
+
+## 防暴力破解
+
+同一个 IP 在 15 分钟内输错令牌 10 次（`GHOST_MAX_FAILS`），这个 IP 会被封 15 分钟，返回 429。计数保存在 `.ghostsync-guard` 目录。
+
+## 版本历史
+
+- 每个环境默认保留 3 个版本（`GHOST_KEEP_VERSIONS`，或环境变量 `GHOST_SYNC_KEEP_VERSIONS`，最多 50）
+- 客户端「云同步 → 历史版本」可以把任意一个保留的版本恢复到本机，并作为最新版本上传
+- 不再被任何版本引用的数据块，会在 2 天后自动清理
 
 ## 数据存放位置
 
@@ -35,7 +56,7 @@
 - 用 Nginx 时，建议再加一条：`location ~ /\.ghostsync- { deny all; }`
 - 也可以把 `GHOST_DATA_DIR` 改到网站根目录以外的路径
 - 上传的内容是客户端用 AES-256-GCM 加密后的数据，服务器上没有明文
-- 每个环境默认保留最近 2 个版本（`GHOST_KEEP_VERSIONS`），更早的版本会自动清理
+- 每个环境默认保留最近 3 个版本（`GHOST_KEEP_VERSIONS`），更早的版本会自动清理
 
 ## 同步流程（客户端）
 
@@ -66,5 +87,9 @@
   - `lock` / `unlock`
   - `blob`（PUT 上传、GET 下载）
   - `commit`
-  - 新增 `delete`
+  - `delete`
+  - `history`：列出保留的版本；`blob?version=N` 下载某个旧版本
+  - `refs`：上传本版本引用的数据块列表（用于清理）
+  - `chunks/missing`、`chunks`（批量上传）、`chunks/get`（批量下载）
+- `ping` 会返回 `features`、`keepVersions`、`maxBody`、`usedBytes`、`freeBytes`
 - 版本冲突返回 412
