@@ -18,6 +18,8 @@ export function DataDir():Promise<string>;
 
 export function DefaultKernelPath():Promise<string>;
 
+export function DeleteDevicePreset(arg1:string):Promise<void>;
+
 export function DeleteProfiles(arg1:Array<string>):Promise<void>;
 
 export function DeleteProxy(arg1:string):Promise<void>;
@@ -39,6 +41,10 @@ export function ImportNativeJSON(arg1:string):Promise<main.Profile>;
 export function ImportProxies(arg1:string):Promise<Array<main.Proxy>>;
 
 export function KernelMajor():Promise<string>;
+
+export function LibraryAdd(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function LibraryRemove(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function ListCloud():Promise<Array<main.cloudMeta>>;
 
@@ -63,6 +69,8 @@ export function PullProfile(arg1:string):Promise<void>;
 export function PushProfile(arg1:string):Promise<void>;
 
 export function Running():Promise<Array<main.RunState>>;
+
+export function SaveDevicePreset(arg1:main.DevicePreset):Promise<main.DevicePreset>;
 
 export function SaveProfile(arg1:main.Profile):Promise<main.Profile>;
 

@@ -128,7 +128,9 @@ export const LanguagePicker: React.FC<{ value: string[]; onChange: (v: string[])
 };
 
 /** Font picker: chips for chosen fonts, dropdown to add any font of this OS, quick all / random. */
-export const FontPicker: React.FC<{ value: string[]; all: string[]; onChange: (v: string[]) => void }> = ({ value, all, onChange }) => {
+export const FontPicker: React.FC<{ value: string[]; all: string[]; onChange: (v: string[]) => void; onSave?: (f: string) => void }> = ({ value, all, onChange, onSave }) => {
+  const [custom, setCustom] = useState('');
+  const addCustom = (save: boolean) => { const f = custom.trim(); if (!f) return; if (!value.includes(f)) onChange([...value, f]); if (save && onSave) onSave(f); setCustom(''); };
   const opts = useMemo(() => all.filter(f => !value.includes(f)).map(f => [f, f] as [string, string]), [all, value]);
   const random = () => onChange(all.filter((_, i) => i < 12 || Math.random() > 0.18));
   return <div className="langpick">
@@ -143,6 +145,48 @@ export const FontPicker: React.FC<{ value: string[]; all: string[]; onChange: (v
         <button type="button" onClick={() => onChange(value.filter(x => x !== f))} title="移除">×</button></span>)}
     </div>
     <SearchSelect value="" options={opts} onChange={v => v && onChange([...value, v])} placeholder="搜索并添加字体" />
+    <div className="combo-row" style={{ marginTop: 6 }}>
+      <input type="text" value={custom} onChange={e => setCustom(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addCustom(false); }} placeholder="手动输入字体名，回车添加" />
+      <button type="button" className="btn sm combo-btn" onClick={() => addCustom(false)}>添加</button>
+      {onSave && <button type="button" className="btn sm combo-btn" onClick={() => addCustom(true)}>★ 添加并存入库</button>}
+    </div>
+  </div>;
+};
+
+/**
+ * Combo: type freely or pick from the list. Values the user typed can be stored
+ * in their own fingerprint library (★) and removed again (×).
+ */
+export const Combo: React.FC<{
+  value: string; options: string[]; custom?: string[]; onChange: (v: string) => void;
+  onSave?: (v: string) => void; onRemove?: (v: string) => void; placeholder?: string; multiline?: boolean; disabled?: boolean; render?: (v: string) => string;
+}> = ({ value, options, custom = [], onChange, onSave, onRemove, placeholder, multiline, disabled, render }) => {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState(false);
+  const q = typed ? value.trim().toLowerCase() : '';
+  const list = useMemo(() => (q ? options.filter(o => o.toLowerCase().includes(q)) : options).slice(0, 300), [q, options]);
+  const known = options.includes(value);
+  const pickV = (v: string) => { onChange(v); setOpen(false); setTyped(false); };
+  const common = {
+    value, disabled, placeholder: placeholder || '手动输入，或点 ▾ 从列表选择',
+    onChange: (e: any) => { onChange(e.target.value); setTyped(true); setOpen(true); },
+    onFocus: () => setTyped(false), onBlur: () => setTimeout(() => setOpen(false), 120),
+    onKeyDown: (e: any) => { if (e.key === 'Escape') setOpen(false); },
+  };
+  return <div className="combo">
+    <div className="combo-row">
+      {multiline ? <textarea {...common} style={{ minHeight: 54 }} /> : <input type="text" {...common} />}
+      <button type="button" className="btn sm combo-btn" disabled={disabled} onMouseDown={e => e.preventDefault()} onClick={() => { setTyped(false); setOpen(o => !o); }} title="从列表选择">▾</button>
+      {onSave && value.trim() && !known && !disabled && <button type="button" className="btn sm combo-btn" onClick={() => onSave(value.trim())} title="存入我的指纹库">★ 存入库</button>}
+    </div>
+    {open && <div className="combo-list" onMouseDown={e => e.preventDefault()}>
+      {list.length === 0 && <div className="combo-empty">没有匹配项，可以直接使用输入的值{onSave ? '，或点「★ 存入库」' : ''}</div>}
+      {list.map(o => <div key={o} className={'combo-item' + (o === value ? ' on' : '')} onClick={() => pickV(o)}>
+        {custom.includes(o) && <span className="combo-star" title="我的指纹库">★</span>}
+        <span className="combo-text">{render ? render(o) : o}</span>
+        {custom.includes(o) && onRemove && <button type="button" className="combo-x" title="从我的指纹库删除" onClick={e => { e.stopPropagation(); onRemove(o); }}>×</button>}
+      </div>)}
+    </div>}
   </div>;
 };
 

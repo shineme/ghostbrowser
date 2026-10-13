@@ -24,6 +24,7 @@ func NewApp() *App { return &App{} }
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.store = NewStore()
+	userLib.open(a.store.dir)
 	globalAuto = &autoSyncer{s: a.store, busy: map[string]bool{}, emit: func(e SyncEvent) { wruntime.EventsEmit(a.ctx, "sync:event", e) }}
 	runReg.onExit = func(id string) {
 		wruntime.EventsEmit(a.ctx, "profile:exit", id)
@@ -132,6 +133,16 @@ func (a *App) ScreenOptions(osName string) []string { return ScreenOptions(osNam
 func (a *App) FingerprintCatalog(osName string) FPCatalog {
 	return FingerprintCatalog(osName, a.KernelMajor())
 }
+
+// ---------- user fingerprint library ----------
+
+// LibraryAdd saves one custom value (a UA, a GPU "vendor\x1frenderer", a font, a screen "WxH@dpr", ...).
+func (a *App) LibraryAdd(osName, field, value string) error { return userLib.Add(osName, field, value) }
+func (a *App) LibraryRemove(osName, field, value string) error {
+	return userLib.Remove(osName, field, value)
+}
+func (a *App) SaveDevicePreset(p DevicePreset) (DevicePreset, error) { return userLib.SavePreset(p) }
+func (a *App) DeleteDevicePreset(id string) error                    { return userLib.DeletePreset(id) }
 
 // DevicePresets returns GhostBrowser's own device library for one OS ("" = all).
 func (a *App) DevicePresets(osName string) []DevicePreset { return DevicePresetsFor(osName) }

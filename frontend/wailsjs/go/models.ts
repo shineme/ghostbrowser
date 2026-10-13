@@ -13,6 +13,7 @@ export namespace main {
 	    hardwareConcurrency: number;
 	    deviceMemory: number;
 	    maxTouchPoints: number;
+	    custom?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new DevicePreset(source);
@@ -32,6 +33,7 @@ export namespace main {
 	        this.hardwareConcurrency = source["hardwareConcurrency"];
 	        this.deviceMemory = source["deviceMemory"];
 	        this.maxTouchPoints = source["maxTouchPoints"];
+	        this.custom = source["custom"];
 	    }
 	}
 	export class FPCatalog {
@@ -42,6 +44,10 @@ export namespace main {
 	    vendors: string[];
 	    gpus: any[];
 	    fonts: string[];
+	    screens: string[];
+	    cores: string[];
+	    memory: string[];
+	    custom: Record<string, Array<string>>;
 	
 	    static createFrom(source: any = {}) {
 	        return new FPCatalog(source);
@@ -56,6 +62,10 @@ export namespace main {
 	        this.vendors = source["vendors"];
 	        this.gpus = source["gpus"];
 	        this.fonts = source["fonts"];
+	        this.screens = source["screens"];
+	        this.cores = source["cores"];
+	        this.memory = source["memory"];
+	        this.custom = source["custom"];
 	    }
 	}
 	export class Fingerprint {

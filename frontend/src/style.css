@@ -511,3 +511,18 @@ a { color: #aab6ff; }
 .langpick .chip small { color: var(--txt-3); }
 .langpick .chip button { background: none; border: 0; color: var(--txt-2); cursor: pointer; padding: 0 4px; font-size: 14px; line-height: 1; border-radius: 6px; }
 .langpick .chip button:hover { color: var(--txt); background: rgba(255,255,255,.08); }
+
+/* Combo: free input + list + user library */
+.combo { position: relative; }
+.combo-row { display: flex; gap: 6px; align-items: flex-start; }
+.combo-row > input, .combo-row > textarea { flex: 1; min-width: 0; }
+.combo-btn { flex: none; white-space: nowrap; }
+.combo-list { position: absolute; z-index: 60; left: 0; right: 0; top: calc(100% + 4px); max-height: 260px; overflow-y: auto; background: var(--ink-2); border: 1px solid var(--hair-2); border-radius: 10px; box-shadow: 0 14px 40px rgba(0,0,0,.45); padding: 4px; }
+.combo-item { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 7px; cursor: pointer; font-size: 12.5px; line-height: 1.35; }
+.combo-item:hover { background: rgba(139,124,255,.14); }
+.combo-item.on { background: rgba(139,124,255,.22); }
+.combo-text { flex: 1; min-width: 0; word-break: break-all; }
+.combo-star { color: #f5c451; flex: none; }
+.combo-x { flex: none; background: none; border: 0; color: var(--txt-3); cursor: pointer; font-size: 15px; padding: 0 4px; }
+.combo-x:hover { color: #ff6b81; }
+.combo-empty { padding: 10px; font-size: 12px; color: var(--txt-3); }

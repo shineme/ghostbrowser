@@ -157,6 +157,7 @@ type DevicePreset struct {
 	Cores     int     `json:"hardwareConcurrency"`
 	Memory    int     `json:"deviceMemory"`
 	Touch     int     `json:"maxTouchPoints"`
+	Custom    bool    `json:"custom,omitempty"`
 }
 
 var laptopScreens = []screen{{1920, 1080, 1.25}, {1536, 864, 1.25}, {1366, 768, 1}, {1920, 1200, 1.25}, {2560, 1600, 1.5}, {1600, 900, 1}, {1920, 1080, 1.5}}
@@ -247,7 +248,7 @@ var devicePresets = func() []DevicePreset {
 // DevicePresetsFor lists presets for one OS ("" = all).
 func DevicePresetsFor(osName string) []DevicePreset {
 	out := []DevicePreset{}
-	for _, p := range devicePresets {
+	for _, p := range append(userLib.presets(), devicePresets...) {
 		if osName == "" || p.OS == osName {
 			out = append(out, p)
 		}
@@ -280,6 +281,10 @@ type FPCatalog struct {
 	Vendors       []string            `json:"vendors"`
 	GPUs          []map[string]string `json:"gpus"`
 	Fonts         []string            `json:"fonts"`
+	Screens       []string            `json:"screens"`
+	Cores         []string            `json:"cores"`
+	Memory        []string            `json:"memory"`
+	Custom        map[string][]string `json:"custom"` // the user's own entries per field, deletable
 }
 
 var osVersionsByOS = map[string][]string{
@@ -327,5 +332,29 @@ func FingerprintCatalog(osName, kernelMajor string) FPCatalog {
 	default:
 		c.Fonts = winFonts
 	}
+	c.Screens = ScreenOptions(osName)
+	c.Cores = []string{"2", "4", "6", "8", "10", "12", "14", "16", "20", "24", "32"}
+	c.Memory = []string{"2", "4", "8"}
+	c.Custom = map[string][]string{}
+	for f := range libraryFields {
+		c.Custom[f] = userLib.values(osName, f)
+	}
+	c.OSVersions = mergeFront(c.Custom["osVersions"], c.OSVersions)
+	c.BrowserMajors = mergeFront(c.Custom["browserMajors"], c.BrowserMajors)
+	c.UserAgents = mergeFront(c.Custom["userAgents"], c.UserAgents)
+	c.Platforms = mergeFront(c.Custom["platforms"], c.Platforms)
+	c.Vendors = mergeFront(c.Custom["vendors"], c.Vendors)
+	c.Fonts = mergeFront(c.Custom["fonts"], c.Fonts)
+	c.Screens = mergeFront(c.Custom["screens"], c.Screens)
+	c.Cores = mergeFront(c.Custom["cores"], c.Cores)
+	c.Memory = mergeFront(c.Custom["memory"], c.Memory)
+	var gpus []map[string]string
+	for _, g := range c.Custom["gpus"] {
+		if v, r, ok := strings.Cut(g, "\x1f"); ok {
+			gpus = append(gpus, map[string]string{"vendor": v, "renderer": r, "custom": "1"})
+			c.Vendors = mergeFront(c.Vendors, []string{v})
+		}
+	}
+	c.GPUs = append(gpus, c.GPUs...)
 	return c
 }

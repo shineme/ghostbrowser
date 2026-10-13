@@ -34,6 +34,10 @@ export function DefaultKernelPath() {
   return window['go']['main']['App']['DefaultKernelPath']();
 }
 
+export function DeleteDevicePreset(arg1) {
+  return window['go']['main']['App']['DeleteDevicePreset'](arg1);
+}
+
 export function DeleteProfiles(arg1) {
   return window['go']['main']['App']['DeleteProfiles'](arg1);
 }
@@ -76,6 +80,14 @@ export function ImportProxies(arg1) {
 
 export function KernelMajor() {
   return window['go']['main']['App']['KernelMajor']();
+}
+
+export function LibraryAdd(arg1, arg2, arg3) {
+  return window['go']['main']['App']['LibraryAdd'](arg1, arg2, arg3);
+}
+
+export function LibraryRemove(arg1, arg2, arg3) {
+  return window['go']['main']['App']['LibraryRemove'](arg1, arg2, arg3);
 }
 
 export function ListCloud() {
@@ -124,6 +136,10 @@ export function PushProfile(arg1) {
 
 export function Running() {
   return window['go']['main']['App']['Running']();
+}
+
+export function SaveDevicePreset(arg1) {
+  return window['go']['main']['App']['SaveDevicePreset'](arg1);
 }
 
 export function SaveProfile(arg1) {

@@ -60,6 +60,10 @@ const M = {
   },
   CloneProfile: async (id: string) => { const p = mock.profiles.find(x => x.id === id); const c = { ...p, id: rid(), name: p.name + ' (copy)', fingerprint: mockFP(p.fingerprint.os) }; mock.profiles.unshift(c); return c; },
   NewFingerprint: async (os: string) => mockFP(os),
+  LibraryAdd: async (_os: string, _f: string, _v: string) => {},
+  LibraryRemove: async (_os: string, _f: string, _v: string) => {},
+  SaveDevicePreset: async (p: any) => ({ ...p, id: 'my-1', name: p.name || '我的预设', custom: true }),
+  DeleteDevicePreset: async (_id: string) => {},
   SyncNow: async (): Promise<any> => ({ phase: 'done', pulled: 0, pushed: 0, failed: 0, message: '同步完成：下载 0，上传 0，失败 0' }),
   FingerprintCatalog: async (os: string): Promise<any> => {
     const majors = ['142', '141', '140', '139', '138'];
@@ -70,6 +74,7 @@ const M = {
       platforms: [os === 'macos' ? 'MacIntel' : os === 'linux' ? 'Linux x86_64' : 'Win32'],
       vendors: os === 'macos' ? ['Google Inc. (Apple)'] : ['Google Inc. (NVIDIA)', 'Google Inc. (Intel)'],
       gpus: os === 'macos' ? [{ vendor: 'Google Inc. (Apple)', renderer: 'ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)' }] : [{ vendor: 'Google Inc. (NVIDIA)', renderer: 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002504) Direct3D11 vs_5_0 ps_5_0, D3D11)' }, { vendor: 'Google Inc. (Intel)', renderer: 'ANGLE (Intel, Intel(R) Iris(R) Xe Graphics (0x00009A49) Direct3D11 vs_5_0 ps_5_0, D3D11)' }],
+      screens: ['1920x1080@1', '2560x1440@1'], cores: ['4', '8', '16'], memory: ['2', '4', '8'], custom: {},
       fonts: os === 'macos' ? ['Helvetica', 'Helvetica Neue', 'Menlo', 'PingFang SC'] : ['Arial', 'Calibri', 'Consolas', 'Microsoft YaHei', 'Segoe UI'],
     };
   },
