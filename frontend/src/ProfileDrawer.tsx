@@ -43,6 +43,46 @@ export const ProfileDrawer: React.FC<{
   const [out, close] = useExit(onClose);
   const [flash, setFlash] = useState(0);
   const setFP = (patch: Partial<Fingerprint>) => setP(s => ({ ...s, fingerprint: { ...s.fingerprint, ...patch } as Fingerprint }));
+  // Exit-IP match: what timezone / languages / coordinates the selected proxy implies.
+  const [geo, setGeo] = useState<any>(null);
+  const [geoBusy, setGeoBusy] = useState(false);
+  const followAny = fp.timezoneFromIP || fp.languageFromIP || fp.geoFromIP;
+  const runGeo = async (force = false) => {
+    setGeoBusy(true);
+    try {
+      const m: any = await api.MatchGeo(p.proxyId || '', (p.inlineProxy || null) as any);
+      setGeo(m);
+      if (m.ok) setP(s => {
+        const f = s.fingerprint, patch: Partial<Fingerprint> = {};
+        if (f.timezoneFromIP || force) patch.timezone = m.timezone;
+        if (f.languageFromIP || force) patch.languages = m.languages;
+        if ((f.geoFromIP || force) && (m.lat || m.lon)) { patch.latitude = m.lat; patch.longitude = m.lon; }
+        if (force) Object.assign(patch, { timezoneFromIP: true, languageFromIP: true, geoFromIP: true });
+        return { ...s, fingerprint: { ...f, ...patch } as Fingerprint };
+      });
+    } catch (e: any) { setGeo({ ok: false, error: String(e?.message || e) }); } finally { setGeoBusy(false); }
+  };
+  useEffect(() => { setGeo(null); if (followAny || tab === 'adv') runGeo(); /* eslint-disable-next-line */ }, [p.proxyId, p.inlineProxy?.host]);
+  useEffect(() => { if (tab === 'adv' && !geo && !geoBusy) runGeo(); /* eslint-disable-next-line */ }, [tab]);
+  const ipTypeName = (t: string) => t === 'hosting' ? '机房' : t === 'mobile' ? '移动' : t === 'residential' ? '住宅' : '';
+  const geoCard = (
+    <div className={`geo-card ${geo && !geo.ok ? 'bad' : geo?.stale ? 'warn' : ''}`}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Icon.globe s={15} />
+        <b>{p.proxyId || p.inlineProxy ? '代理出口' : '本机出口（未选代理）'}</b>
+        <div className="spacer" style={{ flex: 1 }} />
+        <button type="button" className="btn sm" disabled={geoBusy} onClick={() => runGeo()}>{geoBusy ? '检测中…' : '重新检测'}</button>
+        {geo?.ok && !(fp.timezoneFromIP && fp.languageFromIP && fp.geoFromIP) && <button type="button" className="btn sm primary" onClick={() => runGeo(true)}>全部跟随 IP</button>}
+      </div>
+      {!geo && <div className="sub">{geoBusy ? '正在检测出口 IP…' : '尚未检测'}</div>}
+      {geo && !geo.ok && <div className="sub">检测失败：{geo.error}。启动时会再试一次；仍失败会拒绝启动，避免时区和 IP 对不上。</div>}
+      {geo?.ok && <>
+        <div className="num" style={{ marginTop: 4 }}>{geo.ip} · {geo.country} {[geo.region, geo.city].filter(Boolean).join(' · ')}{geo.ipType ? ` · ${ipTypeName(geo.ipType)}` : ''}{geo.latency ? ` · ${geo.latency} ms` : ''}</div>
+        <div className="sub">应匹配：时区 {geo.timezone} · 语言 {(geo.languages || []).join(', ')} · 坐标 {(+geo.lat).toFixed(4)}, {(+geo.lon).toFixed(4)}</div>
+        {geo.stale && <div className="sub">现在连不上代理，以上是上次检测的结果（{geo.error}）。</div>}
+      </>}
+    </div>
+  );
 
   useEffect(() => {
     api.GPUOptions(fp.os).then(setGpus);
@@ -185,6 +225,7 @@ export const ProfileDrawer: React.FC<{
           </div>}
 
           {tab === 'adv' && native && <div className="tabpane">
+            {geoCard}
             <Field label="国家/地区预设" hint="一键填入该国家的时区、语言和地理坐标"><CountrySelect value={countryOfTz(fp.timezone)} onChange={c => setFP({ timezone: c.tz, languages: c.langs, latitude: c.lat, longitude: c.lon, timezoneFromIP: false, languageFromIP: false, geoFromIP: false })} /></Field>
             <Field label="时区"><TimezoneSelect value={fp.timezone} onChange={v => setFP({ timezone: v, timezoneFromIP: false })} /></Field>
             <Field label="语言（按优先级）"><LanguagePicker value={fp.languages || []} onChange={v => setFP({ languages: v, languageFromIP: false })} /></Field>
@@ -195,11 +236,12 @@ export const ProfileDrawer: React.FC<{
           {tab === 'adv' && !native && <div className="tabpane">
             <div className="section-title">地区 — 跟随代理出口 IP</div>
             <Field label="国家/地区预设" hint="一键填入该国家的时区、语言和地理坐标"><CountrySelect value={countryOfTz(fp.timezone)} onChange={c => setFP({ timezone: c.tz, languages: c.langs, latitude: c.lat, longitude: c.lon, timezoneFromIP: false, languageFromIP: false, geoFromIP: false })} /></Field>
-            <Toggle on={fp.timezoneFromIP} onChange={v => setFP({ timezoneFromIP: v })} label="时区跟随 IP" hint="关闭则使用下方手动时区" />
+            {geoCard}
+            <Toggle on={fp.timezoneFromIP} onChange={v => setFP({ timezoneFromIP: v })} label="时区跟随 IP" hint={fp.timezoneFromIP && geo?.ok ? `→ ${geo.timezone}` : '关闭则使用下方手动时区'} />
             {!fp.timezoneFromIP && <Field label="时区"><TimezoneSelect value={fp.timezone} onChange={v => setFP({ timezone: v })} /></Field>}
-            <Toggle on={fp.languageFromIP} onChange={v => setFP({ languageFromIP: v })} label="语言跟随 IP" hint="按出口国家设置 Accept-Language" />
+            <Toggle on={fp.languageFromIP} onChange={v => setFP({ languageFromIP: v })} label="语言跟随 IP" hint={fp.languageFromIP && geo?.ok ? `→ ${(geo.languages || []).join(', ')}` : '按出口国家（及地区）设置 Accept-Language 和 navigator.languages'} />
             {!fp.languageFromIP && <Field label="语言（按优先级）"><LanguagePicker value={fp.languages || []} onChange={v => setFP({ languages: v })} /></Field>}
-            <Toggle on={fp.geoFromIP} onChange={v => setFP({ geoFromIP: v })} label="地理定位跟随 IP" />
+            <Toggle on={fp.geoFromIP} onChange={v => setFP({ geoFromIP: v })} label="地理定位跟随 IP" hint={fp.geoFromIP && geo?.ok ? `→ ${(+geo.lat).toFixed(4)}, ${(+geo.lon).toFixed(4)}（${geo.city || geo.country}）` : '关闭则使用下方手动坐标'} />
             {!fp.geoFromIP && <div className="grid2"><Field label="纬度"><input type="number" step="0.0001" value={fp.latitude} onChange={e => setFP({ latitude: +e.target.value })} /></Field><Field label="经度"><input type="number" step="0.0001" value={fp.longitude} onChange={e => setFP({ longitude: +e.target.value })} /></Field></div>}
 
             <div className="section-title">噪声 — 让每个环境的指纹都独一无二</div>

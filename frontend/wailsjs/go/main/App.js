@@ -114,6 +114,10 @@ export function ListProxies() {
   return window['go']['main']['App']['ListProxies']();
 }
 
+export function MatchGeo(arg1, arg2) {
+  return window['go']['main']['App']['MatchGeo'](arg1, arg2);
+}
+
 export function NativePresets() {
   return window['go']['main']['App']['NativePresets']();
 }

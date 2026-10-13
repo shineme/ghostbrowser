@@ -208,7 +208,10 @@ func (s *Store) nativeSpec(p *Profile, st Settings) (*undetectable.Spec, error) 
 	} else if p.ProxyID != "" {
 		px, _ = s.GetProxy(p.ProxyID)
 	}
-	fp := resolveFP(p.Fingerprint, px)
+	fp, err := s.matchFP(p.Fingerprint, px)
+	if err != nil {
+		return nil, err
+	}
 	if fp.OS != "windows" {
 		return nil, fmt.Errorf("当前本地原生模板只验证过 Windows，请使用 Windows 配置")
 	}

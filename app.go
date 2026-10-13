@@ -293,6 +293,29 @@ func (a *App) pickProxies(ids []string) []Proxy {
 	return out
 }
 
+// MatchGeo checks the exit IP of a saved proxy (proxyID), an inline proxy, or
+// the direct connection (both empty) and returns the timezone, languages and
+// coordinates a profile should use there.
+func (a *App) MatchGeo(proxyID string, inline *Proxy) GeoMatch {
+	var px *Proxy
+	if inline != nil && inline.Host != "" {
+		px = inline
+	} else if proxyID != "" {
+		if p, ok := a.store.GetProxy(proxyID); ok {
+			px = p
+		} else {
+			return GeoMatch{Error: "代理不存在"}
+		}
+	}
+	m := a.store.liveExit(px, 5*time.Minute)
+	if px != nil && px.ID != "" {
+		if p, ok := a.store.GetProxy(px.ID); ok {
+			a.emitProxy(*p)
+		}
+	}
+	return m
+}
+
 // ---------- settings ----------
 
 func (a *App) GetSettings() Settings { return a.store.GetSettings() }

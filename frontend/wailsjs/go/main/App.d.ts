@@ -58,6 +58,8 @@ export function ListProfiles():Promise<Array<main.Profile>>;
 
 export function ListProxies():Promise<Array<main.Proxy>>;
 
+export function MatchGeo(arg1:string,arg2:main.Proxy):Promise<main.GeoMatch>;
+
 export function NativePresets():Promise<Array<main.NativePreset>>;
 
 export function NativeSnapshot(arg1:string):Promise<string>;

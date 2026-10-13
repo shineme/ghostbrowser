@@ -138,6 +138,46 @@ export namespace main {
 	        this.hideMediaDevices = source["hideMediaDevices"];
 	    }
 	}
+	export class GeoMatch {
+	    ok: boolean;
+	    error: string;
+	    stale: boolean;
+	    direct: boolean;
+	    ip: string;
+	    country: string;
+	    region: string;
+	    city: string;
+	    isp: string;
+	    ipType: string;
+	    timezone: string;
+	    languages: string[];
+	    lat: number;
+	    lon: number;
+	    latency: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new GeoMatch(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ok = source["ok"];
+	        this.error = source["error"];
+	        this.stale = source["stale"];
+	        this.direct = source["direct"];
+	        this.ip = source["ip"];
+	        this.country = source["country"];
+	        this.region = source["region"];
+	        this.city = source["city"];
+	        this.isp = source["isp"];
+	        this.ipType = source["ipType"];
+	        this.timezone = source["timezone"];
+	        this.languages = source["languages"];
+	        this.lat = source["lat"];
+	        this.lon = source["lon"];
+	        this.latency = source["latency"];
+	    }
+	}
 	export class NativePreset {
 	    id: string;
 	    name: string;

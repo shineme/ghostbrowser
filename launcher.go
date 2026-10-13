@@ -125,7 +125,10 @@ func (s *Store) Launch(id string) (*RunState, error) {
 			px = pr
 		}
 	}
-	fp := resolveFP(p.Fingerprint, px)
+	fp, err := s.matchFP(p.Fingerprint, px)
+	if err != nil {
+		return nil, err
+	}
 
 	userDir := s.ProfileDir(id)
 	_ = os.MkdirAll(userDir, 0o755)
