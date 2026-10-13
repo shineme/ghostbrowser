@@ -10,10 +10,13 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// localHTTP never goes through a system/env proxy when talking to 127.0.0.1.
+var localHTTP = &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{Proxy: nil}}
+
 func waitDebugger(port int, timeout time.Duration) (string, error) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/json/version", port))
+		resp, err := localHTTP.Get(fmt.Sprintf("http://127.0.0.1:%d/json/version", port))
 		if err == nil {
 			var v struct {
 				WS string `json:"webSocketDebuggerUrl"`

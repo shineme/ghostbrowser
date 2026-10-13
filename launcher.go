@@ -101,7 +101,15 @@ func (s *Store) Launch(id string) (*RunState, error) {
 	if st.KernelMode == "undetectable" {
 		return s.launchUndetectable(p, st)
 	}
-	kernel := st.KernelPath
+	kernel := strings.Trim(strings.TrimSpace(st.KernelPath), "\"")
+	// The bundled Undetectable runtime only works in "undetectable" mode; a path
+	// left over from that mode (or one that no longer exists) silently fails.
+	if kernel != "" {
+		low := strings.ToLower(kernel)
+		if info, err := os.Stat(kernel); err != nil || info.IsDir() || strings.Contains(low, "undetectable-kit") {
+			kernel = ""
+		}
+	}
 	if kernel == "" {
 		kernel = findChrome()
 	}
@@ -212,6 +220,9 @@ func (s *Store) Launch(id string) (*RunState, error) {
 	select {
 	case ws = <-wsCh:
 	case err := <-exited:
+		if err == nil {
+			return nil, fmt.Errorf("浏览器进程把启动请求交给了已在运行的同一环境实例后退出。请先在任务管理器结束占用该环境目录的 chrome.exe 后重试。内核：%s%s", kernel, logTail(logPath))
+		}
 		return nil, fmt.Errorf("浏览器进程启动后立即退出（%v）。内核：%s。请检查内核路径是否为真正的 chrome.exe，以及当前注入方式是否匹配该内核；详细输出见 %s%s", err, kernel, logPath, logTail(logPath))
 	}
 	if ws == "" {
