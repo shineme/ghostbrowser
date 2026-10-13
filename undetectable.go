@@ -266,10 +266,13 @@ func (s *Store) nativeSpec(p *Profile, st Settings) (*undetectable.Spec, error) 
 	}
 	spec := &undetectable.Spec{SchemaVersion: 1, ProfileID: p.ID, Name: p.Name, ChromePath: chrome, ProfilesRoot: root, TemplatePath: filepath.Join(kit, "fingerprints", "templates", file), Data: rawMap(n.Data), ConfigMeta: rawMap(n.ConfigMeta), Runtime: undetectable.RuntimeValues{Platform: fp.Platform, PixelRatio: fp.PixelRatio, ColorDepth: int64(fp.ColorDepth), WebGLVendor: fp.WebGLVendor}, StartURLs: p.StartURLs, ExtraArgs: n.ExtraArgs, Headless: n.Headless}
 	if px != nil && px.Type != "none" && px.Host != "" {
-		if px.User != "" || px.Pass != "" {
-			return nil, fmt.Errorf("原生模式暂不支持带账号密码的代理；请使用本地代理转发或无鉴权代理")
+		// Credentials are kept in the URL; Spec.Start relays them through a
+		// local 127.0.0.1 proxy because Chromium can't take them on the command line.
+		pu := px.URL()
+		if px.User == "" && px.Type == "https" {
+			pu.Scheme = "https"
 		}
-		spec.Proxy = fmt.Sprintf("%s://%s:%d", px.Type, px.Host, px.Port)
+		spec.Proxy = pu.String()
 	}
 	if fp.WebRTC == "disabled" {
 		spec.ExtraArgs = append(spec.ExtraArgs, "--force-webrtc-ip-handling-policy=disable_non_proxied_udp")

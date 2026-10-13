@@ -247,6 +247,7 @@ type Session struct {
 	once         sync.Once
 	bridgeDir    string
 	profileLock  *os.File
+	relay        *Relay
 }
 
 func (s *Spec) Start(port int) (*Session, error) {
@@ -292,8 +293,17 @@ func (s *Spec) Start(port int) (*Session, error) {
 		return nil, err
 	}
 	args := []string{"--profile-id=" + nativeID, "--user-data-dir=" + filepath.Join(s.ProfilesRoot, s.ProfileID), fmt.Sprintf("--remote-debugging-port=%d", port), "--remote-debugging-address=127.0.0.1", "--no-first-run", "--no-default-browser-check", "--enable-chrome-browser-cloud-management", "--enable-privacy-sandbox-ads-apis", "--lang=" + primaryLang(c.Expected().Languages)}
+	var relay *Relay
 	if s.Proxy != "" {
-		args = append(args, "--proxy-server="+s.Proxy)
+		proxyArg := s.Proxy
+		if NeedsRelay(s.Proxy) {
+			// Chromium can't take credentials on the command line: go through a local relay.
+			if relay, err = StartRelay(s.Proxy); err != nil {
+				return nil, fmt.Errorf("proxy relay: %w", err)
+			}
+			proxyArg = relay.URL()
+		}
+		args = append(args, "--proxy-server="+proxyArg)
 	}
 	if s.Headless {
 		args = append(args, "--headless=new")
@@ -303,12 +313,13 @@ func (s *Spec) Start(port int) (*Session, error) {
 	args = append(args, "about:blank")
 	cmd := exec.Command(s.ChromePath, args...)
 	cmd.Dir = filepath.Dir(s.ChromePath)
-	session := &Session{Cmd: cmd, Port: port, ProfileID: s.ProfileID, Config: c, Done: make(chan struct{}), bridgeDir: bridge, profileLock: lock}
+	session := &Session{Cmd: cmd, Port: port, ProfileID: s.ProfileID, Config: c, Done: make(chan struct{}), bridgeDir: bridge, profileLock: lock, relay: relay}
 	if err = cmd.Start(); err != nil {
 		cleanupBridge(bridge)
+		relay.Close()
 		return nil, err
 	}
-	go func() { session.exitErr = cmd.Wait(); close(session.Done) }()
+	go func() { session.exitErr = cmd.Wait(); relay.Close(); close(session.Done) }()
 	ver, err := WaitForCDP(port, 30*time.Second, func() (int, bool) {
 		select {
 		case <-session.Done:
@@ -391,6 +402,7 @@ func (s *Session) Close() {
 		if s.profileLock != nil {
 			s.profileLock.Close()
 		}
+		s.relay.Close()
 	})
 }
 
