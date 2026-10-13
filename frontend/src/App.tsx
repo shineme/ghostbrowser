@@ -3,7 +3,7 @@ import { BorderBeam } from 'border-beam';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api, Profile, Proxy, Settings, onEvent } from './api';
 import { MetalFx } from 'metal-fx';
-import { Icon, Field, flag, ago, useToast, useConfirm, useExit, ToastHost, WindowControls, useMaximised, StatCard, Avatar, CC, CountUp, OsIcon, Ambient, Splash, useSpotlight } from './ui';
+import { Icon, Field, flag, ago, useToast, useConfirm, useExit, ToastHost, WindowControls, useMaximised, StatCard, Avatar, CC, CountUp, OsIcon, Ambient, Splash, useSpotlight, Pick, Segmented } from './ui';
 import { ProfileDrawer } from './ProfileDrawer';
 import { ProxyView } from './ProxyView';
 import { SettingsView } from './SettingsView';
@@ -208,7 +208,7 @@ const ProfilesView: React.FC<{
   const proxied = profiles.filter(p => p.proxyId).length;
 
   return (
-    <>
+    <div className={sel.size ? 'has-bulk' : ''} style={{ display: 'contents' }}>
       <div className="stat-row">
         <StatCard l="环境总数" n={profiles.length} ic="layers" pct={100} />
         <StatCard l="运行中" n={running.size} of={profiles.length} ic="bolt" tone="ok" pct={profiles.length ? running.size / profiles.length * 100 : 0} />
@@ -217,7 +217,14 @@ const ProfilesView: React.FC<{
       </div>
 
       <div className="toolbar">
-        <div className="search"><Icon.search /><input ref={searchRef} type="text" placeholder="搜索名称、分组或标签" value={q} onChange={e => setQ(e.target.value)} /><kbd>Ctrl K</kbd></div>
+        <div className="search"><Icon.search /><input ref={searchRef} type="text" placeholder="搜索名称、分组、标签或 IP" value={q} onChange={e => setQ(e.target.value)} /><kbd>Ctrl K</kbd></div>
+        <Pick label="分组" value={fGroup} onChange={setFGroup} icon={<Icon.folder />}
+          options={[['\u0000', '全部分组', profiles.length] as [string, string, number], ...groups.map(g => [g, g || '未分组', profiles.filter(p => (p.group || '') === g).length] as [string, string, number])]} />
+        {tags.length > 0 && <Pick label="标签" value={fTag} onChange={setFTag} icon={<Icon.grid />}
+          options={[['', '全部标签'] as [string, string], ...tags.map(t => [t, t, profiles.filter(p => (p.tags || []).includes(t)).length] as [string, string, number])]} />}
+        <Pick label="排序" value={sort} onChange={setSort as any} icon={<Icon.layers />}
+          options={[['recent', '最近运行'], ['name', '名称'], ['created', '创建时间']]} />
+        {(fGroup !== '\u0000' || fTag) && <><span className="tb-count num">{list.length} / {profiles.length}</span><button className="tb-clear" onClick={() => { setFGroup('\u0000'); setFTag(''); }}>清除</button></>}
         <div className="spacer" />
         <button className="btn" onClick={() => setBulk(true)}><Icon.layers s={15} /> 批量创建</button>
         <button className="btn" onClick={() => setNativeTools(true)}><Icon.shield s={15} /> 指纹库 / JSON</button>
@@ -225,38 +232,15 @@ const ProfilesView: React.FC<{
           <button className="btn primary" onClick={() => { setEditing(null); setDrawer(true); }}><Icon.plus s={15} /> 新建环境</button>
         </BorderBeam>
       </div>
-      <div className="toolbar" style={{ marginTop: -4, gap: 8 }}>
-        {sel.size > 0 ? <div className="selbar" style={{ borderLeft: 0, paddingLeft: 0, marginLeft: 0 }}>已选 <b className="num">{sel.size}</b>
-          <button className="btn sm go" onClick={startBatch}><Icon.play s={12} /> 启动</button>
-          <button className="btn sm" onClick={stopBatch}><Icon.stop s={12} /> 停止</button>
-          <button className="btn sm" onClick={() => setModal('group')}><Icon.folder s={13} /> 分组/标签</button>
-          <button className="btn sm" onClick={() => setModal('assign')}><Icon.globe s={13} /> 分配代理</button>
-          <button className="btn sm" onClick={pushBatch}><Icon.upload s={13} /> 同步</button>
-          <button className="btn sm danger" onClick={() => del([...sel])}><Icon.trash s={13} /> 删除</button>
-          <button className="btn sm ghost" onClick={() => setSel(new Set())}>取消</button>
-        </div> : <>
-        <select style={{ width: 150 }} value={fGroup} onChange={e => setFGroup(e.target.value)}><option value={'\u0000'}>全部分组</option>{groups.map(g => <option key={g} value={g}>{g || '未分组'}</option>)}</select>
-        {tags.length > 0 && <select style={{ width: 150 }} value={fTag} onChange={e => setFTag(e.target.value)}><option value="">全部标签</option>{tags.map(t => <option key={t} value={t}>{t}</option>)}</select>}
-        <select style={{ width: 150 }} value={sort} onChange={e => setSort(e.target.value as any)}><option value="recent">按最近运行</option><option value="name">按名称</option><option value="created">按创建时间</option></select>
-        {(fGroup !== '\u0000' || fTag) && <button className="btn sm ghost" onClick={() => { setFGroup('\u0000'); setFTag(''); }}>清除筛选</button>}
-        </>}
-        <div className="spacer" />
-        <span className="sub" style={{ color: 'var(--txt-3)' }}>显示 {list.length} / {profiles.length}</span>
-      </div>
 
-      {runningList.length > 0 && <div className="panel pad running-panel">
-        <div className="nm" style={{ fontWeight: 650, marginBottom: 8 }}><Icon.bolt s={14} /> 运行中 <span className="num">{runningList.length}</span></div>
-        <div className="run-grid">
-          {runningList.map(p => { const px = proxyName[p.proxyId]; const st = runs[p.id]; return <div key={p.id} className="run-item">
-            <Avatar seed={p.fingerprint.noiseSeed || p.id} os={p.fingerprint.os} running />
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div className="nm" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
-              <div className="sub num">{st ? `已运行 ${dur(st)}` : '启动中'} · {px ? <>{px.country ? <CC cc={px.country} /> : null}{px.ip || px.host}</> : '直连'}</div>
-            </div>
-            <button className="btn sm" title="切到前台" onClick={() => focus(p.id)}><Icon.laptop s={13} /></button>
-            <button className="btn sm stop" title="停止" onClick={() => stop(p)}><Icon.stop s={12} /></button>
-          </div>; })}
-        </div>
+      {runningList.length > 0 && <div className="run-strip">
+        <span className="lbl"><Icon.bolt /> 运行中 {runningList.length}</span>
+        {runningList.map(p => { const px = proxyName[p.proxyId]; const st = runs[p.id]; return <div key={p.id} className="run-chip">
+          <Avatar seed={p.fingerprint.noiseSeed || p.id} os={p.fingerprint.os} running />
+          <div className="t"><b>{p.name}</b><span className="num">{st ? dur(st) : '启动中'} · {px ? (px.ip || px.host) : '直连'}</span></div>
+          <button className="ib" title="切到前台" onClick={() => focus(p.id)}><Icon.laptop /></button>
+          <button className="ib stop" title="停止" onClick={() => stop(p)}><Icon.stop /></button>
+        </div>; })}
       </div>}
 
       <div className="panel list">
@@ -303,12 +287,24 @@ const ProfilesView: React.FC<{
         {list.length === 0 && <div className="empty" style={{ padding: 50 }}><Icon.search s={28} /><div>没有匹配「{q}」的环境</div></div>}
       </div>
 
+      {sel.size > 0 && <div className="bulkbar">
+        <span className="cnt">已选 <b className="num">{sel.size}</b> 个</span>
+        <button className="btn sm go" onClick={startBatch}><Icon.play s={12} /> 启动</button>
+        <button className="btn sm" onClick={stopBatch}><Icon.stop s={12} /> 停止</button>
+        <span className="sep" />
+        <button className="btn sm ghost" onClick={() => setModal('group')}><Icon.folder s={13} /> 分组</button>
+        <button className="btn sm ghost" onClick={() => setModal('assign')}><Icon.globe s={13} /> 代理</button>
+        <button className="btn sm ghost" onClick={pushBatch}><Icon.upload s={13} /> 同步</button>
+        <span className="sep" />
+        <button className="btn sm ghost danger" onClick={() => del([...sel])}><Icon.trash s={13} /></button>
+        <button className="btn ghost icon" title="取消选择" onClick={() => setSel(new Set())}><Icon.x /></button>
+      </div>}
       {drawer && <ProfileDrawer profile={editing} proxies={Object.values(proxyName)} onClose={() => setDrawer(false)} onSaved={reload} />}
       {bulk && <BulkModal proxies={Object.values(proxyName)} onClose={() => setBulk(false)} onDone={reload} />}
       {nativeTools && <NativeTools profiles={profiles} onClose={() => setNativeTools(false)} onChanged={reload} />}
       {modal === 'group' && <GroupModal ids={[...sel]} groups={groups} onClose={() => setModal('')} onDone={reload} />}
       {modal === 'assign' && <AssignModal ids={[...sel]} proxies={Object.values(proxyName)} profiles={profiles} onClose={() => setModal('')} onDone={reload} />}
-    </>
+    </div>
   );
 };
 
@@ -330,7 +326,7 @@ const GroupModal: React.FC<{ ids: string[]; groups: string[]; onClose: () => voi
             <input type="text" list="gb-groups" value={group} disabled={keep} onChange={e => setGroup(e.target.value)} placeholder="输入或选择分组" />
             <datalist id="gb-groups">{groups.filter(Boolean).map(g => <option key={g} value={g} />)}</datalist>
           </Field>
-          <label className="sub" style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 10 }}><input type="checkbox" checked={keep} onChange={e => setKeep(e.target.checked)} /> 不修改分组</label>
+          <div className="assign-filters" style={{ marginTop: -4, marginBottom: 12 }}><button className={`chip-tg ${keep ? 'on' : ''}`} onClick={() => setKeep(v => !v)}>不修改分组，只加标签</button></div>
           <Field label="添加标签（可选）"><input type="text" value={tag} onChange={e => setTag(e.target.value)} /></Field>
         </div>
         <div className="dfoot"><div className="spacer" /><button className="btn" onClick={() => close()}>取消</button><button className="btn primary" onClick={go}><Icon.check s={15} /> 应用</button></div>
@@ -365,9 +361,9 @@ const AssignModal: React.FC<{ ids: string[]; proxies: Proxy[]; profiles: Profile
             <button className="btn sm ghost" style={{ flex: 'none' }} onClick={() => setPick(new Set(shown.map(p => p.id)))}>全选</button>
             <button className="btn sm ghost" style={{ flex: 'none' }} onClick={() => setPick(new Set())}>清空</button>
           </div>
-          <div className="sub" style={{ display: 'flex', gap: 14, marginBottom: 8 }}>
-            <label style={{ display: 'flex', gap: 5, alignItems: 'center' }}><input type="checkbox" checked={onlyOk} onChange={e => setOnlyOk(e.target.checked)} /> 只显示检测可用</label>
-            <label style={{ display: 'flex', gap: 5, alignItems: 'center' }}><input type="checkbox" checked={onlyFree} onChange={e => setOnlyFree(e.target.checked)} /> 只显示未被其他环境使用</label>
+          <div className="assign-filters">
+            <button className={`chip-tg ${onlyOk ? 'on' : ''}`} onClick={() => setOnlyOk(v => !v)}>仅可用</button>
+            <button className={`chip-tg ${onlyFree ? 'on' : ''}`} onClick={() => setOnlyFree(v => !v)}>仅未被占用</button>
           </div>
           <div className="assign-list">
             {shown.map(p => <div key={p.id} className={`assign-row ${pick.has(p.id) ? 'on' : ''}`} onClick={() => toggle(p.id)}>
@@ -378,12 +374,8 @@ const AssignModal: React.FC<{ ids: string[]; proxies: Proxy[]; profiles: Profile
             </div>)}
             {shown.length === 0 && <div className="sub" style={{ padding: 16, textAlign: 'center' }}>没有符合条件的代理</div>}
           </div>
-          <Field label="分配方式">
-            <select value={mode} onChange={e => setMode(e.target.value as any)}>
-              <option value="order">按顺序轮流（第 1 个环境用第 1 个代理…）</option>
-              <option value="random">随机（代理够用时不重复）</option>
-              <option value="one">全部使用第一个选中的代理</option>
-            </select>
+          <Field label="分配方式" hint={mode === 'order' ? '第 1 个环境用第 1 个代理，依次轮流' : mode === 'random' ? '随机分配，代理数量足够时不重复' : '所有环境都用第一个选中的代理'}>
+            <Segmented className="block" items={[['order', '顺序轮流'], ['random', '随机'], ['one', '统一一个']]} value={mode} onChange={setMode} />
           </Field>
           {nPick > 0 && nPick < ids.length && mode !== 'one' && <div className="sub" style={{ color: '#ffd98a' }}>⚠ 代理数（{nPick}）少于环境数（{ids.length}），会有环境共用同一个代理。</div>}
         </div>

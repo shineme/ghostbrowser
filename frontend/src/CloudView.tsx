@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api, onEvent, Profile, Settings } from './api';
-import { Icon, useToast, useConfirm, useExit, Avatar, ago } from './ui';
+import { Icon, useToast, useConfirm, useExit, Avatar, ago, Segmented } from './ui';
 
 const size = (b?: number) => b == null || b < 0 ? '—' : b >= 1 << 30 ? `${(b / (1 << 30)).toFixed(1)} GB` : b >= 1 << 20 ? `${(b / (1 << 20)).toFixed(1)} MB` : b >= 1024 ? `${Math.round(b / 1024)} KB` : `${b} B`;
 const ACTION: Record<string, string> = { push: '上传', pull: '拉取', restore: '恢复版本', 'push-global': '上传全局数据', 'pull-global': '拉取全局数据' };
@@ -72,10 +72,8 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
       </div>
 
       <div className="toolbar">
-        <div className="seg" style={{ display: 'flex', gap: 4 }}>
-          <button className={`btn sm ${tab === 'list' ? 'primary' : 'ghost'}`} onClick={() => setTab('list')}>全部环境</button>
-          <button className={`btn sm ${tab === 'log' ? 'primary' : 'ghost'}`} onClick={() => { setTab('log'); loadLog(); }}>同步日志{fails ? <span className="badge fail" style={{ marginLeft: 6 }}>{fails}</span> : null}</button>
-        </div>
+        <Segmented className="compact" value={tab} onChange={t => { setTab(t); if (t === 'log') loadLog(); }}
+          items={[['list', '全部环境'], ['log', fails ? `同步日志 · ${fails} 失败` : '同步日志']]} />
         <div className="sub" style={{ color: 'var(--txt-3)' }}>{cloud.length} 个云端 · {profiles.length - cloud.length} 个本地 · 自动同步{settings!.autoSyncOff ? '已关闭' : '已开启'}</div>
         <div style={{ flex: 1 }} />
         {tab === 'log' && log.length > 0 && <button className="btn sm ghost" onClick={async () => { await api.ClearSyncLog(); loadLog(); }}><Icon.trash s={13} /> 清空日志</button>}
@@ -162,3 +160,4 @@ const HistoryModal: React.FC<{ p: Profile; onClose: () => void; onDone: () => vo
     </div>
   );
 };
+

@@ -121,7 +121,7 @@ export const Field: React.FC<{ label?: string; hint?: string; children: React.Re
 );
 
 /** Segmented control with a thumb that glides to the active item. */
-export function Segmented<T extends string>({ items, value, onChange }: { items: [T, string, React.ReactNode?][]; value: T; onChange: (v: T) => void }) {
+export function Segmented<T extends string>({ items, value, onChange, className = '' }: { items: [T, string, React.ReactNode?][]; value: T; onChange: (v: T) => void; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [thumb, setThumb] = useState({ x: 0, w: 0 });
   useLayoutEffect(() => {
@@ -129,9 +129,40 @@ export function Segmented<T extends string>({ items, value, onChange }: { items:
     if (el) setThumb({ x: el.offsetLeft, w: el.offsetWidth });
   }, [value, items.length]);
   return (
-    <div className="seg" ref={ref}>
+    <div className={`seg ${className}`} ref={ref}>
       <span className="thumb" style={{ width: thumb.w, transform: `translateX(${thumb.x}px)` }} />
       {items.map(([v, label, ic]) => <button key={v} data-v={v} className={v === value ? 'active' : ''} onClick={() => onChange(v)}>{ic}{label}</button>)}
+    </div>
+  );
+}
+
+/** Compact filter pill with a popover list: replaces native <select> in toolbars. */
+export function Pick<T extends string>({ label, value, options, onChange, icon, align = 'left' }: {
+  label: string; value: T; options: [T, string, number?][]; onChange: (v: T) => void; icon?: React.ReactNode; align?: 'left' | 'right';
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const down = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('mousedown', down); window.addEventListener('keydown', key);
+    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('keydown', key); };
+  }, [open]);
+  const cur = options.find(o => o[0] === value);
+  const active = options.length > 0 && value !== options[0][0];
+  return (
+    <div className={`pick ${open ? 'open' : ''} ${active ? 'active' : ''}`} ref={ref}>
+      <button type="button" className="pick-btn" onClick={() => setOpen(o => !o)}>
+        {icon}<span className="pick-l">{label}</span>{active && <span className="pick-v">{cur?.[1]}</span>}
+        <svg className="pick-c" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M7 10l5 5 5-5" /></svg>
+      </button>
+      {open && <div className={`pick-menu ${align}`}>
+        {options.map(([v, l, n]) => <button type="button" key={v} className={v === value ? 'on' : ''} onClick={() => { onChange(v); setOpen(false); }}>
+          <span className="pick-tick">{v === value && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>}</span>
+          <span className="pick-o">{l}</span>{n != null && <span className="pick-n num">{n}</span>}
+        </button>)}
+      </div>}
     </div>
   );
 }

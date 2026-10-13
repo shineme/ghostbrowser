@@ -75,31 +75,79 @@ $env:ALL_PROXY='socks5://127.0.0.1:2080'; $env:GB_LIVE_SHOP='1'
 go test -run TestEnsureAgainstRealShop -v .
 ```
 
-云同步 PHP 服务端不参与桌面 GUI 编译。宝塔 Nginx 部署步骤见 [PHP 云同步部署文档](cloud-server/README.zh-CN.md)，可直接使用 `cloud-server/deploy/baota-nginx.conf.example` 作为站点配置片段。
+云同步 PHP 服务端不参与桌面 GUI 编译。宝塔 Nginx 部署步骤见 [PHP 云同步部署文档](cloud-server/README.zh-CN.md)。服务端只有一个文件 `cloud-server/ghostsync.php`，不需要数据库，也不需要伪静态。
 
-## Features
-- Profiles: create / bulk create / clone / delete, groups, tags, start URLs, cookie import (CDP Storage.setCookies)
-- Fingerprint: OS-consistent generator (UA, platform, screen, DPR, cores, memory, WebGL vendor/renderer, fonts), canvas / WebGL / audio / ClientRects noise by seed, timezone / language / geolocation from proxy IP, WebRTC, media devices, DNT
-- Kernel: Undetectable 定制 Chromium only. Fingerprints are applied natively from the binary `startInfo` template; standard Chrome/Edge cannot run the templates.
-- Proxies: bulk import (host:port[:user:pass], user:pass@host:port, scheme://), check exit IP / geo / latency, proxy auth via extension
-- Cloud sync client: zip (caches excluded) -> AES-256-GCM (PBKDF2 key from local sync password) -> PHP server on your VPS
-- Local API on 127.0.0.1:25325: /list, /profile/start?profile=ID (returns CDP port + websocket), /profile/stop?profile=ID, /status
-  - Every call except /status needs the API key from Settings: header `X-API-Key: <key>` or `?key=<key>`
-  - Requests from web pages are refused (loopback Host required; any Origin or cross-site Sec-Fetch-Site is rejected)
+## 功能
+
+### 环境
+- 新建、批量创建、复制、删除；分组、标签、启动网址、导入 Cookie
+- 列表可按分组和标签筛选，按最近运行、名称或创建时间排序；搜索支持名称、分组、标签和出口 IP
+- 批量操作（勾选后底部出现操作栏）：启动、停止、改分组或加标签、分配代理、立即同步、删除
+- 「运行中」条显示每个环境的运行时长和出口 IP，可以一键把浏览器窗口切到前台，或直接停止
+- 存储列显示同步状态：同步中、待上传、已同步（含云端版本号）、仅本地
+- 多个环境共用同一个出口 IP 时会标黄提醒，代理失效时会标红
+
+### 指纹
+- 按操作系统生成相互匹配的 UA、平台、屏幕、DPR、CPU 核数、内存、WebGL、字体
+- Canvas、WebGL、Audio、ClientRects 噪声按种子固定
+- 时区、语言、地理位置可以跟随代理出口 IP；启动前会重新检测出口
+- 内置设备库 + 自定义指纹库（`library.json`），下拉框联动并支持保存自定义值
+
+### 代理
+- 批量导入：粘贴或拖入 txt/csv/json，支持常见格式、协议前缀、换 IP 链接、`# 名称` 备注，自动去重
+- 检测出口 IP、国家/地区、ISP、IP 类型（住宅/机房/移动）和延迟，支持测速
+- 编辑代理：名称、标签、类型、认证、换 IP 链接
+- 「换 IP」：调用服务商的换 IP 链接，然后重新检测，确认出口确实已经变了
+- 可设置「每次启动环境前自动换 IP」（换 IP 失败不会阻止启动）
+- 后台定时检测全部代理（设置 → 代理自动检测间隔，0 = 关闭），失效时显示横幅并列出受影响的环境
+- 提醒多个代理出口相同、多个环境共用同一个代理
+- 批量分配给环境：顺序轮流、随机（数量够时不重复）、统一用一个；可只选「可用」或「未被占用」的代理
+
+### 云同步
+- 客户端加密：AES-256-GCM，密钥由本机的同步密码派生，服务器只存密文
+- **增量同步**：每个文件切成最大 4 MB 的加密块，只上传服务器上没有的块；拉取时本地已有的块直接复用。首次同步后，关闭浏览器通常只传几 MB。单个环境最大 2 GB（不含缓存）
+- 自动同步：启动时以服务器为准对比；启动环境前拉取云端新版本；关闭浏览器后上传（失败自动重试）；退出软件前等待上传完成
+- 云端版本较新时弹窗倒计时询问，默认动作可在设置里改
+- 全局数据同步：设置、代理列表（含凭据、标签、换 IP 链接）、自定义指纹库
+- **历史版本**：「云同步 → 历史版本」可以恢复服务器保留的任意版本，恢复后会作为最新版本上传，其他电脑也会同步到这个版本
+- **同步日志**：最近 300 次同步的时间、流量、耗时和错误，失败的可以一键重试
+- 显示服务器信息：已用空间、磁盘剩余、单次上传上限、保留的版本数
+- 同步地址使用 http 时会提示：令牌会明文传输，建议改用 https
+- 旧版服务端（不支持增量）会自动改用整包同步
+
+### 本地自动化 API
+- 地址 `127.0.0.1:25325`：`/list`、`/profile/start?profile=ID`（返回 CDP 端口和 websocket 地址）、`/profile/stop?profile=ID`、`/status`
+- 除 `/status` 外，每个请求都要带 API Key：请求头 `X-API-Key: <key>`，或网址参数 `?key=<key>`。Key 在「设置 → 数据与本地 API」中复制或重新生成
+- 网页无法调用：要求 Host 是本机地址，带 Origin 或跨站 `Sec-Fetch-Site` 的请求一律拒绝
+- 设置里可以关闭「要求 API Key」（不建议）
+
+```bash
+curl -H "X-API-Key: gb_xxx" "http://127.0.0.1:25325/profile/start?profile=<环境ID>"
+```
 
 ## 云同步 PHP 服务端（已提供）
 
-源码在 `cloud-server/`，部署方式见 [云同步部署文档](cloud-server/README.zh-CN.md)。
-新版客户端检查锁定、上传、提交结果，将完整 Profile JSON 放入加密包，并在拉取时恢复元数据。
-交付包 `undetectable-kit/cloud-server/` 同步附带相同服务端文件。
+单文件 `cloud-server/ghostsync.php`（PHP 7.4+，无需数据库和伪静态），部署方式见 [云同步部署文档](cloud-server/README.zh-CN.md)。`undetectable-kit/cloud-server/` 附带相同的文件。
+
+- 多用户：在 `GHOST_USERS` 里加 `'令牌' => '名字'`，每个用户的数据目录相互独立
+- 防暴力破解：同一个 IP 15 分钟内输错令牌 10 次，封禁 15 分钟（`GHOST_MAX_FAILS`）
+- 版本保留：默认 3 个（`GHOST_KEEP_VERSIONS`，最多 50）；不再被引用的数据块 2 天后自动清理
+- 每次请求最大约 12 MB，PHP 默认的 `post_max_size = 8M` 也能用（客户端会自动按服务器上限缩小批次）
 
 ## Sync server contract
-    GET  /api/ping
+    GET  /api/ping                          features, keepVersions, maxBody, usedBytes, freeBytes
     GET  /api/profiles
-    POST /api/profiles/{id}/lock     {"device": "..."}
-    PUT  /api/profiles/{id}/blob?version=N   (412 if server version != N)
-    GET  /api/profiles/{id}/blob
-    POST /api/profiles/{id}/commit   {id,name,version,sha256,meta}
+    POST /api/profiles/{id}/lock            {"device": "..."}  -> lockToken
+    PUT  /api/profiles/{id}/refs            newline-separated chunk IDs of this upload (under lease)
+    PUT  /api/profiles/{id}/blob?version=N  encrypted manifest (GBE1); 412 if server version != N
+    POST /api/profiles/{id}/commit          {id,name,version,sha256,meta}
     POST /api/profiles/{id}/unlock
-All requests carry Authorization: Bearer <token>.
-The lock response returns lockToken; upload/commit/unlock also send X-Device-ID and X-Lock-Token.
+    GET  /api/profiles/{id}/blob[?version=N]
+    GET  /api/profiles/{id}/history
+    POST /api/profiles/{id}/delete
+    POST /api/chunks/missing                {"ids": [...]} -> {"missing": [...]}
+    PUT  /api/chunks                        framed: (64-hex id, uint32 BE length, GBC1 data)*
+    POST /api/chunks/get                    {"ids": [...]} -> framed, same layout
+All requests carry Authorization: Bearer <token> (and X-Ghost-Token for hosts that strip it).
+Upload, refs, commit and unlock also send X-Device-ID and X-Lock-Token.
+Chunk IDs are HMAC-SHA256(per-profile chunk key, plaintext); chunk bodies are "GBC1" + nonce + AES-256-GCM(deflate(data)). The chunk key lives only inside the encrypted manifest.

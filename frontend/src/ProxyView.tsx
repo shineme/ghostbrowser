@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api, onEvent, Proxy, Profile } from './api';
-import { Icon, Field, Toggle, ago, useToast, useConfirm, useExit, CC, Latency, StatCard } from './ui';
+import { Icon, Field, Toggle, ago, useToast, useConfirm, useExit, CC, Latency, StatCard, Pick, Segmented } from './ui';
 import { COUNTRIES } from './locales';
 
 const cname = (cc?: string) => (cc && COUNTRIES.find(c => c.cc === cc.toUpperCase())?.name) || cc || '';
@@ -109,19 +109,17 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
         <StatCard l="不可用 / 未检测" n={all.length - okCount} of={all.length} ic="alert" tone="bad" pct={(all.length - okCount) / all.length * 100} />
         <StatCard l="覆盖国家 / 地区" n={countries.length} ic="shield" tone="cy" pct={60} />
       </div>
-      {failIds.length > 0 && <div className="panel pad" style={{ marginBottom: 10, borderColor: 'rgba(255,107,122,.3)' }}>
-        <b style={{ color: '#ffb3bc' }}>⚠ {failIds.length} 个代理不可用</b>
-        <span className="sub" style={{ marginLeft: 8 }}>{hit.length ? `影响 ${hit.length} 个环境：${hit.slice(0, 6).map(p => p.name).join('、')}${hit.length > 6 ? ' 等' : ''}` : '没有环境在使用它们'}{health ? ` · 自动检测于 ${ago(health.at)}` : ''}</span>
-        <button className="btn sm" style={{ marginLeft: 10 }} onClick={() => { setStatus('fail'); }}>只看不可用</button>
+      {failIds.length > 0 && <div className="notice bad">
+        <Icon.alert /><b>{failIds.length} 个代理不可用</b>
+        <span className="sub grow">{hit.length ? `影响 ${hit.length} 个环境：${hit.slice(0, 6).map(p => p.name).join('、')}${hit.length > 6 ? ' 等' : ''}` : '没有环境在使用它们'}{health ? ` · 自动检测于 ${ago(health.at)}` : ''}</span>
+        {status !== 'fail' && <button className="btn sm" onClick={() => setStatus('fail')}>只看不可用</button>}
       </div>}
       <div className="toolbar" style={{ flexWrap: 'wrap' }}>
         <div className="search"><Icon.search /><input type="text" placeholder="搜索名称 / IP / 国家 / 城市 / ISP / 标签" value={q} onChange={e => setQ(e.target.value)} /></div>
-        <select value={status} onChange={e => setStatus(e.target.value as any)} style={{ width: 120 }}>
-          <option value="all">全部状态</option><option value="ok">可用</option><option value="fail">不可用</option><option value="unknown">未检测</option>
-        </select>
-        <select value={country} onChange={e => setCountry(e.target.value)} style={{ width: 150 }}>
-          <option value="">全部国家</option>{countries.map(c => <option key={c} value={c}>{c} · {cname(c)}</option>)}
-        </select>
+        <Pick label="状态" value={status} onChange={setStatus as any} icon={<Icon.check />}
+          options={[['all', '全部状态', all.length], ['ok', '可用', all.filter(p => p.status === 'ok').length], ['fail', '不可用', all.filter(p => p.status === 'fail').length], ['unknown', '未检测', all.filter(p => !p.status || p.status === 'unknown').length]]} />
+        <Pick label="国家" value={country} onChange={setCountry} icon={<Icon.globe />}
+          options={[['', '全部国家'] as [string, string, number?], ...countries.map(c => [c, `${c} · ${cname(c)}`, all.filter(p => p.country === c).length] as [string, string, number])]} />
         <div className="spacer" />
         <button className="btn" onClick={() => runCheck(target)} disabled={!!bulk} title={`检测${scope}`}>{bulk === '检测' ? <><ThinkingOrb state="searching" size={20} theme="dark" /> 检测中…</> : <><Icon.refresh s={14} /> 检测{sel.size ? '所选' : ''}</>}</button>
         <button className="btn" onClick={() => runSpeed(target)} disabled={!!bulk} title={`测速${scope}（每个下载约 5 MB）`}>{bulk === '测速' ? <><ThinkingOrb state="searching" size={20} theme="dark" /> 测速中…</> : <><Icon.bolt s={14} /> 测速{sel.size ? '所选' : ''}</>}</button>
@@ -153,7 +151,7 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
                   : <>
                     <button className="btn sm" onClick={() => runCheck([p.id])} title="检测国家、IP 类型和延迟"><Icon.refresh s={13} /> 检测</button>
                     <button className="btn sm" onClick={() => runSpeed([p.id])} title="下载约 5 MB 测速"><Icon.bolt s={13} /></button>
-                    {p.changeIpUrl && <button className="btn sm" onClick={() => rotate(p)} title={p.rotateOnLaunch ? '换 IP（已设置每次启动前自动换）' : '调用换 IP 链接，然后重新检测出口'}><Icon.dice s={13} /> 换IP{p.rotateOnLaunch ? '·自动' : ''}</button>}
+                    {p.changeIpUrl && <button className="btn sm rot" onClick={() => rotate(p)} title={p.rotateOnLaunch ? '换 IP（已设置每次启动前自动换）' : '调用换 IP 链接，然后重新检测出口'}><Icon.dice s={13} />{p.rotateOnLaunch ? <span className="rot-dot" /> : null}</button>}
                   </>}
                 <button className="btn ghost icon" title="编辑" onClick={() => setEditing(p)}><Icon.edit s={15} /></button>
                 <button className="btn ghost icon danger" onClick={() => delMany([p.id], '这个代理')}><Icon.trash s={15} /></button>
@@ -272,7 +270,7 @@ const ProxyEditModal: React.FC<{ p: Proxy; onClose: () => void; onSaved: () => v
             <Field label="标签"><input type="text" value={v.tag || ''} onChange={e => set({ tag: e.target.value })} /></Field>
           </div>
           <div className="grid2">
-            <Field label="类型"><select value={v.type} onChange={e => set({ type: e.target.value, typeGuessed: false })}><option value="http">HTTP</option><option value="https">HTTPS</option><option value="socks5">SOCKS5</option></select></Field>
+            <Field label="类型"><Segmented className="block" items={[['http', 'HTTP'], ['https', 'HTTPS'], ['socks5', 'SOCKS5']]} value={v.type as any} onChange={t => set({ type: t, typeGuessed: false })} /></Field>
             <Field label="主机:端口"><div className="row"><input type="text" value={v.host} onChange={e => set({ host: e.target.value })} /><input type="number" style={{ width: 90, flex: 'none' }} value={v.port} onChange={e => set({ port: +e.target.value })} /></div></Field>
           </div>
           <div className="grid2">
