@@ -34,7 +34,7 @@ func (a *App) startup(ctx context.Context) {
 	a.auto = globalAuto
 	api.start(a.store)
 	// Server-first reconcile on start-up, off the UI thread.
-	go func() { time.Sleep(800 * time.Millisecond); a.auto.Reconcile() }()
+	go func() { time.Sleep(800 * time.Millisecond); a.auto.Reconcile(); a.auto.WatchGlobal() }()
 }
 
 // ---------- profiles ----------

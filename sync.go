@@ -197,7 +197,7 @@ func unzipDir(blob []byte, dir string) error {
 
 type syncClient struct {
 	base, token, device, lockToken, deviceName string
-	hc                             *http.Client
+	hc                                         *http.Client
 }
 
 func (s *Store) sync() *syncClient {
@@ -567,6 +567,18 @@ func (s *Store) ListCloud() ([]cloudMeta, error) {
 	if e := syncReady(s.GetSettings(), false); e != nil {
 		return nil, e
 	}
+	all, e := s.listCloudAll()
+	out := []cloudMeta{}
+	for _, c := range all {
+		if c.ID != globalID {
+			out = append(out, c)
+		}
+	}
+	return out, e
+}
+
+// listCloudAll includes the reserved global-data record.
+func (s *Store) listCloudAll() ([]cloudMeta, error) {
 	var out []cloudMeta
 	e := s.sync().jsonRequest("GET", "/api/profiles", nil, &out)
 	if out == nil {

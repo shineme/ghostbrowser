@@ -44,13 +44,24 @@ func TestAutoSyncServerFirst(t *testing.T) {
 	_ = os.MkdirAll(a.ProfileDir(p.ID), 0700)
 	_ = os.WriteFile(filepath.Join(a.ProfileDir(p.ID), "marker.txt"), []byte("v1"), 0600)
 
-	// A: local-only profile is uploaded on start-up.
-	if r := autoA.Reconcile(); r.Pushed != 1 || r.Failed != 0 {
+	a.PutProxy(Proxy{Name: "px1", Type: "http", Host: "1.2.3.4", Port: 8080, User: "u", Pass: "p"})
+	a.Settings.DefaultOS = "macos"
+	// A: local-only profile and global data are uploaded on start-up.
+	if r := autoA.Reconcile(); r.Pushed != 2 || r.Failed != 0 {
 		t.Fatalf("A reconcile: %+v", r)
 	}
-	// B: empty device downloads it.
-	if r := autoB.Reconcile(); r.Pulled != 1 || r.Failed != 0 {
+	// B: empty device downloads both.
+	if r := autoB.Reconcile(); r.Pulled != 2 || r.Failed != 0 {
 		t.Fatalf("B reconcile: %+v", r)
+	}
+	if px := b.ListProxies(); len(px) != 1 || px[0].Host != "1.2.3.4" || px[0].Pass != "p" {
+		t.Fatalf("B proxies: %+v", px)
+	}
+	if st := b.GetSettings(); st.DefaultOS != "macos" || st.DeviceID != "dev-B" || st.SyncPassword != "pw-123456" {
+		t.Fatalf("B settings: %+v", st)
+	}
+	if b.globalDirty() {
+		t.Fatal("B global dirty right after pull")
 	}
 	if got, _ := os.ReadFile(filepath.Join(b.ProfileDir(p.ID), "marker.txt")); string(got) != "v1" {
 		t.Fatalf("B marker = %q", got)
@@ -98,7 +109,7 @@ func TestAutoSyncServerFirst(t *testing.T) {
 		autoB.Hold()
 		autoB.Decide(nil) // keep local on B
 	}()
-	if r := autoB.Reconcile(); r.Pulled != 0 || r.Pushed != 1 || r.Failed != 0 {
+	if r := autoB.Reconcile(); r.Pulled != 0 || r.Pushed != 2 || r.Failed != 0 { // profile + changed settings
 		t.Fatalf("B keep-local reconcile: %+v", r)
 	}
 	if got, _ := os.ReadFile(filepath.Join(b.ProfileDir(p.ID), "marker.txt")); string(got) != "v2" {
@@ -107,7 +118,7 @@ func TestAutoSyncServerFirst(t *testing.T) {
 	// B's copy replaced the cloud (v4); A pulls it via the countdown default.
 	a.Settings.SyncPromptSecs, a.Settings.SyncPromptAction = 1, "pull"
 	start := time.Now()
-	if r := autoA.Reconcile(); r.Pulled != 1 || time.Since(start) < 900*time.Millisecond {
+	if r := autoA.Reconcile(); r.Pulled != 2 || time.Since(start) < 900*time.Millisecond {
 		t.Fatalf("A countdown reconcile: %+v after %v", r, time.Since(start))
 	}
 	if got, _ := os.ReadFile(filepath.Join(a.ProfileDir(p.ID), "marker.txt")); string(got) != "v2" {

@@ -20,6 +20,7 @@ function Shell() {
   const [proxies, setProxies] = useState<Proxy[]>([]);
   const [running, setRunning] = useState<Set<string>>(new Set());
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [settingsRev, setSettingsRev] = useState(0);
   const max = useMaximised();
 
   const reload = useCallback(async () => {
@@ -32,6 +33,7 @@ function Shell() {
   useEffect(() => { reload(); api.GetSettings().then(setSettings); }, [reload]);
   // Auto sync: refresh the list whenever a profile is pulled/pushed; surface failures.
   useEffect(() => onEvent('sync:event', (e: any) => {
+    if (e.phase === 'item' && e.id === '_global' && e.action === 'pull' && !e.error) { api.GetSettings().then(st => { setSettings(st); setSettingsRev(r => r + 1); }); }
     if (e.phase === 'item') { reload(); if (e.message) toast(`${e.name || e.id}：${e.message}`, 'bad'); else if (e.error) toast(`${e.name || e.id} ${e.action === 'pull' ? '下载' : '上传'}失败：${e.error}`, 'bad'); else if (e.action === 'push') toast(`已同步 ${e.name} 到服务器`); else if (e.action === 'pull') toast(`已从云端拉取 ${e.name}`); }
     if (e.phase === 'done' && (e.pulled || e.pushed || e.failed)) { reload(); toast(e.message, e.failed ? 'bad' : undefined); }
     if (e.phase === 'error') toast(e.message, 'bad');
@@ -107,7 +109,7 @@ function Shell() {
             {tab === 'profiles' && <ProfilesView {...{ profiles, proxyName, running, setRunning, reload }} />}
             {tab === 'proxies' && <ProxyView proxies={proxies} reload={reload} />}
             {tab === 'cloud' && <CloudView profiles={profiles} settings={settings} reload={reload} />}
-            {tab === 'settings' && settings && <SettingsView settings={settings} onSaved={s => { setSettings(s); toast('设置已保存'); }} />}
+            {tab === 'settings' && settings && <SettingsView key={settingsRev} settings={settings} onSaved={s => { setSettings(s); toast('设置已保存'); }} />}
           </div>
         </div>
       </main>

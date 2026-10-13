@@ -36,7 +36,7 @@ export const SyncPrompt: React.FC = () => {
     <div className="overlay center" style={{ zIndex: 80 }}>
       <div className="modal" style={{ width: 'min(640px, 94vw)' }} onMouseDown={hold}>
         <div className="dhead"><div className="glyph"><Icon.cloud s={18} /></div>
-          <div><h3>云端有更新的环境</h3><div className="sub">要用云端版本覆盖本地吗？{auto}</div></div>
+          <div><h3>云端有更新的数据</h3><div className="sub">要用云端版本覆盖本地吗？{auto}</div></div>
         </div>
         <div className="dbody">
           {!held && <div className="sync-countdown"><i style={{ animationDuration: `${p.seconds}s` }} /></div>}
@@ -47,7 +47,7 @@ export const SyncPrompt: React.FC = () => {
                 <td><input type="checkbox" checked={pick.has(it.id)} readOnly /></td>
                 <td><div className="nm">{it.name}</div>{it.conflict && <span className="badge warn" title="本机上次运行后的改动还没上传；拉取会用云端版本替换它">本地也有未上传改动</span>}</td>
                 <td className="num"><div>v{it.cloudVersion} · {ago(it.cloudUpdatedAt)}</div><div className="sub">{[it.cloudDevice, mb(it.size)].filter(Boolean).join(' · ')}</div></td>
-                <td className="num"><div>v{it.localVersion}</div><div className="sub">上次运行 {ago(it.localLastRun)}</div></td>
+                <td className="num"><div>v{it.localVersion}</div>{it.id !== '_global' && <div className="sub">上次运行 {ago(it.localLastRun)}</div>}</td>
               </tr>)}</tbody>
             </table>
           </div>

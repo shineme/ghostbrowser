@@ -94,14 +94,37 @@ type SyncPrompt struct {
 type syncDecision struct{ pull map[string]bool }
 
 func (a *autoSyncer) plan() (prompt, auto []SyncItem, cloud map[string]cloudMeta, err error) {
-	list, err := a.s.ListCloud()
+	all, err := a.s.listCloudAll()
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	cloud = map[string]cloudMeta{}
-	for _, c := range list {
+	list := []cloudMeta{}
+	for _, c := range all {
 		cloud[c.ID] = c
+		if c.ID != globalID {
+			list = append(list, c)
+		}
 	}
+	// Global data: settings, proxy list, fingerprint library.
+	g, dirty := a.s.globalState(), a.s.globalDirty()
+	gc, inCloud := cloud[globalID]
+	gi := SyncItem{ID: globalID, Name: globalName, LocalVersion: g.Version, CloudVersion: gc.Version, CloudUpdated: gc.Updated, CloudDevice: gc.Device, Size: gc.Size}
+	switch {
+	case !inCloud && g.Version == 0:
+		gi.Action, gi.Reason = "push", "local_only"
+		auto = append(auto, gi)
+	case inCloud && gc.Version > g.Version && gc.Version != g.Keep:
+		gi.Action, gi.Reason, gi.Conflict = "pull", "cloud_newer", dirty && g.Hash != ""
+		prompt = append(prompt, gi)
+	case inCloud && gc.Version == g.Version && dirty:
+		gi.Action, gi.Reason = "push", "local_changed"
+		auto = append(auto, gi)
+	case inCloud && g.Keep == gc.Version && g.Version < gc.Version:
+		gi.Action, gi.Reason = "push", "keep_local"
+		auto = append(auto, gi)
+	}
+	delete(cloud, globalID)
 	local := map[string]Profile{}
 	for _, p := range a.s.ListProfiles() {
 		local[p.ID] = p
@@ -175,6 +198,12 @@ func (a *autoSyncer) Reconcile() SyncEvent {
 		if it.Action == "push" {
 			f = a.push
 		}
+		if it.ID == globalID {
+			f = func(string) error { return a.s.PullGlobal() }
+			if it.Action == "push" {
+				f = func(string) error { return a.s.PushGlobal() }
+			}
+		}
 		e := retry(3, f, it.ID)
 		ev := SyncEvent{Phase: "item", ID: it.ID, Name: it.Name, Action: it.Action}
 		if e != nil {
@@ -198,6 +227,14 @@ func (a *autoSyncer) Reconcile() SyncEvent {
 				continue
 			}
 			// Keep local: remember the choice and upload local over that cloud version.
+			if it.ID == globalID {
+				g := a.s.globalState()
+				g.Keep = it.CloudVersion
+				a.s.setGlobalState(g)
+				it.Action = "push"
+				step(it)
+				continue
+			}
 			if p, ok := a.s.GetProfile(it.ID); ok {
 				p.KeepLocal = it.CloudVersion
 				a.s.PutProfile(*p)
@@ -232,7 +269,7 @@ func (a *autoSyncer) ask(items []SyncItem) map[string]bool {
 	a.decide = ch
 	pr := *a.prompt
 	a.pmu.Unlock()
-	a.emit(SyncEvent{Phase: "prompt", Message: fmt.Sprintf("云端有 %d 个环境比本地新", len(items)), Prompt: &pr})
+	a.emit(SyncEvent{Phase: "prompt", Message: fmt.Sprintf("云端有 %d 项比本地新", len(items)), Prompt: &pr})
 	defer func() {
 		a.pmu.Lock()
 		a.prompt, a.decide = nil, nil
@@ -423,5 +460,51 @@ func (a *autoSyncer) Drain(max time.Duration) {
 	select {
 	case <-done:
 	case <-time.After(max):
+	}
+}
+
+// WatchGlobal uploads settings / proxies / library shortly after they change.
+func (a *autoSyncer) WatchGlobal() {
+	warned := int64(-1)
+	for {
+		time.Sleep(20 * time.Second)
+		if !a.enabled() || a.Pending() != nil || !a.s.globalDirty() {
+			continue
+		}
+		if !a.mu.TryLock() { // a reconcile is running
+			continue
+		}
+		if !a.claim(globalID) {
+			a.mu.Unlock()
+			continue
+		}
+		e := a.s.PushGlobal()
+		a.release(globalID)
+		a.mu.Unlock()
+		ev := SyncEvent{Phase: "item", ID: globalID, Name: globalName, Action: "push"}
+		if e != nil {
+			if v := a.s.globalState().Version; isConflict(e) && warned != v {
+				warned = v
+				ev.Error = e.Error()
+				ev.Message = "云端的全局数据已被另一台电脑更新，本机改动暂未上传。下次启动软件时会询问保留哪一份。"
+				a.emit(ev)
+			}
+			continue
+		}
+		a.emit(ev)
+	}
+}
+
+// FlushGlobal uploads pending global-data changes before the app quits.
+func (a *autoSyncer) FlushGlobal() {
+	if a == nil || !a.enabled() || !a.s.globalDirty() || !a.claim(globalID) {
+		return
+	}
+	defer a.release(globalID)
+	done := make(chan struct{})
+	go func() { _ = a.s.PushGlobal(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
 	}
 }

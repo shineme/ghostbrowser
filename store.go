@@ -18,6 +18,7 @@ type Store struct {
 	Profiles map[string]*Profile
 	Proxies  map[string]*Proxy
 	Settings Settings
+	Global   GlobalSyncState
 }
 
 func newID() string {
@@ -81,9 +82,10 @@ func NewStore() *Store {
 }
 
 type diskData struct {
-	Profiles []*Profile `json:"profiles"`
-	Proxies  []*Proxy   `json:"proxies"`
-	Settings Settings   `json:"settings"`
+	Profiles []*Profile      `json:"profiles"`
+	Proxies  []*Proxy        `json:"proxies"`
+	Settings Settings        `json:"settings"`
+	Global   GlobalSyncState `json:"globalSync"`
 }
 
 func (s *Store) file() string { return filepath.Join(s.dir, "data.json") }
@@ -104,10 +106,11 @@ func (s *Store) load() {
 		s.Proxies[p.ID] = p
 	}
 	s.Settings = d.Settings
+	s.Global = d.Global
 }
 
 func (s *Store) saveLocked() {
-	d := diskData{Settings: s.Settings}
+	d := diskData{Settings: s.Settings, Global: s.Global}
 	for _, p := range s.Profiles {
 		d.Profiles = append(d.Profiles, p)
 	}
