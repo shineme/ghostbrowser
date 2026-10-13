@@ -60,6 +60,7 @@ const M = {
   },
   CloneProfile: async (id: string) => { const p = mock.profiles.find(x => x.id === id); const c = { ...p, id: rid(), name: p.name + ' (copy)', fingerprint: mockFP(p.fingerprint.os) }; mock.profiles.unshift(c); return c; },
   NewFingerprint: async (os: string) => mockFP(os),
+  SyncNow: async (): Promise<any> => ({ phase: 'done', pulled: 0, pushed: 0, failed: 0, message: '同步完成：下载 0，上传 0，失败 0' }),
   FingerprintCatalog: async (os: string): Promise<any> => {
     const majors = ['142', '141', '140', '139', '138'];
     const tok = os === 'macos' ? 'Macintosh; Intel Mac OS X 10_15_7' : os === 'linux' ? 'X11; Linux x86_64' : 'Windows NT 10.0; Win64; x64';

@@ -420,7 +420,7 @@ func (s *Store) PushProfile(id string) error {
 	committed = true
 	p.Storage = "cloud"
 	p.CloudVer = cm.Version
-	p.SyncedAt = time.Now().Unix()
+	p.SyncedAt = syncStamp(p.LastRun)
 	s.PutProfile(*p)
 	return nil
 }
@@ -497,7 +497,7 @@ func (s *Store) PullProfile(id string) error {
 	}
 	p.Storage = "cloud"
 	p.CloudVer = version
-	p.SyncedAt = time.Now().Unix()
+	p.SyncedAt = syncStamp(p.LastRun)
 	backup := ""
 	if _, e = os.Stat(dir); e == nil {
 		backup, e = os.MkdirTemp(root, ".before-pull-"+id+"-")

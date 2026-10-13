@@ -302,6 +302,7 @@ export namespace main {
 	    syncServer: string;
 	    syncToken: string;
 	    syncPassword: string;
+	    autoSyncOff: boolean;
 	    deviceName: string;
 	    deviceId: string;
 	    theme: string;
@@ -322,9 +323,38 @@ export namespace main {
 	        this.syncServer = source["syncServer"];
 	        this.syncToken = source["syncToken"];
 	        this.syncPassword = source["syncPassword"];
+	        this.autoSyncOff = source["autoSyncOff"];
 	        this.deviceName = source["deviceName"];
 	        this.deviceId = source["deviceId"];
 	        this.theme = source["theme"];
+	    }
+	}
+	export class SyncEvent {
+	    phase: string;
+	    id?: string;
+	    name?: string;
+	    action?: string;
+	    error?: string;
+	    pulled: number;
+	    pushed: number;
+	    failed: number;
+	    message?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SyncEvent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.phase = source["phase"];
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.action = source["action"];
+	        this.error = source["error"];
+	        this.pulled = source["pulled"];
+	        this.pushed = source["pushed"];
+	        this.failed = source["failed"];
+	        this.message = source["message"];
 	    }
 	}
 	export class cloudMeta {

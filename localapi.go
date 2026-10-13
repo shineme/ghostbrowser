@@ -91,6 +91,9 @@ func (a *localAPI) handleLaunchJSON(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
+	if globalAuto != nil {
+		globalAuto.BeforeLaunch(p.ID)
+	}
 	rs, err := a.store.Launch(p.ID)
 	if err != nil {
 		http.Error(w, err.Error(), 400)
@@ -133,6 +136,9 @@ func (a *localAPI) handleStart(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("profile")
 	if id == "" {
 		id = r.URL.Query().Get("uuid")
+	}
+	if globalAuto != nil {
+		globalAuto.BeforeLaunch(id)
 	}
 	rs, err := a.store.Launch(id)
 	if err != nil {

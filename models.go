@@ -88,6 +88,7 @@ type Settings struct {
 	SyncServer      string `json:"syncServer"`
 	SyncToken       string `json:"syncToken"`
 	SyncPassword    string `json:"syncPassword"`
+	AutoSyncOff     bool   `json:"autoSyncOff"` // auto sync is on by default once sync is configured
 	DeviceName      string `json:"deviceName"`
 	DeviceID        string `json:"deviceId"`
 	Theme           string `json:"theme"`

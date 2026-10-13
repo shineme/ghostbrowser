@@ -10,6 +10,8 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
 
   const push = async (p: Profile) => { mark(p.id, true); try { await api.PushProfile(p.id); toast(`已上传 ${p.name}`); reload(); } catch (e: any) { toast(String(e?.message || e), 'bad'); } finally { mark(p.id, false); } };
   const pull = async (p: Profile) => { mark(p.id, true); try { await api.PullProfile(p.id); toast(`已拉取 ${p.name}`); reload(); } catch (e: any) { toast(String(e?.message || e), 'bad'); } finally { mark(p.id, false); } };
+  const [syncing, setSyncing] = useState(false);
+  const syncAll = async () => { setSyncing(true); try { const r: any = await api.SyncNow(); toast(r.error ? `同步失败：${r.error}` : (r.message || '同步完成'), r.error || r.failed ? 'bad' : undefined); reload(); } catch (e: any) { toast(String(e?.message || e), 'bad'); } finally { setSyncing(false); } };
   const mark = (id: string, on: boolean) => setBusy(s => { const n = new Set(s); on ? n.add(id) : n.delete(id); return n; });
 
   if (!configured) return (
@@ -37,7 +39,7 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
         </div>
       </div>
 
-      <div className="toolbar"><div className="nm" style={{ fontWeight: 650 }}>全部环境</div><div className="sub" style={{ color: 'var(--txt-3)' }}>{cloud.length} 个云端 · {profiles.length - cloud.length} 个本地</div></div>
+      <div className="toolbar"><div className="nm" style={{ fontWeight: 650 }}>全部环境</div><div className="sub" style={{ color: 'var(--txt-3)' }}>{cloud.length} 个云端 · {profiles.length - cloud.length} 个本地 · 自动同步{settings!.autoSyncOff ? '已关闭' : '已开启'}</div><div style={{ flex: 1 }} /><button className="btn sm" onClick={syncAll} disabled={syncing}><Icon.refresh s={14} /> {syncing ? '同步中…' : '立即同步（服务器优先）'}</button></div>
       <div className="panel list">
         <table>
           <thead><tr><th>环境</th><th>存储</th><th>云端版本</th><th>最近同步</th><th style={{ textAlign: 'right' }}>操作</th></tr></thead>

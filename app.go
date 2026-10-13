@@ -16,6 +16,7 @@ import (
 type App struct {
 	ctx   context.Context
 	store *Store
+	auto  *autoSyncer
 }
 
 func NewApp() *App { return &App{} }
@@ -23,8 +24,15 @@ func NewApp() *App { return &App{} }
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.store = NewStore()
-	runReg.onExit = func(id string) { wruntime.EventsEmit(a.ctx, "profile:exit", id) }
+	globalAuto = &autoSyncer{s: a.store, busy: map[string]bool{}, emit: func(e SyncEvent) { wruntime.EventsEmit(a.ctx, "sync:event", e) }}
+	runReg.onExit = func(id string) {
+		wruntime.EventsEmit(a.ctx, "profile:exit", id)
+		globalAuto.AfterExit(id)
+	}
+	a.auto = globalAuto
 	api.start(a.store)
+	// Server-first reconcile on start-up, off the UI thread.
+	go func() { time.Sleep(800 * time.Millisecond); a.auto.Reconcile() }()
 }
 
 // ---------- profiles ----------
@@ -135,8 +143,12 @@ func (a *App) StartProfile(id string) (*RunState, error) {
 		rs, _ := runReg.get(id)
 		return rs, nil
 	}
+	a.auto.BeforeLaunch(id)
 	return a.store.Launch(id)
 }
+
+// SyncNow runs the same server-first comparison as start-up.
+func (a *App) SyncNow() SyncEvent { return a.auto.Reconcile() }
 
 func (a *App) StopProfile(id string) {
 	if rs, ok := runReg.get(id); ok && strings.HasPrefix(rs.WSURL, "ws") {

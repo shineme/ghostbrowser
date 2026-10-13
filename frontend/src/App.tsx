@@ -29,6 +29,12 @@ function Shell() {
   }, []);
 
   useEffect(() => { reload(); api.GetSettings().then(setSettings); }, [reload]);
+  // Auto sync: refresh the list whenever a profile is pulled/pushed; surface failures.
+  useEffect(() => onEvent('sync:event', (e: any) => {
+    if (e.phase === 'item') { reload(); if (e.error) toast(`${e.name || e.id} ${e.action === 'pull' ? '下载' : '上传'}失败：${e.error}`, 'bad'); else if (e.action === 'push') toast(`已同步 ${e.name} 到服务器`); }
+    if (e.phase === 'done' && (e.pulled || e.pushed || e.failed)) { reload(); toast(e.message, e.failed ? 'bad' : undefined); }
+    if (e.phase === 'error') toast(e.message, 'bad');
+  }), [reload]);
   useEffect(() => onEvent('profile:exit', (id: string) => { setRunning(s => { const n = new Set(s); n.delete(id); return n; }); }), []);
 
   const proxyName = useMemo(() => Object.fromEntries(proxies.map(p => [p.id, p])), [proxies]);

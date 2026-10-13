@@ -76,6 +76,8 @@ export function StartProfile(arg1:string):Promise<main.RunState>;
 
 export function StopProfile(arg1:string):Promise<void>;
 
+export function SyncNow():Promise<main.SyncEvent>;
+
 export function TestSync():Promise<void>;
 
 export function UseUndetectableKit():Promise<main.Settings>;

@@ -52,6 +52,7 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
         <Field label="同步服务器地址" hint="指向你 VPS 上部署的 PHP 同步端，例如 https://sync.yourdomain.com"><input type="text" value={s.syncServer} onChange={e => set({ syncServer: e.target.value })} placeholder="https://sync.yourdomain.com" /></Field>
         <Field label="访问令牌 (Bearer Token)"><input type="password" value={s.syncToken} onChange={e => set({ syncToken: e.target.value })} /></Field>
         <Field label="同步密码 (端到端加密)" hint="用于派生 AES-256 密钥。只存在本机，绝不上传；忘记将无法解密云端数据。"><input type="password" value={s.syncPassword} onChange={e => set({ syncPassword: e.target.value })} /></Field>
+        <Toggle on={!s.autoSyncOff} onChange={v => set({ autoSyncOff: !v })} label="自动同步" hint="启动时对比云端，服务器较新则优先下载；每次关闭浏览器后立即上传" />
         <Field label="本机设备名"><input type="text" value={s.deviceName} onChange={e => set({ deviceName: e.target.value })} /></Field>
         <button className="btn" onClick={test} disabled={testing}><Icon.refresh s={14} /> {testing ? '测试中…' : '测试连接'}</button>
       </div>

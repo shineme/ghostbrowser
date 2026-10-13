@@ -150,6 +150,10 @@ export function StopProfile(arg1) {
   return window['go']['main']['App']['StopProfile'](arg1);
 }
 
+export function SyncNow() {
+  return window['go']['main']['App']['SyncNow']();
+}
+
 export function TestSync() {
   return window['go']['main']['App']['TestSync']();
 }
