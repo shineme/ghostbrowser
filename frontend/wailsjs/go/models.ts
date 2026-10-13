@@ -1,5 +1,39 @@
 export namespace main {
 	
+	export class DevicePreset {
+	    id: string;
+	    name: string;
+	    os: string;
+	    osVersion: string;
+	    webglVendor: string;
+	    webglRenderer: string;
+	    screenWidth: number;
+	    screenHeight: number;
+	    pixelRatio: number;
+	    hardwareConcurrency: number;
+	    deviceMemory: number;
+	    maxTouchPoints: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new DevicePreset(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.os = source["os"];
+	        this.osVersion = source["osVersion"];
+	        this.webglVendor = source["webglVendor"];
+	        this.webglRenderer = source["webglRenderer"];
+	        this.screenWidth = source["screenWidth"];
+	        this.screenHeight = source["screenHeight"];
+	        this.pixelRatio = source["pixelRatio"];
+	        this.hardwareConcurrency = source["hardwareConcurrency"];
+	        this.deviceMemory = source["deviceMemory"];
+	        this.maxTouchPoints = source["maxTouchPoints"];
+	    }
+	}
 	export class Fingerprint {
 	    os: string;
 	    osVersion: string;

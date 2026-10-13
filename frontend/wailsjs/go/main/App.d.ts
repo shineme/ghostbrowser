@@ -22,6 +22,8 @@ export function DeleteProfiles(arg1:Array<string>):Promise<void>;
 
 export function DeleteProxy(arg1:string):Promise<void>;
 
+export function DevicePresets(arg1:string):Promise<Array<main.DevicePreset>>;
+
 export function ExportCookies(arg1:string):Promise<string>;
 
 export function ExportNativeJSON(arg1:string):Promise<string>;

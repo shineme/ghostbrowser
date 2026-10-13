@@ -82,31 +82,30 @@ func GenerateFingerprint(osName, browserMajor string) Fingerprint {
 	if browserMajor == "" {
 		browserMajor = "141"
 	}
-	var g gpu
-	var sc screen
+	// Pick one coherent machine from the device library.
+	pool := DevicePresetsFor(osName)
+	if len(pool) == 0 {
+		osName, pool = "windows", DevicePresetsFor("windows")
+	}
+	d := pick(r, pool)
+	g := gpu{d.Vendor, d.Renderer}
+	sc := screen{d.Width, d.Height, d.DPR}
+	cores, mem, osVer := d.Cores, d.Memory, d.OSVersion
 	var fonts []string
-	var osVer string
-	cores := pick(r, []int{4, 8, 8, 12, 16})
-	mem := pick(r, []int{4, 8, 8, 8})
 	switch osName {
 	case "macos":
-		g, sc, fonts = pick(r, macGPUs), pick(r, macScreens), subsetFonts(r, macFonts)
-		osVer = pick(r, []string{"14.6", "15.1", "15.5"})
-		cores = pick(r, []int{8, 10, 12})
-		mem = 8
+		fonts = subsetFonts(r, macFonts)
 	case "linux":
-		g, sc, fonts = pick(r, linuxGPUs), pick(r, linuxScreens), subsetFonts(r, linuxFonts)
-		osVer = "x86_64"
+		fonts = subsetFonts(r, linuxFonts)
 	default:
-		g, sc, fonts = pick(r, winGPUs), pick(r, winScreens), subsetFonts(r, winFonts)
-		osVer = pick(r, []string{"10", "11", "11"})
+		fonts = subsetFonts(r, winFonts)
 	}
 	ua, platform := buildUA(osName, osVer, browserMajor)
 	return Fingerprint{
 		OS: osName, OSVersion: osVer, BrowserVersion: browserMajor,
 		UserAgent: ua, Platform: platform,
 		ScreenWidth: sc.w, ScreenHeight: sc.h, PixelRatio: sc.dpr, ColorDepth: 24,
-		HardwareConc: cores, DeviceMemory: mem, MaxTouchPoints: 0,
+		HardwareConc: cores, DeviceMemory: mem, MaxTouchPoints: d.Touch,
 		WebGLVendor: g.vendor, WebGLRenderer: g.renderer,
 		Languages: []string{"en-US", "en"}, LanguageFromIP: true,
 		Timezone: "America/New_York", TimezoneFromIP: true, GeoFromIP: true,
@@ -119,13 +118,7 @@ func GenerateFingerprint(osName, browserMajor string) Fingerprint {
 
 // GPU / screen pools exposed to the UI's dropdowns.
 func GPUOptions(osName string) []map[string]string {
-	src := winGPUs
-	switch osName {
-	case "macos":
-		src = macGPUs
-	case "linux":
-		src = linuxGPUs
-	}
+	src := pickGPUs(osName)
 	out := []map[string]string{}
 	for _, g := range src {
 		out = append(out, map[string]string{"vendor": g.vendor, "renderer": g.renderer})
@@ -134,13 +127,7 @@ func GPUOptions(osName string) []map[string]string {
 }
 
 func ScreenOptions(osName string) []string {
-	src := winScreens
-	switch osName {
-	case "macos":
-		src = macScreens
-	case "linux":
-		src = linuxScreens
-	}
+	src := pickScreens(osName)
 	out := []string{}
 	for _, s := range src {
 		out = append(out, fmt.Sprintf("%dx%d@%g", s.w, s.h, s.dpr))

@@ -120,6 +120,9 @@ func (a *App) GPUOptions(osName string) []map[string]string {
 }
 func (a *App) ScreenOptions(osName string) []string { return ScreenOptions(osName) }
 
+// DevicePresets returns GhostBrowser's own device library for one OS ("" = all).
+func (a *App) DevicePresets(osName string) []DevicePreset { return DevicePresetsFor(osName) }
+
 // ---------- run ----------
 
 func (a *App) StartProfile(id string) (*RunState, error) {

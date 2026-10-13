@@ -60,6 +60,10 @@ const M = {
   },
   CloneProfile: async (id: string) => { const p = mock.profiles.find(x => x.id === id); const c = { ...p, id: rid(), name: p.name + ' (copy)', fingerprint: mockFP(p.fingerprint.os) }; mock.profiles.unshift(c); return c; },
   NewFingerprint: async (os: string) => mockFP(os),
+  DevicePresets: async (os: string): Promise<any[]> => [
+    { id: 'win-001', name: 'Win11 · RTX 4060 · 1920x1080', os: 'windows', osVersion: '11', webglVendor: 'Google Inc. (NVIDIA)', webglRenderer: 'ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 (0x00002882) Direct3D11 vs_5_0 ps_5_0, D3D11)', screenWidth: 1920, screenHeight: 1080, pixelRatio: 1, hardwareConcurrency: 12, deviceMemory: 8, maxTouchPoints: 0 },
+    { id: 'mac-001', name: 'macOS 15.3 · Apple M3 Pro · 1512x982', os: 'macos', osVersion: '15.3', webglVendor: 'Google Inc. (Apple)', webglRenderer: 'ANGLE (Apple, ANGLE Metal Renderer: Apple M3 Pro, Unspecified Version)', screenWidth: 1512, screenHeight: 982, pixelRatio: 2, hardwareConcurrency: 12, deviceMemory: 8, maxTouchPoints: 0 },
+  ].filter(d => !os || d.os === os),
   GPUOptions: async (os: string) => os === 'macos'
     ? [{ vendor: 'Google Inc. (Apple)', renderer: 'ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)' }, { vendor: 'Google Inc. (Apple)', renderer: 'ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)' }]
     : [{ vendor: 'Google Inc. (NVIDIA)', renderer: 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002504) Direct3D11 vs_5_0 ps_5_0, D3D11)' }, { vendor: 'Google Inc. (Intel)', renderer: 'ANGLE (Intel, Intel(R) Iris(R) Xe Graphics (0x00009A49) Direct3D11 vs_5_0 ps_5_0, D3D11)' }],

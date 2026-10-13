@@ -42,6 +42,10 @@ export function DeleteProxy(arg1) {
   return window['go']['main']['App']['DeleteProxy'](arg1);
 }
 
+export function DevicePresets(arg1) {
+  return window['go']['main']['App']['DevicePresets'](arg1);
+}
+
 export function ExportCookies(arg1) {
   return window['go']['main']['App']['ExportCookies'](arg1);
 }

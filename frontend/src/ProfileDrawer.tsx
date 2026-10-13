@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CountrySelect, LanguagePicker, TimezoneSelect, countryOfTz } from './locales';
+import { SearchSelect, CountrySelect, LanguagePicker, TimezoneSelect, countryOfTz } from './locales';
 import { api, Profile, Proxy, Fingerprint } from './api';
 import { Field, Toggle, Icon, flag, useToast, useExit, Segmented, Avatar } from './ui';
 
@@ -13,6 +13,8 @@ export const ProfileDrawer: React.FC<{
   const [tab, setTab] = useState<'basic' | 'fp' | 'adv'>('basic');
   const [p, setP] = useState<Profile>(() => profile ? JSON.parse(JSON.stringify(profile)) : blank());
   const [gpus, setGpus] = useState<{ vendor: string; renderer: string }[]>([]);
+  const [devices, setDevices] = useState<any[]>([]);
+  const [device, setDevice] = useState('');
   const [screens, setScreens] = useState<string[]>([]);
   const fp = p.fingerprint;
   const [out, close] = useExit(onClose);
@@ -21,10 +23,17 @@ export const ProfileDrawer: React.FC<{
 
   useEffect(() => {
     api.GPUOptions(fp.os).then(setGpus);
+    api.DevicePresets(fp.os).then(d => setDevices(d || [])).catch(() => setDevices([]));
     api.ScreenOptions(fp.os).then(setScreens);
   }, [fp.os]);
 
   const native = !!(p as any).native;
+  const applyDevice = (id: string) => {
+    const d = devices.find(x => x.id === id); if (!d) return;
+    setDevice(id);
+    setFP({ osVersion: d.osVersion, webglVendor: d.webglVendor, webglRenderer: d.webglRenderer, screenWidth: d.screenWidth, screenHeight: d.screenHeight, pixelRatio: d.pixelRatio, hardwareConcurrency: d.hardwareConcurrency, deviceMemory: d.deviceMemory, maxTouchPoints: d.maxTouchPoints });
+    setFlash(x => x + 1);
+  };
   const regen = async () => { const f = await api.NewFingerprint(fp.os); setFP(f as any); setFlash(x => x + 1); toast('已生成新指纹'); };
   const changeOS = async (os: string) => { const f = await api.NewFingerprint(os); setFP(f as any); setFlash(x => x + 1); };
 
@@ -92,6 +101,7 @@ export const ProfileDrawer: React.FC<{
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
               <button className="btn sm" onClick={regen}><Icon.dice s={14} /> {native ? '加载默认模板值' : '重新随机'}</button>
             </div>
+            {!native && devices.length > 0 && <Field label={`设备预设（${devices.length} 台 ${OSES.find(o => o[0] === fp.os)?.[1] || ''} 整机）`} hint="选择一台真实机型，显卡、分辨率、CPU、内存一次填好"><SearchSelect value={device} options={devices.map(d => [d.id, d.name])} onChange={applyDevice} placeholder="搜索机型，如 4060 / M3 / Iris" /></Field>}
             <div className="grid3">
               <Field label="操作系统"><select value={fp.os} onChange={e => changeOS(e.target.value)}>{OSES.filter(([v]) => !native || v === 'windows').map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
               <Field label="系统版本"><input type="text" value={fp.osVersion} onChange={e => setFP({ osVersion: e.target.value })} /></Field>
