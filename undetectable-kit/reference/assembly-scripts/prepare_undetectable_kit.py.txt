@@ -1,0 +1,53 @@
+"""Assemble local runtime and fingerprint-only snapshots without account data."""
+import json, sqlite3, hashlib, shutil, datetime
+from pathlib import Path
+
+project = Path(__file__).resolve().parent
+kit = project / 'undetectable-kit'
+original = Path(r'C:\Users\dhl\undetectable_analysis\profile-inspector')
+local = Path.home() / 'AppData/Local/Undetectable'
+kit.mkdir(exist_ok=True)
+backup = kit / 'backup-source' / datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+backup.mkdir(parents=True)
+for p in project.glob('*.go'):
+    shutil.copy2(p, backup / p.name)
+for name in ['go.mod', 'go.sum', 'README.md']:
+    shutil.copy2(project / name, backup / name)
+shutil.copytree(project/'frontend/src', backup/'frontend-src')
+shutil.copytree(original, kit/'reference/profile-inspector', dirs_exist_ok=True)
+shutil.copytree(Path(r'C:\Program Files\Undetectable\chrome'), kit/'runtime/chrome', dirs_exist_ok=True)
+(kit/'fingerprints/templates').mkdir(parents=True, exist_ok=True)
+(kit/'examples').mkdir(exist_ok=True)
+(kit/'evidence').mkdir(exist_ok=True)
+db=sqlite3.connect(f'file:{(local/"Profiles/storage").as_posix()}?mode=ro',uri=True)
+configs=[]
+for pid,name,data,meta in db.execute('select id,name,data,configMeta from profiles'):
+    d,m=json.loads(data),json.loads(meta)
+    for key in ['pid','debugPort','devToolsLink','note','startPage','publicRTC']:
+        d.pop(key,None)
+    d['UA']=d['UA'].replace('Chrome/ Safari','Chrome/153.0.8010.36 Safari')
+    if not d.get('broVers'): d['broVers']='153.0.8010.36'
+    for key in ['additional_info','jsDefineText','webglConfig']:
+        if isinstance(m.get(key),str):
+            try: m[key]=json.loads(m[key])
+            except ValueError: pass
+    configs.append({'id':pid,'name':name,'data':d,'configMeta':m})
+library={'schemaVersion':1,'source':'local fingerprint-only snapshot; no cookies or credentials','uniqueConfigIDs':sorted(set(str(c['data'].get('configID')) for c in configs)),'profiles':configs}
+(kit/'fingerprints/library.json').write_text(json.dumps(library,ensure_ascii=False,indent=2),encoding='utf8')
+sql=sqlite3.connect(kit/'fingerprints/library.sqlite')
+sql.execute('create table if not exists profiles(id text primary key,name text,data text,configMeta text)')
+for c in configs:
+    sql.execute('insert or replace into profiles values(?,?,?,?)',(c['id'],c['name'],json.dumps(c['data']),json.dumps(c['configMeta'])))
+sql.commit();sql.close()
+for pid,tag in [('fd46f7931477cf2630fec3ba6bd5d6','windows-intel-a'),('1bfcc548794b10dfc8d3defc418a15','windows-intel-a2')]:
+    shutil.copy2(local/f'Profiles/{pid}/startInfo',kit/f'fingerprints/templates/{tag}.bin')
+btemplate=next(p for p in (local/'Profiles').glob('*/startInfo') if p.stat().st_size==10812)
+shutil.copy2(btemplate,kit/'fingerprints/templates/windows-intel-b.bin')
+for name in ['slots_A.txt','slots_B.txt','fn_ini.asm','fn_readprofile.asm','fn_writes_startinfo.asm','rea_search_chestchain.json','rea_trace_configs.json']:
+    p=Path(r'C:\Users\dhl\undetectable_analysis')/name
+    if p.exists(): shutil.copy2(p,kit/'evidence'/name)
+records=[]
+for p in sorted((kit/'runtime').rglob('*')):
+    if p.is_file(): records.append({'path':p.relative_to(kit).as_posix(),'size':p.stat().st_size,'sha256':hashlib.file_digest(p.open('rb'),'sha256').hexdigest()})
+(kit/'runtime-manifest.json').write_text(json.dumps({'browserVersion':'153.0.8010.37','source':r'C:\Program Files\Undetectable\chrome','files':records},indent=2),encoding='utf8')
+print('KIT',kit,'runtime files',len(records),'runtime bytes',sum(x['size'] for x in records),'fingerprint profiles',len(configs),'unique config IDs',library['uniqueConfigIDs'])

@@ -1,0 +1,31 @@
+# 宝塔「网站 -> 设置 -> 配置文件」用的 server{} 配置片段。
+# 将示例路径和 PHP socket 换成你服务器上的真实值后放入对应 server 块。
+# 如果站点配置中已有 location / 或 PHP 处理块，请编辑现有块，不要重复添加。
+
+root /www/server/ghostbrowser-sync/public;
+index index.php;
+
+# 最大加密包 256 MiB，留出请求头等空间；客户端和 PHP 服务上限仍为 256 MiB。
+client_max_body_size 260m;
+client_body_timeout 300s;
+
+# 所有 /api/* 请求交给 public/index.php。
+location / {
+    try_files $uri /index.php?$query_string;
+}
+
+# 在宝塔 PHP 版本设置中选择的版本必须与此 socket 后缀相符。
+# 常见示例：PHP 8.2 -> /tmp/php-cgi-82.sock；请以站点现有配置为准。
+location ~ [^/]\.php(/|$) {
+    try_files $uri =404;
+    fastcgi_pass unix:/tmp/php-cgi-82.sock;
+    fastcgi_index index.php;
+    include fastcgi.conf;
+    fastcgi_param HTTP_AUTHORIZATION $http_authorization;
+    fastcgi_read_timeout 300s;
+}
+
+# 拒绝访问隐藏文件。
+location ~ /\. {
+    deny all;
+}

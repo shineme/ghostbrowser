@@ -1,0 +1,26 @@
+[
+  {
+    "file": "Undetectable.installed.exe",
+    "sha256": "c1a904c14185bcf1be26cae63427c8c6b124499c5e50a79197a56818fa3ea3f0",
+    "configURLs": [
+      "https://shops.chestchain.com/cnf/configs",
+      "https://shops.chestchain.com/cnf/configs/%1",
+      "https://shops.chestchain.com/v2/configs",
+      "https://shops.chestchain.com/v2/configs/%1",
+      "https://shops.chestchain.com/v2/free-configs",
+      "https://shops.chestchain.com/v2/free-configs/%1"
+    ]
+  },
+  {
+    "file": "Undetectable.original.exe",
+    "sha256": "a46486a6ec8c08012f80eb8369b212c2d7a4d25eeeefa0a1c34f960ab1bf18e3",
+    "configURLs": [
+      "https://api.undetectnews.com/cnf/configs",
+      "https://api.undetectnews.com/cnf/configs/%1",
+      "https://api.undetectnews.com/v2/configs",
+      "https://api.undetectnews.com/v2/configs/%1",
+      "https://api.undetectnews.com/v2/free-configs",
+      "https://api.undetectnews.com/v2/free-configs/%1"
+    ]
+  }
+]

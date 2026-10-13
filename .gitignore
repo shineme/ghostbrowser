@@ -1,0 +1,16 @@
+build/bin
+node_modules
+cloud-server/config.php
+cloud-server/data/
+undetectable-kit/cloud-server/config.php
+undetectable-kit/cloud-server/data/
+frontend/dist
+undetectable-kit/runtime/
+undetectable-kit/runtime-manifest.json
+undetectable-kit/profiles/
+undetectable-kit/bin/
+undetectable-kit/bundle-manifest.json
+undetectable-kit/licenses/
+undetectable-kit/backup-source/
+undetectable-kit/reference/host/
+undetectable-kit/reference/profile-inspector/profile-inspector.exe

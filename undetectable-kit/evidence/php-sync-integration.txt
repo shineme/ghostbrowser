@@ -1,0 +1,16 @@
+=== RUN   TestPHPSyncRoundTrip
+    sync_integration_test.go:233: PHP upload/download, encrypted metadata, versions, lease/hash conflicts, failed commits and local-data preservation passed; restored database sha=4c60596b96f2994746b47360280a4f761424f048c4eb526c27023dcd484b6889
+--- PASS: TestPHPSyncRoundTrip (0.89s)
+=== RUN   TestNativeJSONIntegration
+=== RUN   TestNativeJSONIntegration/windows-intel-a
+    undetectable_integration_test.go:108: native import/export, new-tab UA-CH, profile reuse and custom values passed; pid=13344
+=== RUN   TestNativeJSONIntegration/windows-intel-a2
+    undetectable_integration_test.go:108: native import/export, new-tab UA-CH, profile reuse and custom values passed; pid=30204
+=== RUN   TestNativeJSONIntegration/windows-intel-b
+    undetectable_integration_test.go:108: native import/export, new-tab UA-CH, profile reuse and custom values passed; pid=12952
+--- PASS: TestNativeJSONIntegration (4.67s)
+    --- PASS: TestNativeJSONIntegration/windows-intel-a (1.75s)
+    --- PASS: TestNativeJSONIntegration/windows-intel-a2 (1.37s)
+    --- PASS: TestNativeJSONIntegration/windows-intel-b (1.44s)
+PASS
+ok  	ghostbrowser	7.363s

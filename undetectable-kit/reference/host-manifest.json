@@ -1,0 +1,12 @@
+[
+  {
+    "path": "reference/host/Undetectable.installed.exe",
+    "sha256": "c1a904c14185bcf1be26cae63427c8c6b124499c5e50a79197a56818fa3ea3f0",
+    "bytes": 18478448
+  },
+  {
+    "path": "reference/host/Undetectable.original.exe",
+    "sha256": "a46486a6ec8c08012f80eb8369b212c2d7a4d25eeeefa0a1c34f960ab1bf18e3",
+    "bytes": 18478448
+  }
+]

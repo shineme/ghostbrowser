@@ -1,0 +1,256 @@
+package main
+
+import (
+	"archive/zip"
+	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"golang.org/x/crypto/pbkdf2"
+)
+
+// Sync blobs are AES-256-GCM encrypted on the client with a key derived from
+// the user's sync password, so the VPS never sees cookies in the clear.
+
+func deriveKey(pass, salt []byte) []byte {
+	return pbkdf2.Key(pass, salt, 120000, 32, sha256.New)
+}
+
+func encrypt(plain, pass []byte) ([]byte, error) {
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
+		return nil, err
+	}
+	block, err := aes.NewCipher(deriveKey(pass, salt))
+	if err != nil {
+		return nil, err
+	}
+	gcm, _ := cipher.NewGCM(block)
+	nonce := make([]byte, gcm.NonceSize())
+	_, _ = rand.Read(nonce)
+	ct := gcm.Seal(nil, nonce, plain, nil)
+	out := append([]byte("GBE1"), salt...)
+	out = append(out, nonce...)
+	return append(out, ct...), nil
+}
+
+func decrypt(blob, pass []byte) ([]byte, error) {
+	if len(blob) < 4+16+12 || string(blob[:4]) != "GBE1" {
+		return nil, fmt.Errorf("bad blob header")
+	}
+	salt := blob[4:20]
+	block, err := aes.NewCipher(deriveKey(pass, salt))
+	if err != nil {
+		return nil, err
+	}
+	gcm, _ := cipher.NewGCM(block)
+	ns := gcm.NonceSize()
+	return gcm.Open(nil, blob[20:20+ns], blob[20+ns:], nil)
+}
+
+// zipDir packs a profile directory, excluding caches and our generated files.
+func zipDir(dir string) ([]byte, error) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	skip := []string{"cache", "code cache", "gpucache", "shadercache", "graphitedawncache", "dawnwebgpucache", "component_crx_cache", "_fp_ext"}
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		rel, _ := filepath.Rel(dir, path)
+		low := strings.ToLower(rel)
+		for _, s := range skip {
+			if strings.Contains(low, s) {
+				return nil
+			}
+		}
+		w, err := zw.Create(filepath.ToSlash(rel))
+		if err != nil {
+			return err
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return nil
+		}
+		defer f.Close()
+		_, _ = io.Copy(w, f)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	_ = zw.Close()
+	return buf.Bytes(), nil
+}
+
+func unzipDir(blob []byte, dir string) error {
+	zr, err := zip.NewReader(bytes.NewReader(blob), int64(len(blob)))
+	if err != nil {
+		return err
+	}
+	for _, f := range zr.File {
+		dst := filepath.Join(dir, filepath.FromSlash(f.Name))
+		if !strings.HasPrefix(dst, filepath.Clean(dir)+string(os.PathSeparator)) {
+			continue
+		}
+		_ = os.MkdirAll(filepath.Dir(dst), 0o755)
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+		out, err := os.Create(dst)
+		if err != nil {
+			rc.Close()
+			return err
+		}
+		_, _ = io.Copy(out, rc)
+		out.Close()
+		rc.Close()
+	}
+	return nil
+}
+
+type syncClient struct {
+	base, token string
+	hc          *http.Client
+}
+
+func (s *Store) sync() *syncClient {
+	st := s.GetSettings()
+	return &syncClient{base: strings.TrimRight(st.SyncServer, "/"), token: st.SyncToken,
+		hc: &http.Client{Timeout: 120 * time.Second}}
+}
+
+func (c *syncClient) req(method, path string, body io.Reader, ct string) (*http.Response, error) {
+	req, err := http.NewRequest(method, c.base+path, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	if ct != "" {
+		req.Header.Set("Content-Type", ct)
+	}
+	return c.hc.Do(req)
+}
+
+type cloudMeta struct {
+	ID      string          `json:"id"`
+	Name    string          `json:"name"`
+	Version int64           `json:"version"`
+	Sha256  string          `json:"sha256"`
+	Meta    json.RawMessage `json:"meta"`
+	Locked  string          `json:"lockedBy"`
+}
+
+// PushProfile packs, encrypts and uploads a profile as a cloud profile.
+func (s *Store) PushProfile(id string) error {
+	st := s.GetSettings()
+	if st.SyncServer == "" || st.SyncPassword == "" {
+		return fmt.Errorf("configure the sync server and sync password in Settings first")
+	}
+	p, ok := s.GetProfile(id)
+	if !ok {
+		return fmt.Errorf("profile not found")
+	}
+	raw, err := zipDir(s.ProfileDir(id))
+	if err != nil {
+		return err
+	}
+	enc, err := encrypt(raw, []byte(st.SyncPassword))
+	if err != nil {
+		return err
+	}
+	sum := sha256.Sum256(enc)
+	meta, _ := json.Marshal(p)
+	c := s.sync()
+
+	// lock
+	if _, err := c.req("POST", "/api/profiles/"+id+"/lock", strings.NewReader(`{"device":"`+st.DeviceID+`"}`), "application/json"); err != nil {
+		return fmt.Errorf("lock: %w", err)
+	}
+	// upload blob
+	resp, err := c.req("PUT", "/api/profiles/"+id+"/blob?version="+fmt.Sprint(p.CloudVer), bytes.NewReader(enc), "application/octet-stream")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusPreconditionFailed {
+		return fmt.Errorf("conflict: a newer version exists on the server, pull first")
+	}
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("upload failed (%d): %s", resp.StatusCode, b)
+	}
+	// commit metadata + unlock
+	cm := cloudMeta{ID: id, Name: p.Name, Version: p.CloudVer + 1, Sha256: hex.EncodeToString(sum[:]), Meta: meta, Locked: ""}
+	cb, _ := json.Marshal(cm)
+	if _, err := c.req("POST", "/api/profiles/"+id+"/commit", bytes.NewReader(cb), "application/json"); err != nil {
+		return err
+	}
+	p.Storage = "cloud"
+	p.CloudVer++
+	p.SyncedAt = time.Now().Unix()
+	s.PutProfile(*p)
+	return nil
+}
+
+// PullProfile downloads, decrypts and unpacks a cloud profile.
+func (s *Store) PullProfile(id string) error {
+	st := s.GetSettings()
+	c := s.sync()
+	resp, err := c.req("GET", "/api/profiles/"+id+"/blob", nil, "")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("download failed (%d)", resp.StatusCode)
+	}
+	enc, _ := io.ReadAll(resp.Body)
+	raw, err := decrypt(enc, []byte(st.SyncPassword))
+	if err != nil {
+		return fmt.Errorf("decrypt failed — wrong sync password? %w", err)
+	}
+	dir := s.ProfileDir(id)
+	_ = os.RemoveAll(dir)
+	return unzipDir(raw, dir)
+}
+
+// ListCloud returns the profiles stored on the server.
+func (s *Store) ListCloud() ([]cloudMeta, error) {
+	c := s.sync()
+	resp, err := c.req("GET", "/api/profiles", nil, "")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var out []cloudMeta
+	return out, json.NewDecoder(resp.Body).Decode(&out)
+}
+
+func (s *Store) TestSync() error {
+	c := s.sync()
+	resp, err := c.req("GET", "/api/ping", nil, "")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 401 {
+		return fmt.Errorf("unauthorized — check the sync token")
+	}
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("server returned %d", resp.StatusCode)
+	}
+	return nil
+}

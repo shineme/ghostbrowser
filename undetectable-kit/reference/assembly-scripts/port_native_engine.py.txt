@@ -1,0 +1,27 @@
+"""Port previously recovered binary codec and CDP client into a Go package."""
+from pathlib import Path
+src=Path(r'C:\Users\dhl\undetectable_analysis\profile-inspector')
+dst=Path(__file__).resolve().parent/'internal/undetectable'
+dst.mkdir(parents=True,exist_ok=True)
+for name in ['startinfo.go','cdp.go']:
+    text=(src/name).read_text(encoding='utf8').replace('package main','package undetectable',1)
+    (dst/name).write_text(text,encoding='utf8')
+d=(src/'db.go').read_text(encoding='utf8')
+head=d[d.index('// Profile mirrors'):d.index('type Store struct')]
+config=d[d.index('// Config bundles'):d.index('func (s *Store) Config')]
+expected=d[d.index('// Expected holds'):d.index('// Proxy describes')]
+imports='package undetectable\n\nimport ("encoding/json";"fmt";"regexp";"strconv";"strings")\n\n'
+(dst/'config.go').write_text(imports+head+config+expected,encoding='utf8')
+m=(src/'main.go').read_text(encoding='utf8')
+codec=m[m.index('// ApplyExpected writes'):m.index('func printChanges')]
+codec=codec.replace('l.SetSlot(l.OSVerFull, AsciiSlot("19.0.0"))','if cfg.UAD != nil { l.SetSlot(l.OSVerFull, AsciiSlot(cfg.UAD.PlatformVersion)) }')
+a=codec.index('\tappVersion := ');b=codec.index('\n\tl.SetSlot(l.AppVersion',a)
+codec=codec[:a]+'\tappVersion := strings.TrimPrefix(e.UA, "Mozilla/")'+codec[b:]
+codec=codec.replace('// GPU strings','if l.OSVers >= 0 { l.SetSlot(l.OSVers, UTF16Slot(e.OSVersion)) }\n\t// GPU strings')
+# Layout B has fixed brand capacity. Variable counts would overwrite following slots.
+codec=codec.replace('if l.IsB && cfg.UAD != nil {','if l.IsB && cfg.UAD != nil {\n        if len(cfg.UAD.Brands) != 3 || len(cfg.UAD.FullVersionList) != 3 { return nil, fmt.Errorf("layout B requires exactly 3 brands and fullVersionList entries") }')
+(dst/'encode.go').write_text('package undetectable\nimport("fmt";"strings")\n'+codec,encoding='utf8')
+l=(src/'launch.go').read_text(encoding='utf8')
+cdp=l[l.index('// Overrider keeps'):]
+(dst/'overrides.go').write_text('package undetectable\nimport("encoding/json";"fmt";"sort";"strconv";"strings";"sync";"time")\n'+cdp,encoding='utf8')
+print('ported codec, config resolver, CDP transport, overrides')

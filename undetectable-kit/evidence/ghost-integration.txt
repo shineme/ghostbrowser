@@ -1,0 +1,13 @@
+=== RUN   TestNativeJSONIntegration
+=== RUN   TestNativeJSONIntegration/windows-intel-a
+    undetectable_integration_test.go:108: native import/export, new-tab UA-CH, profile reuse and custom values passed; pid=30288
+=== RUN   TestNativeJSONIntegration/windows-intel-a2
+    undetectable_integration_test.go:108: native import/export, new-tab UA-CH, profile reuse and custom values passed; pid=34912
+=== RUN   TestNativeJSONIntegration/windows-intel-b
+    undetectable_integration_test.go:108: native import/export, new-tab UA-CH, profile reuse and custom values passed; pid=5076
+--- PASS: TestNativeJSONIntegration (4.50s)
+    --- PASS: TestNativeJSONIntegration/windows-intel-a (1.74s)
+    --- PASS: TestNativeJSONIntegration/windows-intel-a2 (1.29s)
+    --- PASS: TestNativeJSONIntegration/windows-intel-b (1.30s)
+PASS
+ok  	ghostbrowser	7.342s
