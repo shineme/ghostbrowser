@@ -1,5 +1,41 @@
 export namespace main {
 	
+	export class BulkResult {
+	    ok: number;
+	    failed: number;
+	    errors: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new BulkResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ok = source["ok"];
+	        this.failed = source["failed"];
+	        this.errors = source["errors"];
+	    }
+	}
+	export class CloudVersion {
+	    version: number;
+	    size: number;
+	    updatedAt: number;
+	    deviceName: string;
+	    current: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new CloudVersion(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.size = source["size"];
+	        this.updatedAt = source["updatedAt"];
+	        this.deviceName = source["deviceName"];
+	        this.current = source["current"];
+	    }
+	}
 	export class DevicePreset {
 	    id: string;
 	    name: string;
@@ -262,6 +298,7 @@ export namespace main {
 	    pass: string;
 	    changeIpUrl: string;
 	    tag: string;
+	    rotateOnLaunch?: boolean;
 	    typeGuessed?: boolean;
 	    ip: string;
 	    country: string;
@@ -295,6 +332,7 @@ export namespace main {
 	        this.pass = source["pass"];
 	        this.changeIpUrl = source["changeIpUrl"];
 	        this.tag = source["tag"];
+	        this.rotateOnLaunch = source["rotateOnLaunch"];
 	        this.typeGuessed = source["typeGuessed"];
 	        this.ip = source["ip"];
 	        this.country = source["country"];
@@ -332,6 +370,7 @@ export namespace main {
 	    cloudVersion: number;
 	    syncedAt: number;
 	    keepLocalVersion?: number;
+	    chunkKey?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Profile(source);
@@ -356,6 +395,7 @@ export namespace main {
 	        this.cloudVersion = source["cloudVersion"];
 	        this.syncedAt = source["syncedAt"];
 	        this.keepLocalVersion = source["keepLocalVersion"];
+	        this.chunkKey = source["chunkKey"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -444,6 +484,8 @@ export namespace main {
 	    profilesDir: string;
 	    apiPort: number;
 	    apiEnabled: boolean;
+	    apiKey: string;
+	    apiKeyOff: boolean;
 	    defaultOS: string;
 	    syncServer: string;
 	    syncToken: string;
@@ -454,6 +496,7 @@ export namespace main {
 	    deviceName: string;
 	    deviceId: string;
 	    theme: string;
+	    proxyCheckMins: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -467,6 +510,8 @@ export namespace main {
 	        this.profilesDir = source["profilesDir"];
 	        this.apiPort = source["apiPort"];
 	        this.apiEnabled = source["apiEnabled"];
+	        this.apiKey = source["apiKey"];
+	        this.apiKeyOff = source["apiKeyOff"];
 	        this.defaultOS = source["defaultOS"];
 	        this.syncServer = source["syncServer"];
 	        this.syncToken = source["syncToken"];
@@ -477,6 +522,7 @@ export namespace main {
 	        this.deviceName = source["deviceName"];
 	        this.deviceId = source["deviceId"];
 	        this.theme = source["theme"];
+	        this.proxyCheckMins = source["proxyCheckMins"];
 	    }
 	}
 	export class SyncItem {
@@ -598,6 +644,34 @@ export namespace main {
 		}
 	}
 	
+	export class SyncLogEntry {
+	    time: number;
+	    id: string;
+	    name: string;
+	    action: string;
+	    ok: boolean;
+	    error: string;
+	    bytes: number;
+	    ms: number;
+	    version: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SyncLogEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.time = source["time"];
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.action = source["action"];
+	        this.ok = source["ok"];
+	        this.error = source["error"];
+	        this.bytes = source["bytes"];
+	        this.ms = source["ms"];
+	        this.version = source["version"];
+	    }
+	}
 	
 	export class cloudMeta {
 	    id: string;
@@ -625,6 +699,30 @@ export namespace main {
 	        this.updatedAt = source["updatedAt"];
 	        this.size = source["size"];
 	        this.deviceName = source["deviceName"];
+	    }
+	}
+	export class serverInfo {
+	    features: string[];
+	    keepVersions: number;
+	    maxBody: number;
+	    usedBytes: number;
+	    freeBytes: number;
+	    user: string;
+	    protocol: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new serverInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.features = source["features"];
+	        this.keepVersions = source["keepVersions"];
+	        this.maxBody = source["maxBody"];
+	        this.usedBytes = source["usedBytes"];
+	        this.freeBytes = source["freeBytes"];
+	        this.user = source["user"];
+	        this.protocol = source["protocol"];
 	    }
 	}
 
