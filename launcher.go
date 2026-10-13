@@ -60,6 +60,7 @@ func (s *Store) Launch(id string) (*RunState, error) {
 	if !ok {
 		return nil, fmt.Errorf("profile not found")
 	}
+	s.rotateBeforeLaunch(p)
 	return s.launchUndetectable(p, s.GetSettings())
 }
 

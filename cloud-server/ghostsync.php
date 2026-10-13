@@ -19,8 +19,13 @@
  *   POST /api/profiles/{id}/unlock
  *   PUT  /api/profiles/{id}/blob?version=N   (body = encrypted blob)
  *   POST /api/profiles/{id}/commit    {"id","name","version","sha256","meta"}
- *   GET  /api/profiles/{id}/blob
+ *   GET  /api/profiles/{id}/blob[?version=N]   (N = current or a kept older version)
+ *   GET  /api/profiles/{id}/history
+ *   PUT  /api/profiles/{id}/refs      (under lease: newline-separated chunk IDs of this upload)
  *   POST /api/profiles/{id}/delete
+ *   POST /api/chunks/missing          {"ids": [...]}  -> {"missing": [...]}
+ *   PUT  /api/chunks                  framed: (64-hex id, uint32 BE length, GBC1 data)*
+ *   POST /api/chunks/get              {"ids": [...]}  -> framed, same layout
  */
 
 // ------------------------------------------------------------- settings
@@ -28,7 +33,11 @@ const GHOST_TOKEN = '';                 // 32+ random characters (or env GHOST_S
 const GHOST_DATA_DIR = '';              // '' = a hidden folder next to this file (or env GHOST_SYNC_DATA_DIR)
 const GHOST_MAX_BLOB_MB = 512;          // largest profile upload
 const GHOST_LEASE_SECONDS = 600;        // how long an upload lock lives
-const GHOST_KEEP_VERSIONS = 2;          // blobs kept per profile (current + previous)
+const GHOST_KEEP_VERSIONS = 3;          // versions kept per profile (current + older ones you can restore)
+const GHOST_USERS = [                   // extra users, each with an isolated data folder: 'token' => 'name'
+    // 'another-random-token-of-32-or-more-characters' => 'alice',
+];
+const GHOST_MAX_FAILS = 10;             // wrong tokens per IP within 15 minutes before a 15-minute block
 // ----------------------------------------------------------------------
 
 error_reporting(E_ALL);
@@ -65,7 +74,8 @@ function gs_cfg(): array
         'dir' => rtrim($dir, '/\\'),
         'max' => max(1, (int)$env('GHOST_SYNC_MAX_BLOB_MB', GHOST_MAX_BLOB_MB)) * 1048576,
         'ttl' => max(60, min(3600, (int)$env('GHOST_SYNC_LEASE_SECONDS', GHOST_LEASE_SECONDS))),
-        'keep' => max(1, (int)GHOST_KEEP_VERSIONS),
+        'keep' => max(1, min(50, (int)$env('GHOST_SYNC_KEEP_VERSIONS', GHOST_KEEP_VERSIONS))),
+        'base' => $dir,
     ];
 }
 
@@ -82,7 +92,7 @@ function gs_setup_page(): void
 
 function gs_init_dir(array $c): void
 {
-    foreach ([$c['dir'], $c['dir'] . '/blobs', $c['dir'] . '/tmp'] as $d) {
+    foreach ([$c['dir'], $c['dir'] . '/blobs', $c['dir'] . '/tmp', $c['dir'] . '/chunks', $c['dir'] . '/refs'] as $d) {
         if (!is_dir($d) && !@mkdir($d, 0700, true) && !is_dir($d)) throw new GsFail(500, 'Cannot create data directory; check folder permissions.');
     }
     $deny = [
@@ -151,9 +161,87 @@ function gs_clear_pending(array $c, array &$r): void
 {
     $p = $r['pending_path'] ?? '';
     if ($p && preg_match('/^[a-f0-9]{48}\.part$/D', $p) && is_file($c['dir'] . '/tmp/' . $p)) @unlink($c['dir'] . '/tmp/' . $p);
+    $f = $r['pending_refs'] ?? '';
+    if ($f && preg_match('/^[a-f0-9]{48}\.refs$/D', $f) && is_file($c['dir'] . '/tmp/' . $f)) @unlink($c['dir'] . '/tmp/' . $f);
     $r['pending_path'] = $r['pending_sha'] = null;
     $r['pending_size'] = $r['pending_base'] = null;
+    $r['pending_refs'] = null;
 }
+
+/** Folder holding the per-IP failure counters (outside every user's data). */
+function gs_guard_dir(): string
+{
+    $d = __DIR__ . '/.ghostsync-guard';
+    if (!is_dir($d)) {
+        @mkdir($d, 0700, true);
+        @file_put_contents($d . '/.htaccess', "Require all denied\nDeny from all\n");
+        @file_put_contents($d . '/index.html', '');
+    }
+    return $d;
+}
+
+function gs_client_ip(): string { return (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown'); }
+
+function gs_guard_file(): string { return gs_guard_dir() . '/' . substr(hash('sha256', gs_client_ip()), 0, 32) . '.json'; }
+
+function gs_guard_check(): void
+{
+    $f = gs_guard_file();
+    $g = is_file($f) ? json_decode((string)@file_get_contents($f), true) : null;
+    if (is_array($g) && (int)($g['until'] ?? 0) > time()) {
+        header('Retry-After: ' . ((int)$g['until'] - time()));
+        throw new GsFail(429, 'Too many wrong tokens from this IP; try again later.');
+    }
+}
+
+function gs_guard_fail(): void
+{
+    $f = gs_guard_file();
+    $g = is_file($f) ? json_decode((string)@file_get_contents($f), true) : null;
+    $now = time();
+    if (!is_array($g) || (int)($g['since'] ?? 0) < $now - 900) $g = ['since' => $now, 'fails' => 0, 'until' => 0];
+    $g['fails'] = (int)$g['fails'] + 1;
+    if ($g['fails'] >= max(1, (int)GHOST_MAX_FAILS)) $g['until'] = $now + 900;
+    @file_put_contents($f, json_encode($g), LOCK_EX);
+    // Old counters
+    if (mt_rand(1, 50) === 1) foreach (glob(gs_guard_dir() . '/*.json') ?: [] as $o) if (filemtime($o) < $now - 86400) @unlink($o);
+}
+
+/** Bytes PHP accepts in one request body (smallest of the limits). */
+function gs_ini_bytes(string $k): int
+{
+    $v = trim((string)ini_get($k));
+    if ($v === '' || $v === '0' || $v === '-1') return 0;
+    $n = (float)$v;
+    switch (strtolower(substr($v, -1))) {
+        case 'g': $n *= 1024;
+        case 'm': $n *= 1024;
+        case 'k': $n *= 1024;
+    }
+    return (int)$n;
+}
+
+function gs_dir_size(string $d): int
+{
+    $n = 0;
+    if (!is_dir($d)) return 0;
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($d, FilesystemIterator::SKIP_DOTS));
+    foreach ($it as $f) if ($f->isFile()) $n += $f->getSize();
+    return $n;
+}
+
+function gs_chunk_path(array $c, string $id): string { return $c['dir'] . '/chunks/' . substr($id, 0, 2) . '/' . $id; }
+
+/** Reads a request body of newline- or JSON-listed chunk IDs. */
+function gs_ids(array $b): array
+{
+    $ids = $b['ids'] ?? null;
+    if (!is_array($ids) || count($ids) > 1000) throw new GsFail(400, 'ids must be an array of at most 1000 chunk IDs.');
+    foreach ($ids as $id) if (!is_string($id) || !preg_match('/^[a-f0-9]{64}$/D', $id)) throw new GsFail(400, 'Invalid chunk ID.');
+    return array_values(array_unique($ids));
+}
+
+function gs_hist_entry($h): array { return is_array($h) ? $h : ['sha256' => (string)$h, 'version' => 0, 'size' => 0, 'updated_at' => 0, 'device_name' => '']; }
 
 function gs_view(array $r): array
 {
@@ -175,13 +263,38 @@ function gs_gc(array $c, array $idx): void
     $live = [];
     foreach ($idx['profiles'] as $r) {
         if ($r['sha256']) $live[$r['sha256']] = true;
-        foreach ($r['history'] ?? [] as $h) $live[$h] = true;
+        foreach ($r['history'] ?? [] as $h) $live[gs_hist_entry($h)['sha256']] = true;
     }
     foreach (glob($c['dir'] . '/blobs/*.gbe') ?: [] as $f) {
         if (!isset($live[basename($f, '.gbe')])) @unlink($f);
     }
+    foreach (glob($c['dir'] . '/refs/*.txt') ?: [] as $f) {
+        if (!isset($live[basename($f, '.txt')])) @unlink($f);
+    }
+    foreach (glob($c['dir'] . '/tmp/*.refs') ?: [] as $f) {
+        if (filemtime($f) < time() - 86400) @unlink($f);
+    }
     foreach (glob($c['dir'] . '/tmp/*.part') ?: [] as $f) {
         if (filemtime($f) < time() - 86400) @unlink($f);
+    }
+}
+
+/** Delete chunks no kept version references. Runs at most every 6 hours. */
+function gs_chunk_gc(array $c, bool $force = false): void
+{
+    $stamp = $c['dir'] . '/chunks/.gc';
+    if (!$force && is_file($stamp) && filemtime($stamp) > time() - 21600) return;
+    @touch($stamp);
+    $live = [];
+    foreach (glob($c['dir'] . '/refs/*.txt') ?: [] as $f) {
+        $h = fopen($f, 'rb');
+        if (!$h) return; // never delete on a partial view
+        while (($line = fgets($h)) !== false) { $line = trim($line); if ($line !== '') $live[$line] = true; }
+        fclose($h);
+    }
+    $old = time() - 172800; // chunks of an upload still in progress are young
+    foreach (glob($c['dir'] . '/chunks/??/*') ?: [] as $f) {
+        if (!isset($live[basename($f)]) && filemtime($f) < $old) @unlink($f);
     }
 }
 
@@ -205,17 +318,92 @@ function gs_serve(): void
     if ($method === 'GET' && ($path === '/' || $path === '')) gs_reply(200, ['ok' => true, 'service' => 'ghostbrowser-sync', 'hint' => 'Use this URL as the sync server in GhostBrowser.']);
 
     // Bearer token; X-Ghost-Token as a fallback for hosts that strip Authorization.
+    gs_guard_check();
     $given = '';
     if (preg_match('/^Bearer\s+(.+)$/i', gs_header('Authorization'), $m)) $given = trim($m[1]);
     if ($given === '') $given = gs_header('X-Ghost-Token');
-    if ($given === '' || !hash_equals($c['token'], $given)) {
+    $user = '';
+    if ($given !== '' && hash_equals($c['token'], $given)) {
+        $user = 'owner';
+    } elseif ($given !== '') {
+        foreach (GHOST_USERS as $tok => $name) {
+            if (is_string($tok) && strlen($tok) >= 32 && hash_equals($tok, $given)) {
+                $user = (string)$name;
+                // Each extra user gets a folder derived from their own token.
+                $c['dir'] = (getenv('GHOST_SYNC_DATA_DIR') || GHOST_DATA_DIR !== '')
+                    ? $c['base'] . '/u-' . substr(hash('sha256', 'ghostsync-user|' . $tok), 0, 20)
+                    : __DIR__ . '/.ghostsync-' . substr(hash('sha256', 'ghostsync|' . $tok), 0, 20);
+                break;
+            }
+        }
+    }
+    if ($user === '') {
+        gs_guard_fail();
         header('WWW-Authenticate: Bearer');
         throw new GsFail(401, 'Invalid token.');
     }
     gs_init_dir($c);
 
     if ($path === '/api/ping' && $method === 'GET') {
-        gs_reply(200, ['ok' => true, 'service' => 'ghostbrowser-sync', 'protocol' => 1, 'single' => true, 'time' => time()]);
+        $limits = array_filter([$c['max'], gs_ini_bytes('post_max_size')]);
+        $free = @disk_free_space($c['dir']);
+        gs_reply(200, ['ok' => true, 'service' => 'ghostbrowser-sync', 'protocol' => 2, 'single' => true, 'time' => time(),
+            'user' => $user, 'features' => ['chunks', 'history', 'multiuser'], 'keepVersions' => $c['keep'],
+            'maxBody' => $limits ? min($limits) : 0, 'usedBytes' => gs_dir_size($c['dir']),
+            'freeBytes' => $free === false ? -1 : (int)$free]);
+    }
+    if ($path === '/api/chunks/missing' && $method === 'POST') {
+        $ids = gs_ids(gs_body());
+        $miss = [];
+        foreach ($ids as $id) if (!is_file(gs_chunk_path($c, $id))) $miss[] = $id;
+        gs_reply(200, ['missing' => $miss]);
+    }
+    if ($path === '/api/chunks' && $method === 'PUT') {
+        if (isset($_SERVER['CONTENT_LENGTH']) && (int)$_SERVER['CONTENT_LENGTH'] > 64 * 1048576) throw new GsFail(413, 'Chunk batch is too large.');
+        $in = fopen('php://input', 'rb');
+        if (!$in) throw new GsFail(500, 'Cannot open upload stream.');
+        $stored = 0;
+        $readn = function (int $n) use ($in): string {
+            $buf = '';
+            while (strlen($buf) < $n && !feof($in)) { $x = fread($in, $n - strlen($buf)); if ($x === false) break; $buf .= $x; }
+            return $buf;
+        };
+        while (true) {
+            $id = $readn(64);
+            if ($id === '') break;
+            if (!preg_match('/^[a-f0-9]{64}$/D', $id)) throw new GsFail(400, 'Bad chunk frame.');
+            $len = $readn(4);
+            if (strlen($len) !== 4) throw new GsFail(400, 'Truncated chunk frame.');
+            $n = unpack('N', $len)[1];
+            if ($n < 32 || $n > 8 * 1048576) throw new GsFail(400, 'Bad chunk length.');
+            $data = $readn($n);
+            if (strlen($data) !== $n || substr($data, 0, 4) !== 'GBC1') throw new GsFail(400, 'Expected an encrypted GBC1 chunk.');
+            $dst = gs_chunk_path($c, $id);
+            if (!is_file($dst)) {
+                if (!is_dir(dirname($dst))) @mkdir(dirname($dst), 0700, true);
+                $tmp = $dst . '.' . bin2hex(random_bytes(6)) . '.part';
+                if (@file_put_contents($tmp, $data) !== $n) { @unlink($tmp); throw new GsFail(500, 'Chunk write failed (disk full?).'); }
+                if (!@rename($tmp, $dst)) @unlink($tmp);
+            } else {
+                @touch($dst);
+            }
+            $stored++;
+        }
+        fclose($in);
+        gs_reply(200, ['ok' => true, 'stored' => $stored]);
+    }
+    if ($path === '/api/chunks/get' && $method === 'POST') {
+        $ids = gs_ids(gs_body());
+        foreach ($ids as $id) if (!is_file(gs_chunk_path($c, $id))) throw new GsFail(404, 'Chunk ' . $id . ' is missing.');
+        while (ob_get_level() > 0) ob_end_clean();
+        header('Content-Type: application/octet-stream');
+        header('Cache-Control: no-store');
+        foreach ($ids as $id) {
+            $data = (string)file_get_contents(gs_chunk_path($c, $id));
+            echo $id, pack('N', strlen($data)), $data;
+            flush();
+        }
+        exit;
     }
     if ($path === '/api/profiles' && $method === 'GET') {
         $list = gs_tx($c, function (array &$idx) {
@@ -226,7 +414,7 @@ function gs_serve(): void
         });
         gs_reply(200, $list);
     }
-    if (!preg_match('~^/api/profiles/([a-zA-Z0-9_-]{1,64})/(lock|unlock|blob|commit|delete)$~D', $path, $m)) throw new GsFail(404, 'Not found.');
+    if (!preg_match('~^/api/profiles/([a-zA-Z0-9_-]{1,64})/(lock|unlock|blob|commit|delete|history|refs)$~D', $path, $m)) throw new GsFail(404, 'Not found.');
     $id = $m[1];
     $action = $m[2];
     $ttl = $c['ttl'];
@@ -308,6 +496,32 @@ function gs_serve(): void
         }
         gs_reply(200, ['ok' => true, 'sha256' => $sha, 'bytes' => $size]);
     }
+    if ($action === 'history' && $method === 'GET') {
+        $r = gs_tx($c, function (array &$idx) use ($id) { return $idx['profiles'][$id] ?? null; });
+        if (!$r || (int)$r['version'] === 0) throw new GsFail(404, 'Profile has no committed blob.');
+        $out = [['version' => (int)$r['version'], 'size' => (int)$r['size'], 'updatedAt' => (int)$r['updated_at'], 'deviceName' => (string)($r['device_name'] ?? ''), 'current' => true]];
+        foreach ($r['history'] ?? [] as $h) {
+            $h = gs_hist_entry($h);
+            if ((int)$h['version'] < 1 || !is_file($c['dir'] . '/blobs/' . $h['sha256'] . '.gbe')) continue;
+            $out[] = ['version' => (int)$h['version'], 'size' => (int)$h['size'], 'updatedAt' => (int)$h['updated_at'], 'deviceName' => (string)$h['device_name'], 'current' => false];
+        }
+        gs_reply(200, $out);
+    }
+    if ($action === 'refs' && $method === 'PUT') {
+        if (isset($_SERVER['CONTENT_LENGTH']) && (int)$_SERVER['CONTENT_LENGTH'] > 32 * 1048576) throw new GsFail(413, 'Chunk list is too large.');
+        $raw = (string)file_get_contents('php://input', false, null, 0, 32 * 1048576 + 1);
+        if (strlen($raw) > 32 * 1048576 || ($raw !== '' && !preg_match('/^([a-f0-9]{64}\n?)*$/D', $raw))) throw new GsFail(400, 'Invalid chunk list.');
+        $name = bin2hex(random_bytes(24)) . '.refs';
+        if (@file_put_contents($c['dir'] . '/tmp/' . $name, $raw) !== strlen($raw)) throw new GsFail(500, 'Cannot store chunk list.');
+        gs_tx($c, function (array &$idx) use ($c, $id, $name) {
+            $r = gs_lease($idx, $id);
+            $old = $r['pending_refs'] ?? '';
+            if ($old && preg_match('/^[a-f0-9]{48}\.refs$/D', $old)) @unlink($c['dir'] . '/tmp/' . $old);
+            $r['pending_refs'] = $name;
+            $idx['profiles'][$id] = $r;
+        });
+        gs_reply(200, ['ok' => true]);
+    }
     if ($action === 'commit' && $method === 'POST') {
         $b = gs_body();
         if (($b['id'] ?? '') !== $id || !is_int($b['version'] ?? null) || !is_string($b['sha256'] ?? null) ||
@@ -327,9 +541,20 @@ function gs_serve(): void
             } else {
                 @unlink($src);
             }
-            $hist = $r['history'] ?? [];
-            if ($r['sha256']) array_unshift($hist, $r['sha256']);
-            $r['history'] = array_slice(array_values(array_unique($hist)), 0, max(0, $c['keep'] - 1));
+            $refs = $r['pending_refs'] ?? '';
+            if ($refs && preg_match('/^[a-f0-9]{48}\.refs$/D', $refs) && is_file($c['dir'] . '/tmp/' . $refs)) {
+                @rename($c['dir'] . '/tmp/' . $refs, $c['dir'] . '/refs/' . $b['sha256'] . '.txt');
+            }
+            $r['pending_refs'] = null;
+            $hist = array_map('gs_hist_entry', $r['history'] ?? []);
+            if ($r['sha256']) array_unshift($hist, ['sha256' => $r['sha256'], 'version' => (int)$r['version'], 'size' => (int)$r['size'],
+                'updated_at' => (int)$r['updated_at'], 'device_name' => (string)($r['device_name'] ?? '')]);
+            $seen = [];
+            $hist = array_values(array_filter($hist, function ($h) use (&$seen, $b) {
+                if ($h['sha256'] === $b['sha256'] || isset($seen[$h['sha256']])) return false;
+                return $seen[$h['sha256']] = true;
+            }));
+            $r['history'] = array_slice($hist, 0, max(0, $c['keep'] - 1));
             $r['name'] = $b['name'];
             $r['version'] = $b['version'];
             $r['sha256'] = $b['sha256'];
@@ -346,11 +571,20 @@ function gs_serve(): void
             return $idx;
         });
         gs_gc($c, $idx);
+        gs_chunk_gc($c);
         gs_reply(200, ['ok' => true, 'version' => $b['version']]);
     }
     if ($action === 'blob' && $method === 'GET') {
         $r = gs_tx($c, function (array &$idx) use ($id) { return $idx['profiles'][$id] ?? null; });
         if (!$r || (int)$r['version'] === 0) throw new GsFail(404, 'Profile has no committed blob.');
+        $want = $_GET['version'] ?? '';
+        if (is_string($want) && $want !== '' && (int)$want !== (int)$r['version']) {
+            $found = null;
+            foreach ($r['history'] ?? [] as $h) { $h = gs_hist_entry($h); if ((int)$h['version'] === (int)$want) $found = $h; }
+            if (!$found) throw new GsFail(404, 'That version is no longer kept on the server.');
+            $r['sha256'] = $found['sha256'];
+            $r['version'] = (int)$found['version'];
+        }
         $p = $c['dir'] . '/blobs/' . $r['sha256'] . '.gbe';
         if (!is_file($p)) throw new GsFail(500, 'Committed blob is missing.');
         while (ob_get_level() > 0) ob_end_clean();
@@ -372,9 +606,10 @@ function gs_serve(): void
             return $idx;
         });
         gs_gc($c, $idx);
+        gs_chunk_gc($c, true);
         gs_reply(200, ['ok' => true]);
     }
-    header('Allow: ' . ($action === 'blob' ? 'GET, PUT' : 'POST'));
+    header('Allow: ' . ($action === 'blob' ? 'GET, PUT' : ($action === 'history' ? 'GET' : ($action === 'refs' ? 'PUT' : 'POST'))));
     throw new GsFail(405, 'Method not allowed.');
 }
 

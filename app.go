@@ -46,6 +46,7 @@ func (a *App) startup(ctx context.Context) {
 	api.start(a.store)
 	// Server-first reconcile on start-up, off the UI thread.
 	go func() { time.Sleep(800 * time.Millisecond); a.auto.Reconcile(); a.auto.WatchGlobal() }()
+	go a.proxyHealthLoop()
 }
 
 // ---------- profiles ----------
@@ -267,7 +268,7 @@ func (a *App) CheckProxies(ids []string) []Proxy {
 	runPool(a.pickProxies(ids), 16, func(p Proxy) {
 		r := CheckProxy(p)
 		if cur, ok := a.store.GetProxy(p.ID); ok { // keep edits made meanwhile
-			r.Name, r.Tag, r.ChangeIP, r.Speed, r.SpeedAt = cur.Name, cur.Tag, cur.ChangeIP, cur.Speed, cur.SpeedAt
+			r.Name, r.Tag, r.ChangeIP, r.Speed, r.SpeedAt, r.RotateOnLaunch = cur.Name, cur.Tag, cur.ChangeIP, cur.Speed, cur.SpeedAt, cur.RotateOnLaunch
 		}
 		a.emitProxy(a.store.PutProxy(r))
 	})
@@ -451,3 +452,44 @@ func (a *App) PullProfile(id string) error     { return a.store.PullProfile(id) 
 func (a *App) ListCloud() ([]cloudMeta, error) { return a.store.ListCloud() }
 
 func (a *App) DataDir() string { return appDataDir() }
+
+// ResetAPIKey issues a new local API key; scripts using the old one stop working.
+func (a *App) ResetAPIKey() Settings {
+	st := a.store.GetSettings()
+	st.APIKey = newAPIKey()
+	return a.SaveSettings(st)
+}
+
+// ---- sync: server info, history, log
+
+func (a *App) SyncServerInfo() (serverInfo, error)            { return a.store.ServerInfo(true) }
+func (a *App) CloudHistory(id string) ([]CloudVersion, error) { return a.store.CloudHistory(id) }
+func (a *App) RestoreVersion(id string, version int64) error {
+	if _, ok := runReg.get(id); ok {
+		return fmt.Errorf("请先关闭这个环境的浏览器")
+	}
+	return a.store.RestoreVersion(id, version)
+}
+func (a *App) SyncLog() []SyncLogEntry { return a.store.readSyncLog() }
+func (a *App) ClearSyncLog() {
+	syncLogMu.Lock()
+	_ = os.Remove(a.store.syncLogFile())
+	syncLogMu.Unlock()
+}
+
+// RetrySync repeats one failed operation from the sync log.
+func (a *App) RetrySync(id, action string) error {
+	switch action {
+	case "push":
+		return a.store.PushProfile(id)
+	case "pull":
+		return a.store.PullProfile(id)
+	case "push-global":
+		return a.store.PushGlobal()
+	case "pull-global":
+		return a.store.PullGlobal()
+	}
+	return fmt.Errorf("这条记录不能重试")
+}
+
+func (a *App) SyncBusy() []string { return a.auto.Busy() }

@@ -36,8 +36,12 @@ func main() {
 			DisableFramelessWindowDecorations: true,
 			Theme:                             windows.Dark,
 		},
-		OnStartup:  app.startup,
-		OnShutdown: func(_ context.Context) { runReg.stopAll(); globalAuto.Drain(90 * time.Second); globalAuto.FlushGlobal() },
+		OnStartup: app.startup,
+		OnShutdown: func(_ context.Context) {
+			runReg.stopAll()
+			globalAuto.Drain(90 * time.Second)
+			globalAuto.FlushGlobal()
+		},
 		Bind: []interface{}{
 			app,
 		},

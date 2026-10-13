@@ -55,6 +55,9 @@ func NewStore() *Store {
 	if kit := findUndetectableKit(); kit != "" && s.Settings.UndetectableKit == "" {
 		s.Settings.UndetectableKit = kit
 	}
+	if s.Settings.APIKey == "" {
+		s.Settings.APIKey = newAPIKey()
+	}
 	if s.Settings.DefaultOS == "" {
 		s.Settings.DefaultOS = "windows"
 	}
@@ -218,6 +221,9 @@ func (s *Store) PutSettings(st Settings) Settings {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	st.DeviceID = s.Settings.DeviceID
+	if st.APIKey == "" {
+		st.APIKey = s.Settings.APIKey
+	}
 	s.Settings = st
 	_ = os.MkdirAll(st.ProfilesDir, 0o755)
 	s.saveLocked()

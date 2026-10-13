@@ -1,12 +1,68 @@
 package main
 
 import (
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"strings"
 	"sync"
 )
+
+func newAPIKey() string {
+	b := make([]byte, 24)
+	_, _ = rand.Read(b)
+	return "gb_" + hex.EncodeToString(b)
+}
+
+// guard protects the API from web pages: a page in any browser can send
+// requests to 127.0.0.1, so we require a loopback Host (blocks DNS rebinding),
+// refuse requests a browser marks as cross-site (Origin / Sec-Fetch-Site), and
+// require the API key unless the user turned that off.
+func (a *localAPI) guard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := r.Host
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		}
+		host = strings.Trim(strings.ToLower(host), "[]")
+		if host != "127.0.0.1" && host != "localhost" && host != "::1" {
+			http.Error(w, "forbidden host", http.StatusForbidden)
+			return
+		}
+		if o := r.Header.Get("Origin"); o != "" {
+			http.Error(w, "browser pages may not call the local API", http.StatusForbidden)
+			return
+		}
+		if sf := r.Header.Get("Sec-Fetch-Site"); sf != "" && sf != "none" && sf != "same-origin" {
+			http.Error(w, "browser pages may not call the local API", http.StatusForbidden)
+			return
+		}
+		st := a.store.GetSettings()
+		if !st.APIKeyOff && r.URL.Path != "/status" {
+			k := r.Header.Get("X-API-Key")
+			if k == "" {
+				if b := r.Header.Get("Authorization"); strings.HasPrefix(b, "Bearer ") {
+					k = strings.TrimSpace(b[7:])
+				}
+			}
+			if k == "" {
+				k = r.URL.Query().Get("key")
+			}
+			if st.APIKey == "" || subtle.ConstantTimeCompare([]byte(k), []byte(st.APIKey)) != 1 {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"status":"error","error":"missing or wrong API key (X-API-Key header or ?key=)"}`))
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 // Local automation API, Undetectable-style: list/create/launch/close profiles,
 // so Puppeteer / Playwright / Selenium can attach to the CDP endpoint.
@@ -68,7 +124,7 @@ func (a *localAPI) start(store *Store) {
 	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": true, "running": runReg.list()})
 	})
-	a.srv = &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", st.APIPort), Handler: mux}
+	a.srv = &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", st.APIPort), Handler: a.guard(mux)}
 	go func() { _ = a.srv.ListenAndServe() }()
 }
 

@@ -50,11 +50,15 @@ func (a *autoSyncer) enabled() bool {
 
 func (a *autoSyncer) claim(id string) bool {
 	a.bmu.Lock()
-	defer a.bmu.Unlock()
 	if a.busy[id] {
+		a.bmu.Unlock()
 		return false
 	}
 	a.busy[id] = true
+	a.bmu.Unlock()
+	if a.emit != nil {
+		a.emit(SyncEvent{Phase: "busy", ID: id})
+	}
 	return true
 }
 
@@ -62,6 +66,20 @@ func (a *autoSyncer) release(id string) {
 	a.bmu.Lock()
 	delete(a.busy, id)
 	a.bmu.Unlock()
+	if a.emit != nil {
+		a.emit(SyncEvent{Phase: "idle", ID: id})
+	}
+}
+
+// Busy lists the profiles a sync is working on right now.
+func (a *autoSyncer) Busy() []string {
+	a.bmu.Lock()
+	defer a.bmu.Unlock()
+	out := make([]string, 0, len(a.busy))
+	for id := range a.busy {
+		out = append(out, id)
+	}
+	return out
 }
 
 // localDirty: the profile ran after its last successful sync.
@@ -470,6 +488,9 @@ func (a *autoSyncer) WatchGlobal() {
 		time.Sleep(20 * time.Second)
 		if !a.enabled() || a.Pending() != nil || !a.s.globalDirty() {
 			continue
+		}
+		if warned >= 0 && warned == a.s.globalState().Version {
+			continue // cloud moved on; the start-up prompt settles it
 		}
 		if !a.mu.TryLock() { // a reconcile is running
 			continue

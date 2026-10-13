@@ -359,6 +359,23 @@ func syncFileLock(dir string) (func(), error) {
 }
 
 func (s *Store) PushProfile(id string) error {
+	t0 := time.Now()
+	n, e := s.pushProfile(id)
+	s.logSync(id, "push", n, t0, e)
+	return e
+}
+
+func (s *Store) pushProfile(id string) (sent int64, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("sync crashed: %v", r)
+		}
+	}()
+	e := s.pushProfileInner(id, &sent)
+	return sent, e
+}
+
+func (s *Store) pushProfileInner(id string, sent *int64) error {
 	s.launchMu.Lock()
 	defer s.launchMu.Unlock()
 	if _, ok := runReg.get(id); ok {
@@ -372,7 +389,7 @@ func (s *Store) PushProfile(id string) error {
 	if !ok {
 		return fmt.Errorf("profile not found")
 	}
-	_, dir, e := s.syncDir(id)
+	root, dir, e := s.syncDir(id)
 	if e != nil {
 		return e
 	}
@@ -395,13 +412,30 @@ func (s *Store) PushProfile(id string) error {
 			archived.ProxyID = ""
 		}
 	}
-	raw, e := zipDir(dir, &archived)
-	if e != nil {
-		return e
-	}
-	enc, e := encrypt(raw, []byte(st.SyncPassword))
-	if e != nil {
-		return e
+	var enc []byte
+	var refs []string
+	var files []manifestFile
+	if si, err := s.ServerInfo(false); err == nil && si.has("chunks") {
+		enc, refs, *sent, files, e = s.buildChunked(dir, root, &archived, st.SyncPassword, nil)
+		if e != nil {
+			return e
+		}
+		if refs == nil {
+			refs = []string{}
+		}
+	} else {
+		raw, e := zipDir(dir, &archived)
+		if e != nil {
+			return e
+		}
+		enc, e = encrypt(raw, []byte(st.SyncPassword))
+		if e != nil {
+			return e
+		}
+		if err == nil && si.MaxBody > 0 && int64(len(enc)) > si.MaxBody {
+			return fmt.Errorf("同步包 %d MB 超过服务器单次上传上限 %d MB：请调大 PHP post_max_size / upload_max_filesize，或升级到支持增量同步的 ghostsync.php", len(enc)>>20, si.MaxBody>>20)
+		}
+		*sent = int64(len(enc))
 	}
 	sum := sha256.Sum256(enc)
 	c := s.sync()
@@ -426,6 +460,17 @@ func (s *Store) PushProfile(id string) error {
 	if lease.Version != p.CloudVer {
 		return fmt.Errorf("conflict: cloud is v%d, local is v%d; pull first", lease.Version, p.CloudVer)
 	}
+	if refs != nil {
+		rr, e := c.req("PUT", path+"/refs", strings.NewReader(strings.Join(refs, "\n")), "text/plain")
+		if e != nil {
+			return e
+		}
+		e = syncStatus(rr)
+		rr.Body.Close()
+		if e != nil {
+			return e
+		}
+	}
 	resp, e := c.req("PUT", path+"/blob?version="+strconv.FormatInt(p.CloudVer, 10), bytes.NewReader(enc), "application/octet-stream")
 	if e != nil {
 		return e
@@ -448,6 +493,12 @@ func (s *Store) PushProfile(id string) error {
 		return fmt.Errorf("server returned an invalid commit acknowledgement")
 	}
 	committed = true
+	if files != nil {
+		saveSyncCache(root, id, files)
+		p.ChunkKey = archived.ChunkKey
+	} else {
+		dropSyncCache(root, id)
+	}
 	p.Storage = "cloud"
 	p.CloudVer = cm.Version
 	p.SyncedAt = syncStamp(p.LastRun)
@@ -456,6 +507,25 @@ func (s *Store) PushProfile(id string) error {
 }
 
 func (s *Store) PullProfile(id string) error {
+	t0 := time.Now()
+	n, e := s.pullProfile(id, 0)
+	s.logSync(id, "pull", n, t0, e)
+	return e
+}
+
+// pullProfile restores the cloud copy (version 0 = current, else a kept older
+// version) and returns the bytes downloaded.
+func (s *Store) pullProfile(id string, want int64) (got int64, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("sync crashed: %v", r)
+		}
+	}()
+	err = s.pullProfileInner(id, want, &got)
+	return got, err
+}
+
+func (s *Store) pullProfileInner(id string, want int64, got *int64) error {
 	s.launchMu.Lock()
 	defer s.launchMu.Unlock()
 	if _, ok := runReg.get(id); ok {
@@ -475,7 +545,11 @@ func (s *Store) PullProfile(id string) error {
 	}
 	defer release()
 	c := s.sync()
-	resp, e := c.req("GET", "/api/profiles/"+id+"/blob", nil, "")
+	blobPath := "/api/profiles/" + id + "/blob"
+	if want > 0 {
+		blobPath += "?version=" + strconv.FormatInt(want, 10)
+	}
+	resp, e := c.req("GET", blobPath, nil, "")
 	if e != nil {
 		return e
 	}
@@ -511,16 +585,32 @@ func (s *Store) PullProfile(id string) error {
 		return e
 	}
 	defer os.RemoveAll(stage)
-	if e = unzipDir(raw, stage); e != nil {
-		return e
-	}
-	meta, e := os.ReadFile(filepath.Join(stage, profileArchiveMetadata))
-	if e != nil {
-		return fmt.Errorf("archive has no encrypted profile metadata; re-upload with the new client")
-	}
+	*got = int64(len(enc))
 	var p Profile
-	if e = json.Unmarshal(meta, &p); e != nil {
+	man, chunked, e := decodeManifest(raw)
+	if e != nil {
 		return e
+	}
+	if chunked {
+		n, e := s.restoreChunked(man, dir, root, stage)
+		*got += n
+		if e != nil {
+			return e
+		}
+		p = man.Profile
+		p.ChunkKey = man.ChunkKey
+	} else {
+		if e = unzipDir(raw, stage); e != nil {
+			return e
+		}
+		meta, e := os.ReadFile(filepath.Join(stage, profileArchiveMetadata))
+		if e != nil {
+			return fmt.Errorf("archive has no encrypted profile metadata; re-upload with the new client")
+		}
+		if e = json.Unmarshal(meta, &p); e != nil {
+			return e
+		}
+		_ = os.Remove(filepath.Join(stage, profileArchiveMetadata))
 	}
 	if p.ID != id {
 		return fmt.Errorf("archive profile ID mismatch")
@@ -551,6 +641,11 @@ func (s *Store) PullProfile(id string) error {
 		return fmt.Errorf("restore failed: %w", e)
 	}
 	s.PutProfile(p)
+	if chunked {
+		saveSyncCache(root, id, man.Files)
+	} else {
+		dropSyncCache(root, id)
+	}
 	// Keep the previous environment as a named backup (only the newest one).
 	if backup != "" {
 		old, _ := filepath.Glob(filepath.Join(root, ".before-pull-"+id+"-*"))

@@ -117,3 +117,43 @@ func closeBrowser(ws string) error {
 	_, err := cdpCall(ws, "Browser.close", map[string]any{})
 	return err
 }
+
+// focusBrowser activates the first page tab and restores its window if it was
+// minimised.
+func focusBrowser(port int, ws string) error {
+	resp, err := localHTTP.Get(fmt.Sprintf("http://127.0.0.1:%d/json/list", port))
+	if err != nil {
+		return err
+	}
+	var targets []struct {
+		ID   string `json:"id"`
+		Type string `json:"type"`
+	}
+	err = json.NewDecoder(resp.Body).Decode(&targets)
+	resp.Body.Close()
+	if err != nil {
+		return err
+	}
+	for _, t := range targets {
+		if t.Type != "page" {
+			continue
+		}
+		if ws != "" {
+			if raw, e := cdpCall(ws, "Browser.getWindowForTarget", map[string]any{"targetId": t.ID}); e == nil {
+				var w struct {
+					WindowID int `json:"windowId"`
+				}
+				if json.Unmarshal(raw, &w) == nil && w.WindowID != 0 {
+					_, _ = cdpCall(ws, "Browser.setWindowBounds", map[string]any{"windowId": w.WindowID, "bounds": map[string]any{"windowState": "normal"}})
+				}
+			}
+		}
+		r, e := localHTTP.Get(fmt.Sprintf("http://127.0.0.1:%d/json/activate/%s", port, t.ID))
+		if e != nil {
+			return e
+		}
+		r.Body.Close()
+		return nil
+	}
+	return fmt.Errorf("浏览器没有打开的页面")
+}

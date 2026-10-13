@@ -36,16 +36,17 @@ type Fingerprint struct {
 }
 
 type Proxy struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Type     string `json:"type"` // none | http | https | socks5
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	User     string `json:"user"`
-	Pass     string `json:"pass"`
-	ChangeIP string `json:"changeIpUrl"`
-	Tag      string `json:"tag"`                   // batch label set on import, searchable
-	Guessed  bool   `json:"typeGuessed,omitempty"` // protocol inferred; the first check confirms it
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Type           string `json:"type"` // none | http | https | socks5
+	Host           string `json:"host"`
+	Port           int    `json:"port"`
+	User           string `json:"user"`
+	Pass           string `json:"pass"`
+	ChangeIP       string `json:"changeIpUrl"`
+	Tag            string `json:"tag"`                      // batch label set on import, searchable
+	RotateOnLaunch bool   `json:"rotateOnLaunch,omitempty"` // call ChangeIP before each launch
+	Guessed        bool   `json:"typeGuessed,omitempty"`    // protocol inferred; the first check confirms it
 	// last check result
 	IP       string  `json:"ip"`
 	Country  string  `json:"country"`
@@ -83,6 +84,7 @@ type Profile struct {
 	CloudVer    int64          `json:"cloudVersion"`
 	SyncedAt    int64          `json:"syncedAt"`
 	KeepLocal   int64          `json:"keepLocalVersion,omitempty"` // user kept local over this cloud version
+	ChunkKey    string         `json:"chunkKey,omitempty"`         // incremental sync: per-profile chunk key (base64)
 }
 
 type Settings struct {
@@ -92,6 +94,8 @@ type Settings struct {
 	ProfilesDir     string `json:"profilesDir"`
 	APIPort         int    `json:"apiPort"`
 	APIEnabled      bool   `json:"apiEnabled"`
+	APIKey          string `json:"apiKey"`    // required by the local API (X-API-Key header or ?key=)
+	APIKeyOff       bool   `json:"apiKeyOff"` // allow calls without the key (Host / Origin checks stay on)
 	DefaultOS       string `json:"defaultOS"`
 	SyncServer      string `json:"syncServer"`
 	SyncToken       string `json:"syncToken"`
@@ -104,6 +108,7 @@ type Settings struct {
 	DeviceName       string `json:"deviceName"`
 	DeviceID         string `json:"deviceId"`
 	Theme            string `json:"theme"`
+	ProxyCheckMins   int    `json:"proxyCheckMins"` // background re-check of every proxy; 0 = off
 }
 
 type RunState struct {

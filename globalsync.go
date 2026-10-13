@@ -108,7 +108,9 @@ func (s *Store) globalDirty() bool {
 }
 
 // PushGlobal uploads settings, proxies and the fingerprint library.
-func (s *Store) PushGlobal() error {
+func (s *Store) PushGlobal() (err error) {
+	t0 := time.Now()
+	defer func() { s.logSync(globalID, "push-global", 0, t0, err) }()
 	st := s.GetSettings()
 	if e := syncReady(st, true); e != nil {
 		return e
@@ -176,7 +178,9 @@ func (s *Store) PushGlobal() error {
 // Kept from this computer: its device ID and name, the sync connection that is
 // working right now (address, token, password), its profiles folder, and its
 // kernel path whenever the cloud one does not exist on this computer.
-func (s *Store) PullGlobal() error {
+func (s *Store) PullGlobal() (err error) {
+	t0 := time.Now()
+	defer func() { s.logSync(globalID, "pull-global", 0, t0, err) }()
 	st := s.GetSettings()
 	if e := syncReady(st, true); e != nil {
 		return e
