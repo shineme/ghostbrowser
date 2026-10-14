@@ -196,6 +196,30 @@ const cdelMock: any[] = [
   { id: 'c9e8d7c6b5a4f3e2', name: 'Etsy-02', version: 2, updatedAt: cdelNow - 5 * 86400, deviceName: 'OFFICE-PC', size: 12e6, lockedBy: '', localDeleted: false, deletedVersion: 0, deletedAt: 0, cloudNewer: false, pendingDelete: false },
 ];
 
+// ---- share (mock data) ----
+const shNow = Date.now() / 1000;
+const shareMock = {
+  requireApproval: true,
+  rk: 'K7QM-2XPA-W9TR-HF4D-N6ZC-B3JV-YE5L-UGS4',
+  recovery: { supported: true, configured: false, unlocked: false, legacy: false, kid: '', rkCreated: 0, pwChanged: 0, shareReady: false, user: 'owner' } as any,
+  devices: [
+    { id: 'dev-this-pc', name: 'DESKTOP-WORK', os: 'windows', firstSeen: shNow - 86400 * 210, lastSeen: shNow - 20, approved: true, revoked: false, status: 'approved' },
+    { id: 'dev-mbp', name: 'MacBook-Pro-陈的笔记本电脑（家里书房那台）', os: 'darwin', firstSeen: shNow - 600, lastSeen: shNow - 540, approved: false, revoked: false, status: 'pending' },
+    { id: 'dev-laptop', name: 'LAPTOP-HOME', os: 'windows', firstSeen: shNow - 86400 * 90, lastSeen: shNow - 7200, approved: true, revoked: false, status: 'approved' },
+    { id: 'dev-office3', name: 'OFFICE-PC-03', os: 'windows', firstSeen: shNow - 86400 * 400, lastSeen: shNow - 86400 * 33, approved: false, revoked: true, status: 'revoked' },
+  ] as any[],
+  out: [
+    { id: 'a1b2c3d4e5f6a7b8c9d0e1f2', from: 'owner', to: 'alice', name: 'TikTok 美区 07', mode: 'session', note: '帮忙跑一下这周的直播间', os: 'windows', createdAt: shNow - 3600, expiresAt: shNow + 86400 * 6.9, updatedAt: shNow - 3600, size: 41 << 20, status: 'pending' },
+    { id: 'b1b2c3d4e5f6a7b8c9d0e1f2', from: 'owner', to: 'bob', name: 'Amazon 店铺后台 · 德国站（主账号，请勿修改支付信息）', mode: 'config', note: '', os: 'macos', createdAt: shNow - 86400 * 3, expiresAt: shNow + 86400 * 27, updatedAt: shNow - 86400 * 2, size: 5120, status: 'accepted' },
+    { id: 'c1b2c3d4e5f6a7b8c9d0e1f2', from: 'owner', to: 'carol', name: 'FB 广告 03', mode: 'session', note: '上个月的投放测试', os: 'windows', createdAt: shNow - 86400 * 40, expiresAt: shNow - 86400 * 10, updatedAt: shNow - 86400 * 10, size: 0, status: 'expired' },
+  ] as any[],
+  in: [
+    { id: 'd1b2c3d4e5f6a7b8c9d0e1f2', from: 'alice', to: 'owner', name: 'Shopee 台湾 · 客服号', mode: 'session', note: '这个号今晚 8 点前要回完消息，登录状态已经带上了，直接启动就能用。', os: 'windows', createdAt: shNow - 900, expiresAt: shNow + 86400 * 2.5, updatedAt: shNow - 900, size: 23 << 20, status: 'pending' },
+    { id: 'e1b2c3d4e5f6a7b8c9d0e1f2', from: 'bob', to: 'owner', name: 'Etsy 手作店', mode: 'config', note: '', os: 'macos', createdAt: shNow - 86400 * 5, expiresAt: shNow + 86400 * 85, updatedAt: shNow - 86400 * 5, size: 4096, status: 'accepted', localId: 'sh-e1b2c3d4e5f6a7b8c9d0e1f2' },
+    { id: 'f1b2c3d4e5f6a7b8c9d0e1f2', from: 'carol', to: 'owner', name: 'X 推广账号', mode: 'session', note: '', os: 'windows', createdAt: shNow - 86400 * 20, expiresAt: shNow + 86400 * 10, updatedAt: shNow - 86400, size: 0, status: 'revoked' },
+  ] as any[],
+};
+
 const M = {
  NativePresets: async (): Promise<NativePreset[]> => [{id:'demo', name:'Windows / Intel', configId:'3285798'}],
  UseUndetectableKit: async () => { mock.settings.kernelMode='undetectable'; mock.settings.undetectableKit='undetectable-kit'; return {...mock.settings}; },
@@ -515,6 +539,37 @@ const M = {
   },
   PendingCloudDeletes: async (): Promise<number> => cdelMock.filter(x => x.pendingDelete).length,
   RetryCloudDeletes: async (): Promise<number> => { await wait(600); return cdelMock.filter(x => x.pendingDelete).length; },
+  // ---- share ----
+  _shareInit: (() => { if (location.hash.includes('share')) Object.assign(mock.settings, { syncServer: 'https://vps.example.com/ghostsync.php', syncToken: 'x'.repeat(40), syncPassword: 'pw-12345678', deviceId: 'dev-this-pc', deviceName: 'DESKTOP-WORK' }); if (location.hash.includes('share')) mock.profiles.splice(1, 0, { id: 'sh-e1b2c3d4e5f6a7b8c9d0e1f2', name: 'Etsy 手作店', group: '', tags: [], notes: '', storage: 'local', proxyId: '', startUrls: [], cookies: '', fingerprint: mockFP('macos'), createdAt: shNow - 86400 * 5, lastRun: shNow - 7200, cloudVersion: 0, syncedAt: 0, shareId: 'e1b2c3d4e5f6a7b8c9d0e1f2', sharedFrom: 'bob', shareMode: 'config', shareExpires: shNow + 86400 * 85 }); return 0; })(),
+  CloudDevices: async (): Promise<any> => { await wait(350); return { supported: true, self: 'dev-this-pc', selfStatus: 'approved', requireApproval: shareMock.requireApproval, devices: shareMock.devices.map(d => ({ ...d, current: d.id === 'dev-this-pc' })) }; },
+  ApproveCloudDevice: async (id: string) => { await wait(300); const d = shareMock.devices.find(x => x.id === id); if (d) Object.assign(d, { approved: true, revoked: false, status: 'approved' }); },
+  RevokeCloudDevice: async (id: string) => { await wait(300); if (id === 'dev-this-pc') throw new Error('不能吊销或移除当前正在使用的设备。'); const d = shareMock.devices.find(x => x.id === id); if (d) Object.assign(d, { approved: false, revoked: true, status: 'revoked' }); },
+  ForgetCloudDevice: async (id: string) => { await wait(300); shareMock.devices = shareMock.devices.filter(x => x.id !== id); },
+  SetDeviceApproval: async (on: boolean) => { await wait(200); shareMock.requireApproval = on; },
+  RecoveryStatus: async (): Promise<any> => { await wait(300); return { ...shareMock.recovery }; },
+  SetupRecoveryKey: async (): Promise<string> => { await wait(900); Object.assign(shareMock.recovery, { configured: true, unlocked: true, shareReady: true, legacy: true, kid: '3f9a1c07e2b4d816', rkCreated: Date.now() / 1000, pwChanged: Date.now() / 1000 }); return shareMock.rk; },
+  UnlockSyncWithPassword: async (pw: string) => { await wait(700); if (pw.length < 8) throw new Error('同步密码不正确，无法解锁账号主密钥'); shareMock.recovery.unlocked = true; },
+  UnlockSyncWithRecoveryKey: async (rk: string, pw: string) => { await wait(800); if (rk.replace(/[^a-z0-9]/gi, '').length !== 32) throw new Error('恢复密钥格式不正确：应为 32 位字母数字（8 组，每组 4 位）'); if (pw.length < 8) throw new Error('新同步密码至少 8 位'); shareMock.recovery.unlocked = true; },
+  ChangeSyncPassword: async (o: string, n: string) => { await wait(700); if (o !== mock.settings.syncPassword) throw new Error('当前同步密码不正确'); if (n.length < 8) throw new Error('新同步密码至少 8 位'); mock.settings.syncPassword = n; shareMock.recovery.pwChanged = Date.now() / 1000; },
+  RotateRecoveryKey: async (pw: string): Promise<string> => { await wait(800); if (pw !== mock.settings.syncPassword) throw new Error('同步密码不正确，无法解锁账号主密钥'); shareMock.recovery.rkCreated = Date.now() / 1000; return 'K7QM-2XPA-W9TR-HF4D-N6ZC-B3JV-YE8L-UGS5'.replace(/[018]/g, 'Q'); },
+  SaveRecoveryKeyFile: async (rk: string): Promise<string> => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['GhostBrowser 云同步恢复密钥\n\n' + rk + '\n'], { type: 'text/plain' })); a.download = 'GhostBrowser-恢复密钥.txt'; a.click(); return 'GhostBrowser-恢复密钥.txt'; },
+  ShareList: async (): Promise<any> => { await wait(400); return { supported: true, ready: shareMock.recovery.shareReady, self: 'owner', out: shareMock.out.map(x => ({ ...x })), in: shareMock.in.map(x => ({ ...x })), removed: 0 }; },
+  ShareUsers: async (): Promise<string[]> => { await wait(250); return ['alice', 'bob', 'carol', '运营组-dave']; },
+  CreateShare: async (r: any): Promise<any> => {
+    await wait(900); const p = mock.profiles.find(x => x.id === r.profileId); const now = Date.now() / 1000;
+    const sh = { id: rid().padEnd(24, '0').slice(0, 24), from: 'owner', to: r.to, name: p?.name || r.profileId, mode: r.mode, note: r.note, os: p?.fingerprint?.os || 'windows', createdAt: now, expiresAt: now + r.days * 86400, updatedAt: now, size: r.mode === 'session' ? 38 << 20 : 4096, status: 'pending' };
+    shareMock.out.unshift(sh); return sh;
+  },
+  AcceptShare: async (id: string): Promise<any> => {
+    await wait(1100); const sh = shareMock.in.find(x => x.id === id); if (!sh) throw new Error('找不到该分享');
+    sh.status = 'accepted'; sh.localId = 'sh-' + id;
+    const p = { id: 'sh-' + id, name: sh.name, group: '', tags: [], notes: '', storage: 'local', proxyId: '', startUrls: [], cookies: '', fingerprint: mockFP(sh.os), createdAt: Date.now() / 1000, lastRun: 0, cloudVersion: 0, syncedAt: 0, shareId: id, sharedFrom: sh.from, shareMode: sh.mode, shareExpires: sh.expiresAt };
+    mock.profiles.unshift(p); return p;
+  },
+  DeclineShare: async (id: string) => { await wait(300); const sh = shareMock.in.find(x => x.id === id); if (sh) sh.status = 'declined'; },
+  RevokeShare: async (id: string) => { await wait(400); const sh = shareMock.out.find(x => x.id === id); if (sh) sh.status = 'revoked'; },
+  ExtendShare: async (id: string, days: number) => { await wait(400); const sh = shareMock.out.find(x => x.id === id); if (sh) sh.expiresAt = Date.now() / 1000 + days * 86400; },
+  LeaveShare: async (id: string) => { await wait(400); const sh = shareMock.in.find(x => x.id === id); if (sh) { sh.status = 'left'; sh.localId = ''; } mock.profiles = mock.profiles.filter(p => p.id !== 'sh-' + id); },
 };
 
 export const api: typeof M = inWails ? (Go as any) : M;

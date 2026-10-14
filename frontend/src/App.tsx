@@ -19,6 +19,7 @@ import { ExtensionsView } from './ExtensionsView';
 import { AuditView } from './AuditView';
 import { WindowTools } from './WindowTools';
 import { KernelMissingModal } from './KernelInstall';
+import { ShareDialog, ShIc, shareLeft } from './SharingView'; // share
 
 type Tab = 'profiles' | 'proxies' | 'rpa' | 'extensions' | 'cloud' | 'audit' | 'settings';
 
@@ -48,6 +49,9 @@ function Shell() {
     if (e.phase === 'error') toast(e.message, 'bad');
     if (e.phase === 'deleted' || e.phase === 'deleted-pending' || e.phase === 'deleted-cloud') { reload(); if (e.message) toast(e.message, e.phase === 'deleted-pending' ? 'bad' : undefined); }
   }), [reload]);
+  // share: ended shares removed in the background; jump to 云端同步 → 设备与密钥
+  useEffect(() => onEvent('shares:changed', () => { reload(); toast('有分享已撤销或过期，本机副本已删除'); }), [reload]);
+  useEffect(() => { const f = (e: any) => { setTab('cloud'); setTimeout(() => window.dispatchEvent(new CustomEvent('gb:cloud-tab', { detail: e.detail })), 60); }; window.addEventListener('gb:goto-cloud', f); return () => window.removeEventListener('gb:goto-cloud', f); }, []);
   useEffect(() => onEvent('profile:exit', (id: string) => { setRunning(s => { const n = new Set(s); n.delete(id); return n; }); }), []);
 
   const proxyName = useMemo(() => Object.fromEntries(proxies.map(p => [p.id, p])), [proxies]);
@@ -173,6 +177,7 @@ const ProfilesView: React.FC<{
   const [fTag, setFTag] = useState('');
   const [sort, setSort] = useState<'recent' | 'name' | 'created'>('recent');
   const [modal, setModal] = useState<'' | 'group' | 'assign'>('');
+  const [shareP, setShareP] = useState<Profile | null>(null); // share
   const [needKernel, setNeedKernel] = useState<Profile | null>(null);
   const [syncBusy, setSyncBusy] = useState<Set<string>>(new Set());
   const [runs, setRuns] = useState<Record<string, number>>({});
@@ -298,7 +303,8 @@ const ProfilesView: React.FC<{
                     <Avatar seed={p.fingerprint.noiseSeed || p.id} os={p.fingerprint.os} running={isRun} />
                     <div>
                       <div className="nm">{p.name}</div>
-                      <div className="sub">{p.group || '未分组'}{(p.tags || []).length ? <span style={{ marginLeft: 6 }}>{(p.tags || []).map(t => <span key={t} className="tag">{t}</span>)}</span> : null}</div>
+                      {(p as any).shareId ? <div className="sub sh-rowtag"><span className="badge cloud" title={`由 ${(p as any).sharedFrom} 共享，配置只读`}><ShIc.share s={11} /> 共享 · {(p as any).sharedFrom}</span><span className={`sh-left ${shareLeft((p as any).shareExpires)[1]}`}>{shareLeft((p as any).shareExpires)[0]}</span></div> :
+                      <div className="sub">{p.group || '未分组'}{(p.tags || []).length ? <span style={{ marginLeft: 6 }}>{(p.tags || []).map(t => <span key={t} className="tag">{t}</span>)}</span> : null}</div>}
                     </div>
                   </div>
                 </td>
@@ -312,7 +318,9 @@ const ProfilesView: React.FC<{
                       : isRun ? <button className="btn sm stop" style={{ width: 74 }} onClick={() => stop(p)}><Icon.stop s={12} /> 停止</button>
                         : <button className="btn sm go" style={{ width: 74 }} onClick={() => start(p)}><Icon.play s={12} /> 启动</button>}
                     <span className="acts" style={{ display: 'flex', gap: 2 }}>
-                      <button className="btn ghost icon" title="编辑" onClick={() => { setEditing(p); setDrawer(true); }}><Icon.edit s={15} /></button>
+                      {(p as any).shareId ? <button className="btn ghost icon" title="共享环境的配置为只读" disabled><Icon.edit s={15} /></button>
+                        : <button className="btn ghost icon" title="编辑" onClick={() => { setEditing(p); setDrawer(true); }}><Icon.edit s={15} /></button>}
+                      {!(p as any).shareId && <button className="btn ghost icon" title="分享给其他用户" onClick={() => setShareP(p)}><ShIc.share s={15} /></button>}
                       <button className="btn ghost icon" title="复制" onClick={() => clone(p)}><Icon.copy s={15} /></button>
                       <button className="btn ghost icon danger" title="删除" onClick={() => del([p.id])}><Icon.trash s={15} /></button>
                     </span>
@@ -343,6 +351,7 @@ const ProfilesView: React.FC<{
       {delT && delT.length > 0 && <DeleteModal targets={delT} onClose={() => setDelT(null)} onDone={() => { setSel(new Set()); reload(); }} />}
       {modal === 'group' && <GroupModal ids={[...sel]} groups={groups} onClose={() => setModal('')} onDone={reload} />}
       {needKernel && <KernelMissingModal name={needKernel.name} onClose={() => setNeedKernel(null)} onLaunch={() => start(needKernel)} />}
+      {shareP && <ShareDialog profile={shareP} running={running.has(shareP.id)} onClose={() => setShareP(null)} onSecurity={() => window.dispatchEvent(new CustomEvent('gb:goto-cloud', { detail: 'security' }))} />}
       {modal === 'assign' && <AssignModal ids={[...sel]} proxies={Object.values(proxyName)} profiles={profiles} onClose={() => setModal('')} onDone={reload} />}
     </div>
   );

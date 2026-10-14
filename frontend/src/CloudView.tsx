@@ -4,6 +4,9 @@ import { api, onEvent, Profile, Settings } from './api';
 import { InlineTransfer } from './Transfers';
 import { Icon, useToast, useConfirm, useExit, Avatar, ago, Segmented } from './ui';
 import { DeleteModal, DelTarget } from './DeleteModal';
+import { SharingView } from './SharingView'; // share
+import { DevicesCard } from './DevicesCard';
+import { RecoveryCard } from './RecoveryKeyModal';
 
 type CloudOnlyItem = { id: string; name: string; version: number; updatedAt: number; deviceName: string; size: number; lockedBy: string; localDeleted: boolean; deletedVersion: number; deletedAt: number; cloudNewer: boolean; pendingDelete: boolean; pendingError?: string };
 
@@ -26,7 +29,8 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
   const [infoErr, setInfoErr] = useState('');
   const [log, setLog] = useState<LogRow[]>([]);
   const [hist, setHist] = useState<Profile | null>(null);
-  const [tab, setTab] = useState<'list' | 'only' | 'log'>('list');
+  const [tab, setTab] = useState<'list' | 'only' | 'log' | 'share' | 'security'>('list');
+  useEffect(() => { const f = (e: any) => setTab(e.detail); window.addEventListener('gb:cloud-tab', f); return () => window.removeEventListener('gb:cloud-tab', f); }, []); // share
   const [only, setOnly] = useState<CloudOnlyItem[] | null>(null);
   const [onlyErr, setOnlyErr] = useState('');
   const [delT, setDelT] = useState<DelTarget[] | null>(null);
@@ -90,7 +94,7 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
 
       <div className="toolbar">
         <Segmented className="compact" value={tab} onChange={t => { setTab(t); if (t === 'log') loadLog(); }}
-          items={[['list', '全部环境'], ['only', only?.length ? `仅云端 · ${only.length}` : '仅云端'], ['log', fails ? `同步日志 · ${fails} 失败` : '同步日志']]} />
+          items={[['list', '全部环境'], ['only', only?.length ? `仅云端 · ${only.length}` : '仅云端'], ['share', '分享'], ['security', '设备与密钥'], ['log', fails ? `同步日志 · ${fails} 失败` : '同步日志']]} />
         <div className="sub" style={{ color: 'var(--txt-3)' }}>{cloud.length} 个云端 · {profiles.length - cloud.length} 个本地 · 自动同步{settings!.autoSyncOff ? '已关闭' : '已开启'}</div>
         <div style={{ flex: 1 }} />
         {tab === 'only' && only?.some(i => i.pendingDelete) && <button className="btn sm ghost" onClick={retryDeletes}><Icon.refresh s={13} /> 重试云端删除</button>}
@@ -98,7 +102,9 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
         <button className="btn sm" onClick={syncAll} disabled={syncing}><Icon.refresh s={14} /> {syncing ? '同步中…' : '立即同步（服务器优先）'}</button>
       </div>
 
-      {tab === 'only' ? <div className="panel list cdel-only">
+      {tab === 'share' ? <SharingView reload={reload} goSecurity={() => setTab('security')} />
+        : tab === 'security' ? <div className="dv-grid"><DevicesCard /><RecoveryCard /></div>
+        : tab === 'only' ? <div className="panel list cdel-only">
         {onlyErr && <div className="notice bad" style={{ margin: 12 }}><Icon.alert s={14} /> 无法连接同步服务器，下面只显示本机记录：{onlyErr}</div>}
         {only === null ? <div className="empty" style={{ padding: 40 }}><ThinkingOrb state="connecting" size={32} theme="dark" /></div>
           : only.length === 0 ? <div className="empty" style={{ padding: 44 }}><div className="halo"><ThinkingOrb state="breathing" size={32} theme="dark" /></div><h3>云端没有本机缺少的环境</h3><div>用「只删本地」删除的环境会出现在这里，可以随时恢复到本机或从云端删除。</div></div>
@@ -130,7 +136,7 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
         <table>
           <thead><tr><th>环境</th><th>状态</th><th>云端版本</th><th>最近同步</th><th style={{ textAlign: 'right' }}>操作</th></tr></thead>
           <tbody>
-            {profiles.map((p, i) => {
+            {profiles.filter(p => !(p as any).shareId).map((p, i) => {
               const [txt, tone] = syncState(p, busy);
               return <tr key={p.id} className="rise" style={{ ['--i' as any]: i }}>
                 <td><div className="cell-id"><Avatar seed={p.fingerprint.noiseSeed || p.id} os={p.fingerprint.os} /><div><div className="nm">{p.name}</div><div className="sub">{p.group || '未分组'}</div></div></div></td>
