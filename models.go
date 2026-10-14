@@ -63,6 +63,11 @@ type Fingerprint struct {
 	BlockVideo                bool   `json:"blockVideo,omitempty"`
 	BlockSound                bool   `json:"blockSound,omitempty"`
 	StartupParameters         string `json:"startupParameters,omitempty"`
+
+	// ---- fingerprint extras (open-source kernel) ----
+	// MediaIDAlias: with real media devices, show per-profile, per-origin
+	// aliases instead of the real deviceId / groupId.
+	MediaIDAlias bool `json:"mediaIdAlias,omitempty"`
 }
 
 type Proxy struct {

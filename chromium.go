@@ -745,6 +745,7 @@ func pageScript(fp Fingerprint, px *Proxy) string {
 		"am": fpMode(fp.AudioMode, fp.AudioNoise), "rm": fpMode(fp.ClientRectsMode, fp.ClientRectNoise),
 		"md": mediaMode(fp), "mic": clampInt(fp.MediaMics, 0, 8), "spk": clampInt(fp.MediaSpeakers, 0, 8), "cam": clampInt(fp.MediaCameras, 0, 8),
 		"sv": fp.SpeechVoices, "gpu": fp.WebGPU, "ps": fp.PortScanProtection, "wl": whitelistJS(fp.ScanWhitelist), "bv": fp.BlockVideo,
+		"mida": fp.MediaIDAlias,
 	}
 	if cfg["sv"] == "" {
 		cfg["sv"] = "real"
@@ -956,20 +957,64 @@ if (C.rtc === "disabled") {
     return orig.apply(this, a).then(d => { if (d && typeof d.sdp === "string" && !(d instanceof RTCSessionDescription)) d.sdp = sdp(d.sdp); return d; });
   });
 }
-// Media devices
+// Media devices. Device and group IDs are stable per profile seed and origin
+// (like Chrome's own per-origin salt, but tied to the profile seed).
+const oh = (() => { let h = 0x811c9dc5; const o = String((self.location && self.location.origin) || ""); for (let i = 0; i < o.length; i++) h = Math.imul(h ^ o.charCodeAt(i), 16777619); return h >>> 0; })();
+const shash = (str) => { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619); return h >>> 0; };
+const hex64 = (...k) => { let s = ""; for (let j = 0; j < 8; j++) s += H(oh, ...k, j, 11).toString(16).padStart(8, "0"); return s; };
 if (self.MediaDevices && C.md !== "real") {
   let list = [];
   if (C.md === "custom") {
-    const hex = (k) => { let s = ""; for (let j = 0; j < 8; j++) s += H(k, j, 11).toString(16).padStart(8, "0"); return s; };
     const MP = self.MediaDeviceInfo && MediaDeviceInfo.prototype, IP = self.InputDeviceInfo ? InputDeviceInfo.prototype : MP;
     if (MP) {
       fakeProto(MP, ["deviceId", "kind", "label", "groupId"]);
       wrap(MP, "toJSON", function (orig, a) { return fakes.has(this) ? Object.assign({}, fakes.get(this)) : orig.apply(this, a); });
-      const add = (kind, n, P) => { for (let i = 0; i < n; i++) list.push(mkFake(P, { deviceId: hex(kind.length * 100 + i), kind, label: "", groupId: hex(kind.length * 100 + i + 50) })); };
+      const add = (kind, n, P) => { for (let i = 0; i < n; i++) list.push(mkFake(P, { deviceId: hex64(kind.length * 100 + i), kind, label: "", groupId: hex64(kind.length * 100 + i + 50) })); };
       add("audioinput", C.mic, IP); add("videoinput", C.cam, IP); add("audiooutput", C.spk, MP);
     }
   }
   wrap(MediaDevices.prototype, "enumerateDevices", function () { return Promise.resolve(list.slice()); });
+} else if (self.MediaDevices && C.mida && self.MediaDeviceInfo) {
+  // Real devices under aliases. "" (no permission yet), "default" and
+  // "communications" are not identifying and stay as they are.
+  const keep = (id) => !id || id === "default" || id === "communications";
+  const back = new Map(), real = new WeakMap();
+  const al = (id, salt) => { if (keep(id)) return id; const a = hex64(shash(id), salt); back.set(a, id); return a; };
+  const unal = (id) => typeof id === "string" && back.has(id) ? back.get(id) : id;
+  const MP = MediaDeviceInfo.prototype, IDI = self.InputDeviceInfo && InputDeviceInfo.prototype;
+  fakeProto(MP, ["deviceId", "kind", "label", "groupId"]);
+  wrap(MP, "toJSON", function (orig, a) { return fakes.has(this) ? Object.assign({}, fakes.get(this)) : orig.apply(this, a); });
+  const fixIds = (o) => { if (o && typeof o === "object") { if ("deviceId" in o) o.deviceId = al(o.deviceId, 1); if ("groupId" in o) o.groupId = al(o.groupId, 2); } return o; };
+  if (IDI) wrap(IDI, "getCapabilities", function (orig, a) { return fixIds(orig.apply(real.has(this) ? real.get(this) : this, a)); });
+  const ed = MediaDevices.prototype.enumerateDevices;
+  const enumAll = (md) => ed.call(md).then(l => l.map(d => {
+    const o = mkFake(Object.getPrototypeOf(d), { deviceId: al(d.deviceId, 1), kind: d.kind, label: d.label, groupId: al(d.groupId, 2) });
+    real.set(o, d); return o;
+  }));
+  wrap(MediaDevices.prototype, "enumerateDevices", function (orig, a) { return enumAll(this); });
+  // Constraints: translate aliases back to the real IDs (string, array,
+  // {exact, ideal} and the advanced list).
+  const tv = (v) => typeof v === "string" ? unal(v) : Array.isArray(v) ? v.map(unal) : v && typeof v === "object" ? Object.assign({}, v, "exact" in v ? { exact: tv(v.exact) } : {}, "ideal" in v ? { ideal: tv(v.ideal) } : {}) : v;
+  const tset = (c) => { if (!c || typeof c !== "object") return c; const o = Object.assign({}, c); if ("deviceId" in o) o.deviceId = tv(o.deviceId); if ("groupId" in o) o.groupId = tv(o.groupId); if (Array.isArray(o.advanced)) o.advanced = o.advanced.map(tset); return o; };
+  const tcon = (c) => { if (!c || typeof c !== "object") return c; const o = Object.assign({}, c); for (const k of ["audio", "video"]) if (o[k] && typeof o[k] === "object") o[k] = tset(o[k]); return o; };
+  const ids = (c) => { const out = []; const walk = (v) => { if (typeof v === "string") out.push(v); else if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v === "object") { walk(v.exact); walk(v.ideal); } }; const ws = (x) => { if (x && typeof x === "object") { walk(x.deviceId); walk(x.groupId); (x.advanced || []).forEach(ws); } }; if (c && typeof c === "object") { ws(c.audio); ws(c.video); ws(c); } return out; };
+  // An alias saved earlier (e.g. in localStorage) is unknown until the list
+  // is read once, so read it first when the request carries one we don't know.
+  const ready = (md, c) => ids(c).some(x => !keep(x) && !back.has(x) && /^[0-9a-f]{64}$/.test(x)) ? enumAll(md).catch(() => 0) : Promise.resolve();
+  wrap(MediaDevices.prototype, "getUserMedia", function (orig, a) { const md = this; return ready(md, a[0]).then(() => orig.apply(md, [tcon(a[0])].concat(a.slice(1)))); });
+  const T = self.MediaStreamTrack && MediaStreamTrack.prototype;
+  if (T) {
+    for (const n of ["getSettings", "getCapabilities"]) wrap(T, n, function (orig, a) { return fixIds(orig.apply(this, a)); });
+    const fw = (v, salt) => typeof v === "string" ? al(v, salt) : Array.isArray(v) ? v.map(x => fw(x, salt)) : v && typeof v === "object" ? Object.assign({}, v, "exact" in v ? { exact: fw(v.exact, salt) } : {}, "ideal" in v ? { ideal: fw(v.ideal, salt) } : {}) : v;
+    const fset = (c) => { if (!c || typeof c !== "object") return c; if ("deviceId" in c) c.deviceId = fw(c.deviceId, 1); if ("groupId" in c) c.groupId = fw(c.groupId, 2); if (Array.isArray(c.advanced)) c.advanced.forEach(fset); return c; };
+    wrap(T, "getConstraints", function (orig, a) { return fset(orig.apply(this, a)); });
+    wrap(T, "applyConstraints", function (orig, a) { return orig.apply(this, [tset(a[0])].concat(a.slice(1))); });
+  }
+  const HM = self.HTMLMediaElement && HTMLMediaElement.prototype;
+  if (HM && HM.setSinkId) {
+    wrap(HM, "setSinkId", function (orig, a) { return orig.apply(this, [unal(a[0])].concat(a.slice(1))); });
+    getter(HM, "sinkId", function (og) { return al(og.call(this), 1); });
+  }
 }
 // Speech voices
 if (self.speechSynthesis && C.sv !== "real") {

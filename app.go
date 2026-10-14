@@ -1218,3 +1218,12 @@ func (a *App) PendingCloudDeletes() int { return len(a.store.pendingDeletes()) }
 
 // RetryCloudDeletes sends queued cloud deletes now; returns how many are left.
 func (a *App) RetryCloudDeletes() int { return a.syncer().RetryPendingDeletes() }
+
+// ---- fingerprint extras ----
+
+// RegenerateSeed gives a profile a new noise seed (Canvas / WebGL / audio /
+// media device IDs change; cookies and data stay). Returns the new seed.
+func (a *App) RegenerateSeed(id string) (int64, error) { return a.store.regenerateSeed(id) }
+
+// NewNoiseSeed returns a random seed for a profile that is not saved yet.
+func (a *App) NewNoiseSeed() int64 { return newNoiseSeed() }
