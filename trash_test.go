@@ -145,6 +145,7 @@ func TestTrashAutoPurge(t *testing.T) {
 // GHOST_PHP_TEST=php go test -run TestTrashSync .
 func TestTrashSync(t *testing.T) {
 	env := startCdelServer(t)
+	userLib.open(t.TempDir()) // another test may have left the library pointing at a removed temp dir
 	A := env.device("PC-A", "dev-A")
 	B := env.device("PC-B", "dev-B")
 	for i := 0; A.s.TestSync() != nil; i++ {
