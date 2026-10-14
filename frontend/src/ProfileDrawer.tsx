@@ -4,6 +4,7 @@ import { api, Profile, Proxy, Fingerprint } from './api';
 import { Field, Toggle, Icon, flag, useToast, useExit, Segmented, Avatar, DevIcon } from './ui';
 import { CookieModal } from './CookieModal';
 import { ExtIcon, Ext } from './ExtensionsView';
+import { GuardPane, LaunchPane } from './FpControls';
 import { DEVICE_TYPES, TRUST, devType, osName, osVerLabel, needsOpen, uaOSOf } from './devices';
 
 type FPCatalog = { osVersions: string[]; browserMajors: string[]; userAgents: string[]; platforms: string[]; vendors: string[]; gpus: { vendor: string; renderer: string; custom?: string }[]; fonts: string[]; screens: string[]; cores: string[]; memory: string[]; custom: Record<string, string[]> };
@@ -33,7 +34,7 @@ export const ProfileDrawer: React.FC<{
       setPxInfo(r.status === 'ok' ? `✓ ${r.type.toUpperCase()} · ${r.country} ${r.region || ''} ${r.city || ''} · ${r.ipType === 'hosting' ? '机房' : r.ipType === 'mobile' ? '移动' : '住宅'} IP · ${r.latency} ms${same ? '（已在代理列表中）' : '，已加入代理列表'}` : `✗ 不可用：${r.error || '连接失败'}（已加入代理列表，可稍后重试）`);
     } catch (e: any) { setPxInfo(String(e?.message || e)); } finally { setPxBusy(false); }
   };
-  const [tab, setTab] = useState<'basic' | 'fp' | 'adv'>('basic');
+  const [tab, setTab] = useState<'basic' | 'fp' | 'adv' | 'guard' | 'launch'>('basic');
   // ---- extensions / cookies ----
   const [exts, setExts] = useState<Ext[] | null>(null);
   const [cookieOpen, setCookieOpen] = useState(false);
@@ -179,7 +180,7 @@ export const ProfileDrawer: React.FC<{
             </div>
             <i className="scan" />
           </div>
-          <Segmented value={tab} onChange={setTab} items={[['basic', '基本信息', <Icon.layers />], ['fp', '指纹配置', <Icon.fingerprint />], ['adv', '地区与噪声', <Icon.shield />]]} />
+          <Segmented value={tab} onChange={setTab} items={[['basic', '基本信息', <Icon.layers />], ['fp', '指纹配置', <Icon.fingerprint />], ['adv', '地区与字体', <Icon.globe />], ['guard', '防护', <Icon.shield />], ['launch', '启动', <Icon.bolt />]]} />
 
           {tab === 'basic' && <div className="tabpane">
             <Field label="环境名称"><input type="text" value={p.name} onChange={e => setP({ ...p, name: e.target.value })} placeholder="例如 FB-Ads-01" autoFocus /></Field>
@@ -297,21 +298,14 @@ export const ProfileDrawer: React.FC<{
             <Toggle on={fp.geoFromIP} onChange={v => setFP({ geoFromIP: v })} label="地理定位跟随 IP" hint={fp.geoFromIP && geo?.ok ? `→ ${(+geo.lat).toFixed(4)}, ${(+geo.lon).toFixed(4)}（${geo.city || geo.country}）` : '关闭则使用下方手动坐标'} />
             {!fp.geoFromIP && <div className="grid2"><Field label="纬度"><input type="number" step="0.0001" value={fp.latitude} onChange={e => setFP({ latitude: +e.target.value })} /></Field><Field label="经度"><input type="number" step="0.0001" value={fp.longitude} onChange={e => setFP({ longitude: +e.target.value })} /></Field></div>}
 
-            <div className="section-title">噪声 — 让每个环境的指纹都独一无二</div>
-            <Toggle on={fp.canvasNoise} onChange={v => setFP({ canvasNoise: v })} label="Canvas 噪声" hint="按环境种子注入稳定噪声" />
-            <Toggle on={fp.webglNoise} onChange={v => setFP({ webglNoise: v })} label="WebGL 噪声" />
-            <Toggle on={fp.audioNoise} onChange={v => setFP({ audioNoise: v })} label="AudioContext 噪声" />
-            <Toggle on={fp.clientRectNoise} onChange={v => setFP({ clientRectNoise: v })} label="ClientRects 噪声" />
-            <Field label="噪声种子 (seed)" hint="同一种子 = 同一环境指纹永远一致"><input type="number" value={fp.noiseSeed} onChange={e => setFP({ noiseSeed: +e.target.value })} /></Field>
-
-            <div className="section-title">其它</div>
-            <Field label="WebRTC"><select value={fp.webrtc} onChange={e => setFP({ webrtc: e.target.value })}><option value="proxy">替换为代理 IP（推荐）</option><option value="disabled">完全禁用</option><option value="real">真实（不推荐）</option></select></Field>
-            <Toggle on={fp.hideMediaDevices} onChange={v => setFP({ hideMediaDevices: v })} label="隐藏媒体设备" />
-            <Toggle on={fp.doNotTrack} onChange={v => setFP({ doNotTrack: v })} label="Do Not Track" />
+            <div className="section-title">字体</div>
             <Field label={`字体（${(fp.fonts || []).length} / ${cat.fonts.length} 种 ${osName(fp.os)} 字体）`} hint="只列出该系统自带字体">
               <FontPicker value={fp.fonts || []} all={cat.fonts} onChange={v => setFP({ fonts: v })} onSave={f => libAdd('fonts', f)} />
             </Field>
           </div>}
+
+          {tab === 'guard' && <div className="tabpane"><GuardPane fp={fp as any} setFP={setFP as any} open={openKernel} /></div>}
+          {tab === 'launch' && <div className="tabpane"><LaunchPane fp={fp as any} setFP={setFP as any} open={openKernel} /></div>}
         </div>
 
         <div className="dfoot">

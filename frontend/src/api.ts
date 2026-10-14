@@ -89,6 +89,14 @@ function mockArrange(n: number, mode: string) {
   }
   return { mode, screen, cols, rows, cells };
 }
+// ---- fingerprint protection + launch controls ----
+Object.assign(mock.profiles[1], { kernel: 'chromium' });
+Object.assign(mock.profiles[1].fingerprint, { canvasMode: 'noise', webglImageMode: 'noise', audioMode: 'real', audioNoise: false, clientRectsMode: 'off', clientRectNoise: false,
+  mediaDevicesMode: 'custom', mediaMics: 1, mediaSpeakers: 2, mediaCameras: 1, speechVoices: 'custom', webgpu: 'off', doNotTrack: true,
+  portScanProtection: true, scanWhitelist: '3000, 8080, localhost:5173', windowMode: 'custom', windowWidth: 1440, windowHeight: 900, windowX: 120, windowY: 60,
+  hardwareAcceleration: true, blockVideo: true, startupParameters: '--lang=en-US\n--disable-features=Translate' });
+Object.assign(mock.profiles[4], { kernel: 'chromium' });
+Object.assign(mock.profiles[4].fingerprint, { webrtc: 'disabled', randomFingerprintOnLaunch: true, windowMode: 'maximized', blockImages: true, blockSound: true, hardwareAcceleration: false });
 const wait = (ms = 250) => new Promise(r => setTimeout(r, ms));
 // ---- mcp / audit (mock state) ----
 const mcpMock = { running: !location.hash.includes('mcperr'), enabled: true, port: location.hash.includes('mcperr') ? 25326 : 25326, error: location.hash.includes('mcperr') ? 'listen tcp 127.0.0.1:25326: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.' : '', calls: 128, lastCall: Date.now() - 42e3, lastClient: 'cursor-vscode 1.7.2', startedAt: Date.now() - 3 * 3600e3 };

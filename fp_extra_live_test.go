@@ -12,6 +12,29 @@ import (
 	"time"
 )
 
+// liveUserDataDir is a temp profile dir removed with retries: Chromium's helper
+// processes (crashpad, utility) can still be writing into it for a moment after
+// the browser process was killed, which made t.TempDir's cleanup flaky
+// ("directory not empty").
+func liveUserDataDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "gb-fp-live-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		var err error
+		for i := 0; i < 50; i++ {
+			if err = os.RemoveAll(dir); err == nil {
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Logf("leaving temp dir %s: %v", dir, err)
+	})
+	return dir
+}
+
 // fpLive launches headless Chromium with the fingerprint applied, opens a test
 // page and returns the JSON value of expr evaluated in it.
 func fpLive(t *testing.T, fp Fingerprint, expr string) map[string]any {
@@ -38,7 +61,7 @@ func fpLiveAt(t *testing.T, fp Fingerprint, expr, host string) map[string]any {
 		page = strings.Replace(page, "127.0.0.1", host, 1)
 		extra = append(extra, "--host-resolver-rules=MAP "+host+" 127.0.0.1")
 	}
-	args := append([]string{"--headless=new", "--no-sandbox", "--user-data-dir=" + t.TempDir(), fmt.Sprintf("--remote-debugging-port=%d", port)}, launchFlags(fp)...)
+	args := append([]string{"--headless=new", "--no-sandbox", "--user-data-dir=" + liveUserDataDir(t), fmt.Sprintf("--remote-debugging-port=%d", port)}, launchFlags(fp)...)
 	args = append(args, extra...)
 	cmd := exec.Command(bin, append(mergeFlags(args), "about:blank")...)
 	if err := cmd.Start(); err != nil {
