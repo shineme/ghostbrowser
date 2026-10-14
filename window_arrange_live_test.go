@@ -20,11 +20,24 @@ func liveBrowser(t *testing.T, id, url string) string {
 		t.Skip("set GHOST_CHROME to a Chromium binary")
 	}
 	port := freePort()
-	cmd := exec.Command(bin, "--headless=new", "--no-sandbox", "--window-size=800,600", "--user-data-dir="+t.TempDir(), fmt.Sprintf("--remote-debugging-port=%d", port), url)
+	// Own temp dir instead of t.TempDir(): Chromium's helper processes can
+	// still write to the profile for a moment after the browser is killed,
+	// which made t.TempDir's cleanup fail the test ("directory not empty").
+	dir, err := os.MkdirTemp("", "gb-live-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bin, "--headless=new", "--no-sandbox", "--window-size=800,600", "--user-data-dir="+dir, fmt.Sprintf("--remote-debugging-port=%d", port), url)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() })
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+		for i := 0; i < 20 && os.RemoveAll(dir) != nil; i++ {
+			time.Sleep(100 * time.Millisecond)
+		}
+	})
 	ws, err := waitDebugger(port, 20*time.Second)
 	if err != nil {
 		t.Fatal(err)
