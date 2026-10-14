@@ -1,6 +1,8 @@
 package main
 
 import (
+	crand "crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -350,6 +352,7 @@ type emulator struct {
 	startMu     sync.Mutex
 	startTarget string
 	net         *fpNet // port-scan protection / video blocking (nil = off)
+	workerPause sync.Map // worker session → chan signalled on Debugger.paused
 }
 
 func (e *emulator) Close() {
@@ -543,7 +546,51 @@ func acceptLanguage(langs []string) string {
 	return strings.Join(out, ",")
 }
 
+// patchWorker runs the page script in a worker before the worker's own code.
+// A worker waiting for the debugger has no context to evaluate in yet, so it
+// is resumed with an instrumentation breakpoint that pauses right before its
+// first script; the patch is evaluated there and the debugger detached again.
+func (e *emulator) patchWorker(sid string) {
+	c := e.conn
+	paused := make(chan struct{}, 1)
+	e.workerPause.Store(sid, paused)
+	defer e.workerPause.Delete(sid)
+	ok := false
+	if _, err := c.call(sid, "Debugger.enable", nil); err == nil {
+		raw, err := c.call(sid, "Debugger.setInstrumentationBreakpoint", map[string]any{"instrumentation": "beforeScriptExecution"})
+		var bp struct {
+			BreakpointID string `json:"breakpointId"`
+		}
+		_ = json.Unmarshal(raw, &bp)
+		if err == nil && bp.BreakpointID != "" {
+			_, _ = c.call(sid, "Runtime.runIfWaitingForDebugger", nil)
+			select {
+			case <-paused:
+				_, _ = c.call(sid, "Runtime.evaluate", map[string]any{"expression": e.script, "silent": true})
+				ok = true
+			case <-time.After(3 * time.Second):
+			}
+			_, _ = c.call(sid, "Debugger.removeBreakpoint", map[string]any{"breakpointId": bp.BreakpointID})
+		}
+		_, _ = c.call(sid, "Debugger.disable", nil) // also resumes a paused worker
+		if ok {
+			return
+		}
+	}
+	_, _ = c.call(sid, "Runtime.runIfWaitingForDebugger", nil)
+	_, _ = c.call(sid, "Runtime.evaluate", map[string]any{"expression": e.script, "silent": true})
+}
+
 func (e *emulator) onEvent(m cdpMsg) {
+	if m.Method == "Debugger.paused" {
+		if ch, ok := e.workerPause.Load(m.Session); ok {
+			select {
+			case ch.(chan struct{}) <- struct{}{}:
+			default:
+			}
+		}
+		return
+	}
 	if e.net.onEvent(e.conn, m) {
 		return
 	}
@@ -598,7 +645,13 @@ func (e *emulator) onEvent(m cdpMsg) {
 		}
 	case "worker", "shared_worker", "service_worker":
 		_, _ = c.call(sid, "Network.setUserAgentOverride", e.ua)
-		resume()
+		// Patch the worker before its own script runs so navigator and
+		// OffscreenCanvas values match the page's (see patchWorker).
+		if ev.Waiting {
+			e.patchWorker(sid)
+		} else {
+			_, _ = c.call(sid, "Runtime.evaluate", map[string]any{"expression": e.script, "silent": true})
+		}
 	default:
 		resume()
 	}
@@ -664,6 +717,11 @@ func pageScript(fp Fingerprint, px *Proxy) string {
 	if cfg["sv"] == "" {
 		cfg["sv"] = "real"
 	}
+	// k: per-launch secret the script uses to recognise itself (so it never
+	// patches a context twice) without leaving a global the page could see.
+	var kb [9]byte
+	_, _ = crand.Read(kb[:])
+	cfg["k"] = "gb" + hex.EncodeToString(kb[:])
 	if fp.SpeechVoices == "custom" {
 		cfg["voices"] = speechVoicesFor(fp.OS, fp.Languages)
 	}
@@ -675,13 +733,14 @@ func pageScript(fp Fingerprint, px *Proxy) string {
 }
 
 const pageJS = `(() => {
-if (window.__gb) return; Object.defineProperty(window, "__gb", { value: 1 });
 const C = __CFG__;
+// Already patched? Our toString answers the secret key; the native one throws.
+try { if (Function.prototype.toString.call(C.k) === C.k) return; } catch (e) {}
 let s = (C.seed % 2147483647) || 1;
 const rnd = () => (s = s * 16807 % 2147483647) / 2147483647;
 const hide = new WeakMap();
 const nts = Function.prototype.toString;
-const pts = function toString() { return hide.has(this) ? hide.get(this) : nts.call(this); };
+const pts = { toString() { "use strict"; if (this === C.k) return C.k; return hide.has(this) ? hide.get(this) : nts.call(this); } }.toString;
 hide.set(pts, "function toString() { [native code] }");
 Function.prototype.toString = pts;
 const def = (obj, prop, getter) => {
@@ -695,16 +754,18 @@ const wrap = (obj, name, impl) => {
   const orig = obj && obj[name]; if (!orig) return;
   const w = { [name](...a) { return impl.call(this, orig, a); } }[name];
   hide.set(w, "function " + name + "() { [native code] }");
+  Object.defineProperty(w, "length", { value: orig.length });
   obj[name] = w;
 };
-const N = Navigator.prototype;
+const N = (self.Navigator || self.WorkerNavigator).prototype;
 if (C.hc) def(N, "hardwareConcurrency", () => C.hc);
-if (C.mem) def(N, "deviceMemory", () => C.mem);
+// deviceMemory only exists in secure contexts; don't add it elsewhere.
+if (C.mem && "deviceMemory" in N) def(N, "deviceMemory", () => C.mem);
 def(N, "webdriver", () => false);
 if (C.dnt) def(N, "doNotTrack", () => "1");
 
 // Desktop screen (phones, tablets and TVs get theirs from device emulation)
-if (!C.vp) {
+if (!C.vp && self.Screen && self.window) {
   const S = Screen.prototype, bar = C.os === "windows" ? 48 : C.os === "macos" ? 25 : 0;
   def(S, "width", () => C.sw); def(S, "height", () => C.sh);
   def(S, "availWidth", () => C.sw); def(S, "availHeight", () => C.sh - bar);
@@ -781,13 +842,28 @@ const copyOf = (cv, noisy) => {
 const modeOf = (cv) => glc.has(cv) ? (C.wm === "noise" ? "noise" : "real") : C.cm;
 if (self.HTMLCanvasElement && gid) for (const name of ["toDataURL", "toBlob"]) {
   wrap(HTMLCanvasElement.prototype, name, function (orig, a) {
+    // Anything that is not a real canvas goes to the native method, which
+    // throws exactly as it would without the patch.
+    if (!(this instanceof HTMLCanvasElement)) return orig.apply(this, a);
     const m = modeOf(this);
     if (m === "real") return orig.apply(this, a);
-    const c = copyOf(this, m === "noise");
+    let c = null;
+    try { c = copyOf(this, m === "noise"); } catch (e) {}
     return orig.apply(c || this, a);
   });
 }
-if (gid && C.cm !== "real") {
+// OffscreenCanvas.convertToBlob reads through a (noised or blank) copy too.
+const OC2 = self.OffscreenCanvasRenderingContext2D && OffscreenCanvasRenderingContext2D.prototype;
+const ogid = OC2 && OC2.getImageData, opid = OC2 && OC2.putImageData;
+if (self.OffscreenCanvas && ogid && C.cm !== "real") wrap(OffscreenCanvas.prototype, "convertToBlob", function (orig, a) {
+  if (!(this instanceof OffscreenCanvas)) return orig.apply(this, a);
+  try {
+    const w = this.width, h = this.height, c = new OffscreenCanvas(w, h);
+    if (C.cm === "noise" && w && h) { const x = c.getContext("2d"); x.drawImage(this, 0, 0); opid.call(x, noiseImg(ogid.call(x, 0, 0, w, h), 0, 0), 0, 0); }
+    return orig.apply(c, a);
+  } catch (e) { return orig.apply(this, a); }
+});
+if (C.cm !== "real") {
   for (const P of [C2, self.OffscreenCanvasRenderingContext2D && OffscreenCanvasRenderingContext2D.prototype]) {
     if (!P) continue;
     wrap(P, "getImageData", function (orig, a) {
@@ -812,7 +888,7 @@ if (C.am === "off") {
   });
 }
 // Client rects: a small offset per element, the same on every call.
-if (C.rm === "noise") {
+if (C.rm === "noise" && self.Element) {
   const ek = (el) => {
     const s = (el.tagName || "") + "#" + (el.id || "") + "." + (typeof el.className === "string" ? el.className : "") + ":" + ((el.textContent || "").length);
     let h = 0; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
@@ -823,7 +899,7 @@ if (C.rm === "noise") {
   if (self.Range) wrap(Range.prototype, "getBoundingClientRect", function (orig, a) {
     const n = this.startContainer; return jit(orig.apply(this, a), H(this.startOffset, this.endOffset, (n && n.textContent || "").length));
   });
-} else if (C.rm === "off") {
+} else if (C.rm === "off" && self.Element) {
   wrap(Element.prototype, "getBoundingClientRect", function () { return new DOMRect(0, 0, 0, 0); });
 }
 // WebRTC
@@ -884,7 +960,8 @@ if (C.ps && self.WebSocket) {
   const localHost = (h) => { h = h.replace(/^\[|\]$/g, "").toLowerCase(); return h === "localhost" || h.endsWith(".localhost") || /^127\./.test(h) || h === "::1" || h === "0.0.0.0" || h === "::"; };
   if (!localHost(location.hostname)) {
     const WS = WebSocket, wl = new Set(C.wl || []), moved = new WeakMap();
-    const W = function WebSocket(url, protocols) {
+    const W = function WebSocket(url) {
+      const protocols = arguments[1];
       if (!new.target) return WS(url, protocols);
       let shown = null;
       try {
@@ -897,7 +974,7 @@ if (C.ps && self.WebSocket) {
     };
     getter(WS.prototype, "url", function (og) { return moved.has(this) ? moved.get(this) : og.call(this); });
     hide.set(W, "function WebSocket() { [native code] }");
-    W.prototype = WS.prototype;
+    Object.defineProperty(W, "prototype", { value: WS.prototype, writable: false });
     for (const k of ["CONNECTING", "OPEN", "CLOSING", "CLOSED"]) Object.defineProperty(W, k, { value: WS[k], enumerable: true });
     Object.defineProperty(WS.prototype, "constructor", { value: W, writable: true, configurable: true });
     Object.setPrototypeOf(W, Object.getPrototypeOf(WS));

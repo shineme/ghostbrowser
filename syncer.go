@@ -78,7 +78,9 @@ func syncCaptureScript() string {
   if (window.top !== window || window.__gbSyncOn) return;
   window.__gbSyncOn = true;
   window.__gbq = [];
-  const send = (o) => { const q = window.__gbq; if (q.length < 2000) q.push(o); };
+  // The poller stamps __gbLast on every drain; once it stops (syncer
+  // stopped) capture goes quiet instead of queueing actions for a restart.
+  const send = (o) => { const q = window.__gbq, l = window.__gbLast; if ((!l || Date.now() - l < 3000) && q.length < 2000) q.push(o); };
   const esc = (s) => (window.CSS && CSS.escape) ? CSS.escape(s) : s.replace(/[^\w-]/g, '\\$&');
   const sel = (el) => {
     if (!(el instanceof Element)) return '';
@@ -104,7 +106,8 @@ func syncCaptureScript() string {
       vx: e.clientX / innerWidth, vy: e.clientY / innerHeight, x: e.clientX, y: e.clientY, btn: e.button, n: e.detail || 1});
   };
   addEventListener('click', onPtr, true);
-  addEventListener('auxclick', onPtr, true);
+  // A right click fires both auxclick and contextmenu; replay it once.
+  addEventListener('auxclick', (e) => { if (e.button !== 2) onPtr(e); }, true);
   addEventListener('contextmenu', onPtr, true);
   addEventListener('wheel', (e) => {
     if (!e.isTrusted) return;
@@ -117,8 +120,13 @@ func syncCaptureScript() string {
   addEventListener('keydown', (e) => {
     if (!e.isTrusted || composing || e.isComposing || e.keyCode === 229) return;
     const m = mods(e);
-    if (e.key.length === 1 && !(m & 7)) { send({t: 'text', s: e.key}); return; }
+    // Printable keys carry key/code so followers get real keydown/keypress
+    // (page shortcuts, space-to-scroll), not just inserted text.
+    if (e.key.length === 1 && !(m & 7)) { send({t: 'text', s: e.key, key: e.key, code: e.code, kc: e.keyCode, mods: m}); return; }
     if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(e.key)) return;
+    // Ctrl/Cmd+V and Shift+Insert are replayed through the paste event below;
+    // replaying the shortcut too would paste twice (the clipboard is shared).
+    if (((m & 6) && e.code === 'KeyV') || ((m & 8) && e.key === 'Insert')) return;
     send({t: 'key', key: e.key, code: e.code, kc: e.keyCode, mods: m});
   }, true);
   addEventListener('paste', (e) => {
@@ -136,7 +144,7 @@ func syncCaptureScript() string {
 // syncDrainExpr installs the capture script if this world doesn't have it yet
 // and returns (and clears) the queued events as a JSON string.
 func syncDrainExpr() string {
-	return `(() => { ` + syncCaptureScript() + ` const q = window.__gbq || []; window.__gbq = []; return q.length ? JSON.stringify(q) : ''; })()`
+	return `(() => { ` + syncCaptureScript() + ` const q = window.__gbq || []; window.__gbq = []; window.__gbLast = Date.now(); return q.length ? JSON.stringify(q) : ''; })()`
 }
 
 func jsStr(s string) string { b, _ := json.Marshal(s); return string(b) }
@@ -358,6 +366,13 @@ func (s *syncer) attachMaster(ws string) error {
 		if _, err := c.call(sid, st.m, st.p); err != nil {
 			c.c.Close()
 			return err
+		}
+	}
+	// Prime the capture world before Start returns: whatever a previous
+	// syncer left queued there is discarded, not replayed.
+	if id, err := worldContext(c, sid); err == nil {
+		if _, err := c.call(sid, "Runtime.evaluate", map[string]any{"expression": syncDrainExpr(), "contextId": id, "returnByValue": true}); err == nil {
+			s.mctx = id
 		}
 	}
 	go s.poll()
@@ -729,6 +744,16 @@ func (f *syncFollower) apply(ev syncEvent) error {
 		_, err := f.call("Input.dispatchMouseEvent", map[string]any{"type": "mouseWheel", "x": x, "y": y, "deltaX": ev.DX, "deltaY": ev.DY})
 		return soft(err)
 	case "text":
+		if ev.Key != "" && ev.Key == ev.S {
+			// A typed printable key: replay as a key press so keydown/keypress
+			// listeners fire on followers too (the default action inserts the text).
+			p := map[string]any{"type": "keyDown", "key": ev.Key, "code": ev.Code, "text": ev.S, "unmodifiedText": ev.S, "windowsVirtualKeyCode": ev.KC, "nativeVirtualKeyCode": ev.KC, "modifiers": cdpMods(ev.Mods)}
+			if _, err := f.call("Input.dispatchKeyEvent", p); soft(err) != nil {
+				return err
+			}
+			_, err := f.call("Input.dispatchKeyEvent", map[string]any{"type": "keyUp", "key": ev.Key, "code": ev.Code, "windowsVirtualKeyCode": ev.KC, "nativeVirtualKeyCode": ev.KC, "modifiers": cdpMods(ev.Mods)})
+			return soft(err)
+		}
 		_, err := f.call("Input.insertText", map[string]any{"text": ev.S})
 		return soft(err)
 	case "key":

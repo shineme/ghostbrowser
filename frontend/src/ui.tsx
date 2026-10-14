@@ -176,6 +176,28 @@ export function Pick<T extends string>({ label, value, options, onChange, icon, 
 }
 
 /** Animated number that eases from its previous value. */
+/** Full-width form dropdown in the Pick style (replaces native <select> in forms). */
+export function SelectField<T extends string>({ value, options, onChange, disabled }: { value: T; options: [T, string][]; onChange: (v: T) => void; disabled?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const down = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('mousedown', down); window.addEventListener('keydown', key);
+    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('keydown', key); };
+  }, [open]);
+  const cur = options.find(o => o[0] === value);
+  return (
+    <div className={`pick pickfield selfield ${open ? 'open' : ''} ${disabled ? 'disabled' : ''}`} ref={ref}>
+      <button type="button" className="pick-btn" disabled={disabled} onClick={() => setOpen(o => !o)}><span className="pick-o">{cur ? cur[1] : value}</span>
+        <svg className="pick-c" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M7 10l5 5 5-5" /></svg></button>
+      {open && <div className="pick-menu left">{options.map(([v, l]) => <button type="button" key={v} className={v === value ? 'on' : ''} title={l} onClick={() => { onChange(v); setOpen(false); }}>
+        <span className="pick-tick">{v === value && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>}</span><span className="pick-o">{l}</span></button>)}</div>}
+    </div>
+  );
+}
+
 export const CountUp: React.FC<{ n: number; ms?: number }> = ({ n, ms = 900 }) => {
   const [v, setV] = useState(0);
   const from = useRef(0);

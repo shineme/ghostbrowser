@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Combo, SearchSelect, FontPicker, CountrySelect, LanguagePicker, TimezoneSelect, countryOfTz } from './locales';
 import { api, Profile, Proxy, Fingerprint } from './api';
-import { Field, Toggle, Icon, flag, useToast, useExit, Segmented, Avatar, DevIcon } from './ui';
+import { Field, Toggle, Icon, flag, useToast, useExit, Segmented, Avatar, DevIcon, SelectField } from './ui';
 import { CookieModal } from './CookieModal';
 import { ExtIcon, Ext } from './ExtensionsView';
 import { GuardPane, LaunchPane } from './FpControls';
@@ -189,16 +189,10 @@ export const ProfileDrawer: React.FC<{
               <Field label="标签 (逗号分隔)"><input type="text" value={(p.tags || []).join(', ')} onChange={e => setP({ ...p, tags: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} /></Field>
             </div>
             <Field label="存储方式">
-              <select value={p.storage} onChange={e => setP({ ...p, storage: e.target.value })}>
-                <option value="local">本地 — 只存在这台电脑</option>
-                <option value="cloud">云端 — 同步到你的 VPS</option>
-              </select>
+              <SelectField value={p.storage || 'local'} onChange={v => setP({ ...p, storage: v })} options={[['local', '本地 — 只存在这台电脑'], ['cloud', '云端 — 同步到你的 VPS']]} />
             </Field>
             <Field label="代理">
-              <select value={p.proxyId} onChange={e => setP({ ...p, proxyId: e.target.value })}>
-                <option value="">不使用代理（直连）</option>
-                {[...extraProxies.filter(x => !proxies.some(y => y.id === x.id)), ...proxies].map(px => <option key={px.id} value={px.id}>{flag(px.country)} · {px.name} · {px.type}{px.status === 'ok' ? ` · ${px.city || px.ip}` : ''}</option>)}
-              </select>
+              <SelectField value={p.proxyId || ''} onChange={v => setP({ ...p, proxyId: v })} options={[['', '不使用代理（直连）'] as [string, string], ...[...extraProxies.filter(x => !proxies.some(y => y.id === x.id)), ...proxies].map(px => [px.id, `${flag(px.country)} · ${px.name} · ${px.type}${px.status === 'ok' ? ` · ${px.city || px.ip}` : ''}`] as [string, string])]} />
               <div className="combo-row" style={{ marginTop: 6 }}>
                 <input type="text" value={pxText} onChange={e => setPxText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') quickProxy(); }} placeholder="或直接粘贴一个代理，自动识别格式并检测，如 user:pass@1.2.3.4:8080" />
                 <button type="button" className="btn sm combo-btn" disabled={pxBusy || !pxText.trim()} onClick={quickProxy}>{pxBusy ? '检测中…' : '识别并使用'}</button>
@@ -244,7 +238,7 @@ export const ProfileDrawer: React.FC<{
             </div>
             {!native && devices.length > 0 && <Field label={`设备预设（${devices.length} 台 ${osName(fp.os)} ${dtInfo.name}）`} hint="选择一台真实机型，显卡、分辨率、CPU、内存一次填好"><SearchSelect value={device} options={devices.map(d => [d.id, (d.custom ? '★ ' : '') + d.name])} onChange={applyDevice} placeholder={dt === 'phone' || dt === 'foldable' ? '搜索机型，如 S24 / Pixel / 小米' : dt === 'tablet' ? '搜索机型，如 Tab S9 / Pad' : '搜索机型，如 4060 / M3 / Iris'} /></Field>}
             <div className="grid3">
-              <Field label="操作系统"><select value={fp.os} onChange={e => changeOS(e.target.value)}>{dtInfo.oses.filter(v => !native || v === 'windows').map(v => <option key={v} value={v}>{osName(v)}</option>)}</select></Field>
+              <Field label="操作系统"><SelectField value={fp.os} onChange={v => changeOS(v)} options={dtInfo.oses.filter(v => !native || v === 'windows').map(v => [v, osName(v)] as [string, string])} /></Field>
               <Field label="系统版本"><Combo value={fp.osVersion} {...lib('osVersions', cat.osVersions)} onChange={v => setFP({ osVersion: v })} render={v => osVerLabel(fp.os, v)} /></Field>
               <Field label="浏览器大版本"><Combo value={fp.browserVersion} {...lib('browserMajors', cat.browserMajors)} onChange={setMajor} render={v => `Chrome ${v}`} /></Field>
             </div>
@@ -263,7 +257,7 @@ export const ProfileDrawer: React.FC<{
             <div className="grid3">
               <Field label="CPU 核心数"><Combo value={String(fp.hardwareConcurrency ?? '')} {...lib('cores', cat.cores)} onChange={v => /^\d*$/.test(v) && setFP({ hardwareConcurrency: +v })} /></Field>
               <Field label="内存 (GB)" hint="Chrome 上报最高 8"><Combo value={String(fp.deviceMemory ?? '')} {...lib('memory', cat.memory)} onChange={v => /^\d*$/.test(v) && setFP({ deviceMemory: +v })} /></Field>
-              <Field label={native ? '触控点（继承模板）' : '触控点'}><select disabled={native} value={fp.maxTouchPoints} onChange={e => setFP({ maxTouchPoints: +e.target.value })}>{opt(touchOpts, fp.maxTouchPoints).map(n => <option key={n} value={n}>{n === 0 ? '0（无触屏）' : `${n}（触屏）`}</option>)}</select></Field>
+              <Field label={native ? '触控点（继承模板）' : '触控点'}><SelectField disabled={native} value={String(fp.maxTouchPoints ?? 0)} onChange={v => setFP({ maxTouchPoints: +v })} options={opt(touchOpts, fp.maxTouchPoints).map(n => [String(n), n === 0 ? '0（无触屏）' : `${n}（触屏）`] as [string, string])} /></Field>
             </div>
             <div className="grid2">
               <Field label="WebGL Vendor"><Combo value={fp.webglVendor} {...lib('vendors', cat.vendors)} onChange={setVendor} /></Field>
@@ -283,7 +277,7 @@ export const ProfileDrawer: React.FC<{
             <Field label="国家/地区预设" hint="一键填入该国家的时区、语言和地理坐标"><CountrySelect value={countryOfTz(fp.timezone)} onChange={c => setFP({ timezone: c.tz, languages: c.langs, latitude: c.lat, longitude: c.lon, timezoneFromIP: false, languageFromIP: false, geoFromIP: false })} /></Field>
             <Field label="时区"><TimezoneSelect value={fp.timezone} onChange={v => setFP({ timezone: v, timezoneFromIP: false })} /></Field>
             <Field label="语言（按优先级）"><LanguagePicker value={fp.languages || []} onChange={v => setFP({ languages: v, languageFromIP: false })} /></Field>
-            <Field label="二进制模板"><select value={p.native?.templateKey} onChange={e => setP({ ...p, native: { ...p.native!, templateKey: e.target.value } as any })}><option value="windows-intel-a">Windows Intel · A</option><option value="windows-intel-a2">Windows Intel · A2</option><option value="windows-intel-b">Windows Intel · B</option></select></Field>
+            <Field label="二进制模板"><SelectField value={p.native?.templateKey || ''} onChange={v => setP({ ...p, native: { ...p.native!, templateKey: v } as any })} options={[['windows-intel-a', 'Windows Intel · A'], ['windows-intel-a2', 'Windows Intel · A2'], ['windows-intel-b', 'Windows Intel · B']]} /></Field>
             <div className="sub">字体、媒体设备、语音、WebGL 参数和未映射的噪声开关继承模板。高级配置可在「指纹库 / JSON」导出启动 JSON，修改后导入为新环境。此模式直接使用内核和 CDP，需保持 GhostBrowser 运行。</div>
           </div>}
 

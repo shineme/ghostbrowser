@@ -227,3 +227,26 @@ func TestExtLoadLive(t *testing.T) {
 	}
 	t.Fatalf("extension %s not loaded; targets: %s", e.ID, last)
 }
+
+// Review: manifest icon / locale paths must not escape the extension folder.
+func TestExtManifestPathsStayInside(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "ext")
+	_ = os.MkdirAll(filepath.Join(dir, "img"), 0o755)
+	_ = os.WriteFile(filepath.Join(root, "secret.png"), []byte("SECRET"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "img", "i.png"), []byte("PNG"), 0o644)
+	if got := iconDataURL(dir, map[string]string{"128": "../secret.png"}); got != "" {
+		t.Fatalf("icon outside the folder was read: %q", got)
+	}
+	if got := iconDataURL(dir, map[string]string{"128": "..\\secret.png"}); got != "" {
+		t.Fatalf("backslash icon outside the folder was read: %q", got)
+	}
+	if got := iconDataURL(dir, map[string]string{"128": "/img/i.png"}); got == "" {
+		t.Fatal("normal icon not read")
+	}
+	_ = os.MkdirAll(filepath.Join(root, "_locales", "x"), 0o755)
+	_ = os.WriteFile(filepath.Join(root, "msgs.json"), []byte(`{"name":{"message":"LEAK"}}`), 0o644)
+	if got := localizedName(dir, extManifest{DefaultLocale: "../.."}, "__MSG_name__"); got == "LEAK" {
+		t.Fatal("locale path escaped the folder")
+	}
+}

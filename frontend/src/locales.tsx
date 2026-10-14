@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { SelectField } from './ui';
 
 // Country presets: code, name, primary timezone, Accept-Language list, capital coordinates.
 export type Country = { cc: string; name: string; tz: string; langs: string[]; lat: number; lon: number };
@@ -86,17 +87,14 @@ const tzOffset = (tz: string) => {
   } catch { return ''; }
 };
 
-/** Searchable dropdown: a filter box above a native list. */
+/** Searchable dropdown: a filter box above a styled list. */
 export function SearchSelect({ value, options, onChange, placeholder }: { value: string; options: [string, string][]; onChange: (v: string) => void; placeholder?: string }) {
   const [q, setQ] = useState('');
   const list = useMemo(() => { const s = q.trim().toLowerCase(); return s ? options.filter(([v, l]) => v.toLowerCase().includes(s) || l.toLowerCase().includes(s)) : options; }, [q, options]);
   const shown = list.some(([v]) => v === value) || !value ? list : [[value, options.find(o => o[0] === value)?.[1] || value] as [string, string], ...list];
   return <div className="ssel">
     <input type="text" className="ssel-q" value={q} onChange={e => setQ(e.target.value)} placeholder={placeholder || '搜索…'} />
-    <select value={value} onChange={e => { onChange(e.target.value); setQ(''); }}>
-      {!value && <option value="">请选择</option>}
-      {shown.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-    </select>
+    <SelectField value={value} onChange={v => { if (v) { onChange(v); setQ(''); } }} options={[...(!value ? [['', list.length ? '请选择' : '没有匹配的机型'] as [string, string]] : []), ...shown]} />
   </div>;
 }
 
