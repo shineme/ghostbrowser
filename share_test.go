@@ -331,8 +331,16 @@ func TestSecRecoveryLegacyMigration(t *testing.T) {
 	if e := b.PullProfile(p.ID); e != nil || readMarker(b, p.ID) != "legacy-v1" {
 		t.Fatalf("legacy pull: %v", e)
 	}
-	if e := b.PullGlobal(); e != nil {
+	// the pre-migration global record decrypts with the unlocked master key
+	// (PullGlobal itself writes the process-wide fingerprint library, so check the blob directly)
+	resp, e := b.sync().req("GET", "/api/profiles/"+globalID+"/blob", nil, "")
+	if e != nil {
 		t.Fatal(e)
+	}
+	enc, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if _, e := decrypt(enc, b.loadKeyring().master()); e != nil {
+		t.Fatalf("legacy global record: %v", e)
 	}
 	// change the password: data uploaded before migration stays readable
 	if e := a.ChangeSyncPassword("legacy-password", "new-password-1"); e != nil {
