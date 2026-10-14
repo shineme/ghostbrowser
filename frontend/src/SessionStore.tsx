@@ -24,7 +24,7 @@ export const SessionScopeChips: React.FC<{ on: boolean }> = ({ on }) => (
 /** One line in the Cookie dialog: what the current snapshot holds. */
 export const SessionSnapshotLine: React.FC<{ profileId: string }> = ({ profileId }) => {
   const [i, setI] = useState<SessionInfo | null>(null);
-  useEffect(() => { (api as any).SessionStoreInfo(profileId).then((v: SessionInfo) => setI(v)).catch(() => setI(null)); }, [profileId]);
+  useEffect(() => { api.SessionStoreInfo(profileId).then((v: SessionInfo) => setI(v)).catch(() => setI(null)); }, [profileId]);
   if (!i) return null;
   if (i.error) return <div className="ss-line bad"><span className="ss-k">登录快照</span><span className="ss-v">{i.error}</span></div>;
   if (!i.schema) return <div className="ss-line"><span className="ss-k">登录快照</span><span className="ss-v sub">还没有快照，浏览器运行后自动生成</span></div>;

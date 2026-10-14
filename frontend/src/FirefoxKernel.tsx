@@ -23,7 +23,7 @@ export const FoxIcon: React.FC<{ s?: number }> = ({ s = 14 }) => (
 
 export function useFirefoxInfo(dep?: any): [FirefoxInfo | null, () => void] {
   const [info, setInfo] = useState<FirefoxInfo | null>(null);
-  const load = () => (api as any).FirefoxInfo().then((x: FirefoxInfo) => setInfo(x)).catch(() => setInfo(null));
+  const load = () => api.FirefoxInfo().then((x: FirefoxInfo) => setInfo(x)).catch(() => setInfo(null));
   useEffect(() => { load(); }, [dep]);
   return [info, load];
 }
@@ -36,7 +36,7 @@ export function useFirefoxInstall(onDone?: (p: KernelProgress) => void) {
   const [p, setP] = useState<KernelProgress>(ffIdle);
   useEffect(() => {
     let last = '';
-    (api as any).FirefoxInstallStatus().then((x: KernelProgress) => { if (x) { setP(x); last = x.phase; } }).catch(() => {});
+    api.FirefoxInstallStatus().then((x: KernelProgress) => { if (x) { setP(x); last = x.phase; } }).catch(() => {});
     return onEvent('firefox:install', (x: KernelProgress) => { setP(x); if (x.phase === 'done' && last !== 'done') onDone?.(x); last = x.phase; });
   }, []);
   return p;
@@ -47,7 +47,7 @@ export const FirefoxInstaller: React.FC<{ onInstalled?: (path: string) => void; 
   const toast = useToast();
   const [ch, setCh] = useState<'esr' | 'release'>('esr');
   const p = useFirefoxInstall(x => { if (x.path) onInstalled?.(x.path); toast(`Firefox ${x.version || ''} 安装完成`, 'ok'); });
-  const start = async () => { try { await (api as any).FirefoxInstallStart(ch); } catch (e: any) { toast(String(e?.message || e), 'bad'); } };
+  const start = async () => { try { await api.FirefoxInstallStart(ch); } catch (e: any) { toast(String(e?.message || e), 'bad'); } };
   const show = p.phase !== 'idle';
   return (
     <div className={`ki ff-ki ${compact ? 'compact' : ''}`}>
@@ -56,7 +56,7 @@ export const FirefoxInstaller: React.FC<{ onInstalled?: (path: string) => void; 
         <span className="sub" style={{ margin: 0 }}>{ch === 'esr' ? '一年一个大版本，指纹最稳定，推荐' : '每 4 周更新，和大多数 Firefox 用户一致'}</span>
       </div>}
       {show
-        ? <KernelProgressView p={p} onCancel={() => (api as any).FirefoxInstallCancel()} onRetry={start} compact={compact} product="Firefox" />
+        ? <KernelProgressView p={p} onCancel={() => api.FirefoxInstallCancel()} onRetry={start} compact={compact} product="Firefox" />
         : <div className="ki-cta">
           <div className="ki-cta-ic ff"><FoxIcon s={18} /></div>
           <div className="ki-cta-txt"><b>一键安装官方 Firefox</b><span>从 Mozilla 官方下载（HTTPS），按官方 SHA-512 校验后静默安装到程序数据目录 · 约 70 MB</span></div>
@@ -72,7 +72,7 @@ export const FirefoxSettingsCard: React.FC<{ value: string; onChange: (path: str
   const [t, setT] = useState(0);
   useEffect(() => { const h = setTimeout(() => setT(x => x + 1), 300); return () => clearTimeout(h); }, [value]);
   useEffect(() => { reload(); }, [t]);
-  const pick = async () => { const f = await (api as any).PickFirefox(); if (f) onChange(f); };
+  const pick = async () => { const f = await api.PickFirefox(); if (f) onChange(f); };
   return (
     <div id="ff-card" className="panel pad setting-card spot rise" style={{ ['--i' as any]: index }}>
       <div className="head"><span className="ic ff"><FoxIcon s={17} /></span><div><h4>Firefox 内核</h4><span>Mozilla Firefox + 偏好设置（user.js），通过 WebDriver BiDi 控制</span></div>
@@ -83,7 +83,7 @@ export const FirefoxSettingsCard: React.FC<{ value: string; onChange: (path: str
           {value && <button className="btn ghost" style={{ flex: 'none' }} onClick={() => onChange('')}><Icon.refresh s={14} /> 自动检测</button>}</div>
       </Field>
       {info?.missing && <div className="notice warn"><Icon.alert /><span className="grow">找不到这个文件，将改用自动检测到的 Firefox。</span></div>}
-      {info && !info.path && <div className="notice warn ff-miss"><Icon.alert /><span className="grow">本机没有安装 Firefox。可以一键安装官方版本，或<a className="ff-link" onClick={() => (api as any).FirefoxDownloadPage()}>打开 Mozilla 官方下载页</a>手动安装。</span></div>}
+      {info && !info.path && <div className="notice warn ff-miss"><Icon.alert /><span className="grow">本机没有安装 Firefox。可以一键安装官方版本，或<a className="ff-link" onClick={() => api.FirefoxDownloadPage()}>打开 Mozilla 官方下载页</a>手动安装。</span></div>}
       <FirefoxInstaller onInstalled={p => { onInstalled(p); reload(); }} />
       <div className="sub" style={{ marginTop: 12 }}>每个环境使用独立的 Firefox 配置目录。支持：代理（含账号密码，经本地中转）、语言、时区、WebRTC、DNT / GPC、地理位置、WebGL、字体可见范围、严格模式、CPU 核心数、禁止图片、启动页和窗口大小。不伪装显卡、Canvas 和系统。RPA、同步器暂不支持 Firefox。</div>
     </div>
@@ -96,7 +96,7 @@ export const FirefoxMissingNotice: React.FC = () => {
   if (!info || info.path) return null;
   return (
     <div className="notice warn ki-notice">
-      <div><b>没有找到 Firefox</b><span>这个环境需要 Firefox 才能启动。可以一键安装官方 ESR，或<a className="ff-link" onClick={() => (api as any).FirefoxDownloadPage()}>前往官方下载页</a>。</span></div>
+      <div><b>没有找到 Firefox</b><span>这个环境需要 Firefox 才能启动。可以一键安装官方 ESR，或<a className="ff-link" onClick={() => api.FirefoxDownloadPage()}>前往官方下载页</a>。</span></div>
       <FirefoxInstaller compact onInstalled={() => reload()} />
     </div>
   );

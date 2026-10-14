@@ -56,13 +56,13 @@ export const EnvCheckModal: React.FC<{ profileId: string; name: string; onClose:
 
   const run = useCallback(async () => {
     setLoading(true); setErr('');
-    try { const r: EnvReport = await (api as any).CheckEnvironment(profileId); setRep(r); setClock(r.clock); }
+    try { const r: EnvReport = await api.CheckEnvironment(profileId); setRep(r); setClock(r.clock); }
     catch (e) { setErr(errText(e)); }
     finally { setLoading(false); }
   }, [profileId]);
   const loadLog = useCallback(async () => {
     setLogErr('');
-    try { setLog((await (api as any).RepairHistory(profileId)) || []); } catch (e) { setLogErr(errText(e)); setLog([]); }
+    try { setLog((await api.RepairHistory(profileId)) || []); } catch (e) { setLogErr(errText(e)); setLog([]); }
   }, [profileId]);
   useEffect(() => { run(); loadLog(); }, [run, loadLog]);
   useEffect(() => {
@@ -70,12 +70,12 @@ export const EnvCheckModal: React.FC<{ profileId: string; name: string; onClose:
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
   });
 
-  const recheckClock = async () => { setClockBusy(true); try { setClock(await (api as any).CheckSystemClock()); } catch (e) { toast(errText(e), 'bad'); } finally { setClockBusy(false); } };
+  const recheckClock = async () => { setClockBusy(true); try { setClock(await api.CheckSystemClock()); } catch (e) { toast(errText(e), 'bad'); } finally { setClockBusy(false); } };
 
   const repair = async (items: string[], key: string) => {
     setFixing(key);
     try {
-      const r: any = await (api as any).RepairEnvironment(profileId, items);
+      const r: any = await api.RepairEnvironment(profileId, items);
       if (r.changed > 0) toast(`已修复 ${r.entry?.items?.length || items.length} 项，修改 ${r.changed} 个字段，可在「修复记录」中恢复`);
       else toast('没有需要修改的配置', 'bad');
       if (r.skipped?.length) toast(r.skipped[0], 'bad');
@@ -89,7 +89,7 @@ export const EnvCheckModal: React.FC<{ profileId: string; name: string; onClose:
     const ok = await ask({ title: `恢复 ${fmtTime(e.at)} 的修复？`, body: `将把 ${e.changes.length} 个字段改回修复前的值（${e.items.map(i => ITEM_CN[i] || i).join('、')}）。之后对其他设置的修改不受影响。`, ok: '恢复' });
     if (!ok) return;
     setRestoring(e.id);
-    try { await (api as any).RestoreRepair(profileId, e.id); toast('已恢复到修复前的配置'); onChanged?.(); await Promise.all([loadLog(), run()]); }
+    try { await api.RestoreRepair(profileId, e.id); toast('已恢复到修复前的配置'); onChanged?.(); await Promise.all([loadLog(), run()]); }
     catch (x) { toast(errText(x), 'bad'); }
     finally { setRestoring(''); }
   };

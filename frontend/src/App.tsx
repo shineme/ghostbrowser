@@ -478,7 +478,7 @@ const BulkModal: React.FC<{ proxies: Proxy[]; onClose: () => void; onDone: () =>
   const [ffInfo] = useFirefoxInfo();
   const ffOK = dt === 'desktop' || dt === 'laptop';
   const [out, close] = useExit(onClose);
-  const go = async () => { setBusy(true); await (api as any).CreateTypedProfilesKernel(prefix, dt, os, count, proxyId, group, ffOK ? kernel : ''); toast(`已创建 ${count} 个${kernel === 'firefox' && ffOK ? ' Firefox ' : ''}环境`); setBusy(false); onDone(); close(); };
+  const go = async () => { setBusy(true); await api.CreateTypedProfilesKernel(prefix, dt, os, count, proxyId, group, ffOK ? kernel : ''); toast(`已创建 ${count} 个${kernel === 'firefox' && ffOK ? ' Firefox ' : ''}环境`); setBusy(false); onDone(); close(); };
   return (
     <div className={`overlay center ${out ? 'out' : ''}`} onMouseDown={e => e.target === e.currentTarget && close()}>
       <BorderBeam size="pulse-inner" colorVariant="ocean" theme="dark" strength={0.6} borderRadius={20}>

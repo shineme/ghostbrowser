@@ -9,5 +9,9 @@
   "author": {
     "name": "shineme",
     "email": ""
+  },
+  "info": {
+    "productName": "GhostBrowser",
+    "productVersion": "0.8.0"
   }
 }
