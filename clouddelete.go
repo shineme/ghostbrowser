@@ -276,7 +276,7 @@ func (a *autoSyncer) DeleteProfiles(source string, ids []string, mode string, fo
 				continue // nothing deleted: the user decides whether to force
 			}
 			if ok {
-				s.DeleteProfile(id)
+				s.TrashProfile(id, r.Cloud != "skipped") // recycle bin: data kept until purged
 				r.Local = true
 			}
 			s.clearLocalDeleted(id)
@@ -287,9 +287,9 @@ func (a *autoSyncer) DeleteProfiles(source string, ids []string, mode string, fo
 			if syncOn && (p.CloudVer > 0 || p.Storage == "cloud") {
 				s.markLocalDeleted(id, localDeletedMark{Name: p.Name, CloudVersion: p.CloudVer, DeletedAt: time.Now().Unix()})
 			}
-			s.DeleteProfile(id)
+			s.TrashProfile(id, false) // recycle bin: data kept until purged
 			r.Local = true
-			s.auditNamed(source, "profile.delete", id, r.Name, nil, map[bool]string{true: "仅删除本机，云端副本保留", false: ""}[syncOn && (p.CloudVer > 0 || p.Storage == "cloud")])
+			s.auditNamed(source, "profile.delete", id, r.Name, nil, map[bool]string{true: "仅删除本机，云端副本保留；已移至最近删除", false: "已移至最近删除"}[syncOn && (p.CloudVer > 0 || p.Storage == "cloud")])
 		}
 		if claimed {
 			a.release(id)
@@ -359,6 +359,7 @@ func (a *autoSyncer) applyTombstones(tombs []cloudMeta) (removed int) {
 	for _, t := range tombs {
 		a.s.clearLocalDeleted(t.ID)
 		a.s.clearCloudDelete(t.ID)
+		a.s.markTrashCloudDeleted(t.ID) // a later restore re-creates it as a new profile
 		if a.removeForTomb(t) {
 			removed++
 		}
@@ -389,8 +390,8 @@ func (a *autoSyncer) removeForTomb(t cloudMeta) bool {
 		return false // a sync is moving it right now; the next pass handles it
 	}
 	defer a.release(t.ID)
-	a.s.DeleteProfile(t.ID)
-	a.s.auditNamed("sync", "sync.delete-local", t.ID, p.Name, nil, "云端已在 "+dev+" 删除，已删除本机副本")
+	a.s.TrashProfile(t.ID, true) // recycle bin: unsynced local changes stay recoverable
+	a.s.auditNamed("sync", "sync.delete-local", t.ID, p.Name, nil, "云端已在 "+dev+" 删除，本机副本已移至最近删除")
 	a.emitEv(SyncEvent{Phase: "deleted", ID: t.ID, Name: p.Name, Message: fmt.Sprintf("环境「%s」已在 %s 删除，已同步删除本机副本", p.Name, dev)})
 	return true
 }

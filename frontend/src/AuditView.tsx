@@ -16,6 +16,7 @@ const ACTIONS: Record<string, string> = {
   'profile.start': '启动环境', 'profile.stop': '停止环境', 'profile.create': '新建环境', 'profile.edit': '编辑环境',
   'profile.delete': '删除环境', 'profile.clone': '克隆环境', 'proxy.assign': '分配代理', 'group.set': '设置分组',
   'group.create': '新建分组', 'sync.push': '同步 · 上传', 'sync.pull': '同步 · 下载', 'sync.delete': '同步 · 删除云端', 'sync.delete-local': '同步 · 删除本机副本',
+  'profile.restore': '从最近删除恢复', 'profile.purge': '彻底删除环境',
   'sync.restore': '同步 · 恢复版本', 'mcp.call': 'MCP 调用', 'mcp.start': '启动 MCP 服务', 'mcp.stop': '停止 MCP 服务', 'api.call': '接口调用',
 };
 const actionLabel = (a: string) => ACTIONS[a] || (a.startsWith('sync.') ? `同步 · ${a.slice(5)}` : a);

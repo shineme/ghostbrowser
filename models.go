@@ -121,6 +121,11 @@ type Profile struct {
 	Kernel string `json:"kernel,omitempty"`
 	// Extension Center: IDs of extensions loaded with --load-extension at launch.
 	ExtensionIDs []string `json:"extensionIds,omitempty"`
+	// Recycle bin (最近删除): set on records kept in Store.Trash.
+	Trashed           bool   `json:"trashed,omitempty"`
+	TrashedAt         int64  `json:"trashedAt,omitempty"`
+	TrashDir          string `json:"trashDir,omitempty"`          // where the data folder is kept
+	TrashCloudDeleted bool   `json:"trashCloudDeleted,omitempty"` // the cloud copy was deleted too
 }
 
 // needsOpenKernel: the custom kernel only carries Windows desktop templates.
@@ -161,6 +166,8 @@ type Settings struct {
 	Syncer *SyncerPrefs `json:"syncer,omitempty"`
 	// cloud delete: last choice in the delete dialog ("local" | "cloud").
 	DeleteMode string `json:"deleteMode,omitempty"`
+	// Recycle bin: days a deleted profile is kept before it is purged (0 = 30).
+	TrashDays int `json:"trashDays,omitempty"`
 }
 
 type RunState struct {

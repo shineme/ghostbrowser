@@ -1218,3 +1218,22 @@ func (a *App) PendingCloudDeletes() int { return len(a.store.pendingDeletes()) }
 
 // RetryCloudDeletes sends queued cloud deletes now; returns how many are left.
 func (a *App) RetryCloudDeletes() int { return a.syncer().RetryPendingDeletes() }
+
+// ---- recycle bin ----
+
+// ListTrash lists profiles in the recycle bin (最近删除), newest first.
+func (a *App) ListTrash() []TrashItem { return a.store.ListTrash() }
+
+// RestoreFromTrash moves profiles back to the profile list.
+func (a *App) RestoreFromTrash(ids []string) []RestoreResult {
+	return a.store.RestoreFromTrash("ui", ids)
+}
+
+// PurgeTrash permanently deletes profiles from the recycle bin.
+func (a *App) PurgeTrash(ids []string) int { return a.store.PurgeTrash("ui", ids, "彻底删除") }
+
+// EmptyTrash permanently deletes everything in the recycle bin.
+func (a *App) EmptyTrash() int { return a.store.EmptyTrash("ui") }
+
+// TrashDays is how many days deleted profiles are kept.
+func (a *App) TrashDays() int { return trashDays(a.store.GetSettings()) }

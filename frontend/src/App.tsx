@@ -4,6 +4,7 @@ import { ThinkingOrb } from 'thinking-orbs';
 import { api, Profile, Proxy, Settings, onEvent } from './api';
 import { MetalFx } from 'metal-fx';
 import { DeleteModal, DelTarget } from './DeleteModal';
+import { TrashModal, useTrashCount } from './TrashView';
 import { Icon, Field, flag, ago, useToast, useConfirm, useExit, ToastHost, WindowControls, useMaximised, StatCard, Avatar, CC, CountUp, OsIcon, Ambient, Splash, useSpotlight, Pick, Segmented, DevIcon } from './ui';
 import { DEVICE_TYPES, devType, devName, osName as osNameOf, needsOpen } from './devices';
 import { ProfileDrawer } from './ProfileDrawer';
@@ -215,6 +216,10 @@ const ProfilesView: React.FC<{
   const stop = async (p: Profile) => { setBusyFor(p.id, true); await api.StopProfile(p.id); setRunning(s => { const n = new Set(s); n.delete(p.id); return n; }); setBusyFor(p.id, false); };
   const clone = async (p: Profile) => { await api.CloneProfile(p.id); toast('已复制环境'); reload(); };
   const [delT, setDelT] = useState<DelTarget[] | null>(null);
+  const [trashOpen, setTrashOpen] = useState(false); // 最近删除
+  const [trashN, refreshTrash] = useTrashCount(profiles.length);
+  const trashBtn = <button className={`btn icon trash-btn ${trashN ? '' : 'none'}`} onClick={() => setTrashOpen(true)} title={trashN ? `最近删除 · ${trashN} 个` : '最近删除'} aria-label="最近删除"><Icon.trash s={15} />{trashN > 0 && <span className="trash-n num">{trashN > 99 ? '99+' : trashN}</span>}</button>;
+  const trashModal = trashOpen && <TrashModal onClose={() => { setTrashOpen(false); refreshTrash(); }} onChanged={() => { reload(); refreshTrash(); }} />;
   const del = (ids: string[]) => setDelT(ids.map(id => profiles.find(p => p.id === id)).filter(Boolean).map(p => ({ id: p!.id, name: p!.name, inCloud: p!.storage === 'cloud' || p!.cloudVersion > 0, running: running.has(p!.id) })));
 
   const startBatch = async () => { for (const id of sel) { const p = profiles.find(x => x.id === id); if (p && !running.has(id)) await start(p); } };
@@ -234,7 +239,9 @@ const ProfilesView: React.FC<{
         </BorderBeam>
         <button className="btn" onClick={() => setBulk(true)}><Icon.layers s={15} /> 批量创建</button>
         <button className="btn" onClick={() => setNativeTools(true)}><Icon.shield s={15} /> 指纹库 / JSON</button>
+        {trashN > 0 && <button className="btn" onClick={() => setTrashOpen(true)}><Icon.trash s={15} /> 最近删除 <span className="trash-n inline num">{trashN}</span></button>}
       </div>
+      {trashModal}
       {drawer && <ProfileDrawer profile={editing} proxies={Object.values(proxyName)} onClose={() => setDrawer(false)} onSaved={reload} />}
       {bulk && <BulkModal proxies={Object.values(proxyName)} onClose={() => setBulk(false)} onDone={reload} />}
       {nativeTools && <NativeTools profiles={profiles} onClose={() => setNativeTools(false)} onChanged={reload} />}
@@ -263,6 +270,7 @@ const ProfilesView: React.FC<{
           options={[['recent', '最近运行'], ['name', '名称'], ['created', '创建时间']]} />
         {(fGroup !== '\u0000' || fTag) && <><span className="tb-count num">{list.length} / {profiles.length}</span><button className="tb-clear" onClick={() => { setFGroup('\u0000'); setFTag(''); }}>清除</button></>}
         <div className="spacer" />
+        {trashBtn}
         <button className="btn" onClick={() => setBulk(true)}><Icon.layers s={15} /> 批量创建</button>
         <button className="btn" onClick={() => setNativeTools(true)}><Icon.shield s={15} /> 指纹库 / JSON</button>
         <BorderBeam size="sm" colorVariant="ocean" theme="dark" borderRadius={9}>
@@ -340,7 +348,8 @@ const ProfilesView: React.FC<{
       {drawer && <ProfileDrawer profile={editing} proxies={Object.values(proxyName)} onClose={() => setDrawer(false)} onSaved={reload} />}
       {bulk && <BulkModal proxies={Object.values(proxyName)} onClose={() => setBulk(false)} onDone={reload} />}
       {nativeTools && <NativeTools profiles={profiles} onClose={() => setNativeTools(false)} onChanged={reload} />}
-      {delT && delT.length > 0 && <DeleteModal targets={delT} onClose={() => setDelT(null)} onDone={() => { setSel(new Set()); reload(); }} />}
+      {delT && delT.length > 0 && <DeleteModal targets={delT} onClose={() => setDelT(null)} onDone={() => { setSel(new Set()); reload(); refreshTrash(); }} />}
+      {trashModal}
       {modal === 'group' && <GroupModal ids={[...sel]} groups={groups} onClose={() => setModal('')} onDone={reload} />}
       {needKernel && <KernelMissingModal name={needKernel.name} onClose={() => setNeedKernel(null)} onLaunch={() => start(needKernel)} />}
       {modal === 'assign' && <AssignModal ids={[...sel]} proxies={Object.values(proxyName)} profiles={profiles} onClose={() => setModal('')} onDone={reload} />}
