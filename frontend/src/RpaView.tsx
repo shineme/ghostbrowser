@@ -5,6 +5,7 @@ import { Icon, Field, Toggle, Segmented, Pick, StatCard, Avatar, ago, useToast, 
 import { RI, RWorkflow, REvent, StepIcon, toneOf, typeLabel, countSteps, StatusBadge, newStep, flat } from './rpaMeta';
 import { RpaEditor } from './RpaEditor';
 import { RpaRunDrawer } from './RpaRunDrawer';
+import { RpaRecorder, recName } from './RpaRecorder';
 
 const err = (e: any) => String(e?.message || e);
 
@@ -37,6 +38,7 @@ export function RpaView({ profiles }: { profiles: Profile[]; reload?: () => void
   const [drawer, setDrawer] = useState<{ wf: RWorkflow; runId: string } | null>(null);
   const [importing, setImporting] = useState<string | null>(null);
   const [live, setLive] = useState<Record<string, string>>({}); // runId -> status while running
+  const [recording, setRecording] = useState(false);
 
   const load = useCallback(async () => {
     try { setList(((await api.ListWorkflows()) || []) as any); setLoadErr(''); }
@@ -78,6 +80,8 @@ export function RpaView({ profiles }: { profiles: Profile[]; reload?: () => void
       onStarted={runId => { const w = running; setRunning(null); setDrawer({ wf: w, runId }); load(); }} />}
     {drawer && <RpaRunDrawer wf={drawer.wf} runId={drawer.runId} profiles={profiles} onClose={() => setDrawer(null)}
       onRerun={() => { const w = drawer.wf; setDrawer(null); setRunning(w); }} />}
+    {recording && <RpaRecorder target={{ mode: 'new' }} profiles={profiles} onClose={() => setRecording(false)}
+      onDone={(steps, vars) => setEditing({ id: '', name: recName(), description: '由录制生成', steps, vars, createdAt: 0, updatedAt: 0, lastRunAt: 0, lastStatus: '', lastRunId: '', runCount: 0 } as RWorkflow)} />}
     {importing !== null && <ImportModal initial={importing} onClose={() => setImporting(null)} onDone={w => { load(); setEditing(w); }} />}
   </>;
 
@@ -91,6 +95,7 @@ export function RpaView({ profiles }: { profiles: Profile[]; reload?: () => void
       {loadErr && <div className="notice bad" style={{ marginTop: 4 }}><Icon.alert />{loadErr}</div>}
       <div className="actions">
         <button className="btn primary" onClick={createSample}><Icon.sparkles s={15} /> 新建示例流程</button>
+        <button className="btn rec-btn" onClick={() => setRecording(true)}><span className="rec-dot-ic sm" /> 录制操作</button>
         <button className="btn" onClick={() => setEditing('new')}><Icon.plus s={15} /> 空白流程</button>
         <button className="btn ghost" onClick={() => setImporting('')}><Icon.upload s={15} /> 导入</button>
       </div>
@@ -123,6 +128,7 @@ export function RpaView({ profiles }: { profiles: Profile[]; reload?: () => void
         <Pick label="上次结果" value={status} onChange={setStatus} icon={<Icon.check />} options={[['all', '全部', list.length], ['ok', '成功', cnt('ok')], ['partial', '部分成功', cnt('partial')], ['failed', '失败', cnt('failed')], ['never', '从未运行', cnt('never')]]} />
         <div className="spacer" />
         <button className="btn" onClick={() => setImporting('')}><Icon.upload s={14} /> 导入</button>
+        <button className="btn rec-btn" onClick={() => setRecording(true)} title="在浏览器里操作一遍，自动生成流程"><span className="rec-dot-ic sm" /> 录制</button>
         <button className="btn primary" onClick={() => setEditing('new')}><Icon.plus s={15} /> 新建流程</button>
       </div>
 

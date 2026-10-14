@@ -148,7 +148,8 @@ const condText = (p: Record<string, string>) => {
 };
 /** One-line description shown on a step row. */
 export const summary = (s: RStep): string => {
-  const p = s.params || {};
+  // Recorded selectors carry a fallback ("css || xpath:…"); show the primary one.
+  const p = s.params?.selector?.includes(' || ') ? { ...s.params, selector: s.params.selector.split(' || ')[0] } : (s.params || {});
   switch (s.type) {
     case 'goto': return p.url || '未填写网址';
     case 'click': return (p.selector || '未填写选择器') + (p.double === 'true' ? ' · 双击' : '');

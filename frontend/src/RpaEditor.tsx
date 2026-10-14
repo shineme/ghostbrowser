@@ -5,6 +5,7 @@ import {
   RI, RStep, RWorkflow, RIssue, DEF, STEP_DEFS, GROUPS, FieldDef, StepIcon, toneOf, typeLabel, summary, newStep, flat, countSteps,
   updateStep, removeStep, moveStep, insertAfter, insertInto, cloneStep, findStep, siblingPos, varsBefore,
 } from './rpaMeta';
+import { RpaRecorder } from './RpaRecorder';
 
 const err = (e: any) => String(e?.message || e);
 const blankWf = (): RWorkflow => ({ id: '', name: '', description: '', steps: [], vars: {}, createdAt: 0, updatedAt: 0, lastRunAt: 0, lastStatus: '', lastRunId: '', runCount: 0 });
@@ -18,7 +19,8 @@ export const RpaEditor: React.FC<{ wf: RWorkflow | null; onClose: () => void; on
   const toast = useToast();
   const ask = useConfirm();
   const [d, setD] = useState<RWorkflow>(() => JSON.parse(JSON.stringify(wf || blankWf())));
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirty] = useState(() => !!wf && !wf.id && (wf.steps || []).length > 0);
+  const [rec, setRec] = useState(false);
   const [sel, setSel] = useState<string>(() => (wf?.steps?.[0]?.id || ''));
   const [issues, setIssues] = useState<RIssue[]>([]);
   const [busy, setBusy] = useState(false);
@@ -86,17 +88,33 @@ export const RpaEditor: React.FC<{ wf: RWorkflow | null; onClose: () => void; on
     } else { navigator.clipboard?.writeText(tok).catch(() => {}); toast(`已复制 ${tok}，粘贴到参数里即可`); }
   };
 
+  // Recorded steps go after the selected step (or at the end); recorded
+  // variables are added without overwriting values already set.
+  const insertRecorded = (steps: RStep[], vars: Record<string, string>) => {
+    if (!steps.length) return;
+    const fresh = steps.map(s => ({ ...cloneStep(s), name: s.name || '' }));
+    edit(w => {
+      let list = w.steps;
+      if (sel && findStep(list, sel)) { let after = sel; for (const s of fresh) { list = insertAfter(list, after, s); after = s.id; } }
+      else list = [...list, ...fresh];
+      const v = { ...(w.vars || {}) }; Object.entries(vars || {}).forEach(([k, x]) => { if (!(k in v)) v[k] = x; });
+      return { ...w, steps: list, vars: v };
+    });
+    setSel(fresh[fresh.length - 1].id);
+    toast(`已插入 ${fresh.length} 个录制的步骤`);
+  };
   const ctx: Ctx = { sel, setSel, issues: byStep, order, steps: d.steps, act, addInto };
   const varRows = Object.entries(d.vars || {});
   const setVars = (rows: [string, string][]) => edit(w => ({ ...w, vars: Object.fromEntries(rows) }));
 
   return (
     <div className={`overlay ${out ? 'out' : ''}`} onMouseDown={e => e.target === e.currentTarget && tryClose()}>
+      {rec && <RpaRecorder target={cur ? { mode: 'append', after: cur.name || typeLabel(cur.type) } : { mode: 'append', after: '最后一步' }} onClose={() => setRec(false)} onDone={insertRecorded} />}
       <div className="drawer rpa-editor">
         <div className="dhead">
           <div className="glyph"><RI.flow s={20} /></div>
           <div style={{ minWidth: 0 }}>
-            <h3>{wf ? '编辑流程' : '新建流程'}{dirty && <span className="rpa-dirty">未保存</span>}</h3>
+            <h3>{wf?.id ? '编辑流程' : '新建流程'}{dirty && <span className="rpa-dirty">未保存</span>}</h3>
             <div className="sub">{countSteps(d.steps)} 个步骤 · 选择器支持 CSS、<code>xpath://…</code>、<code>text:文字</code> · Ctrl+S 保存</div>
           </div>
           <div style={{ marginLeft: 'auto' }}><button className="btn ghost icon" onClick={tryClose}><Icon.x /></button></div>
@@ -124,6 +142,7 @@ export const RpaEditor: React.FC<{ wf: RWorkflow | null; onClose: () => void; on
             <div className="re-steps-head">
               <span className="section-title" style={{ margin: 0, flex: 1 }}>步骤</span>
               <div className="re-addwrap">
+                <button className="btn sm rec-btn" onClick={() => setRec(true)} title={cur ? `录制并插入到「${cur.name || typeLabel(cur.type)}」之后` : '录制并添加到末尾'}><span className="rec-dot-ic sm" /> 录制</button>
                 <button className="btn sm primary" onClick={() => setMenu(m => !m)}><Icon.plus s={13} /> 添加步骤</button>
                 {menu && <AddMenu onPick={add} onClose={() => setMenu(false)} hint={cur ? `插入到「${cur.name || typeLabel(cur.type)}」之后` : '添加到末尾'} />}
               </div>

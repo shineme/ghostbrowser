@@ -84,6 +84,8 @@ export function ExportNativeJSON(arg1:string):Promise<string>;
 
 export function ExportWorkflow(arg1:string):Promise<string>;
 
+export function FinalizeRecording(arg1:Array<main.RpaStep>,arg2:main.RecordFinalizeOptions):Promise<main.RecordFinalized>;
+
 export function FingerprintCatalog(arg1:string):Promise<main.FPCatalog>;
 
 export function FingerprintCatalogFor(arg1:string,arg2:string):Promise<main.FPCatalog>;
@@ -168,6 +170,8 @@ export function OpenWorkflowFile():Promise<string>;
 
 export function ParseProxy(arg1:string):Promise<main.Proxy>;
 
+export function PauseRecording():Promise<main.RecordState>;
+
 export function PendingSyncPrompt():Promise<main.SyncPrompt>;
 
 export function PickChromium():Promise<string>;
@@ -184,11 +188,21 @@ export function PushProfile(arg1:string):Promise<void>;
 
 export function PushProfiles(arg1:Array<string>):Promise<main.BulkResult>;
 
+export function RecordPickMode(arg1:string):Promise<main.RecordState>;
+
+export function RecordRemoveStep(arg1:string):Promise<main.RecordState>;
+
+export function RecordUpdateStep(arg1:main.RpaStep):Promise<main.RecordState>;
+
+export function RecordingState():Promise<main.RecordState>;
+
 export function RemoveExtension(arg1:string):Promise<void>;
 
 export function ResetAPIKey():Promise<main.Settings>;
 
 export function RestoreVersion(arg1:string,arg2:number):Promise<void>;
+
+export function ResumeRecording():Promise<main.RecordState>;
 
 export function RetrySync(arg1:string,arg2:string):Promise<void>;
 
@@ -230,6 +244,8 @@ export function StartMcp(arg1:number):Promise<main.McpStatus>;
 
 export function StartProfile(arg1:string):Promise<main.RunState>;
 
+export function StartRecording(arg1:string,arg2:main.RecordOptions):Promise<main.RecordState>;
+
 export function StartSync(arg1:string,arg2:Array<string>):Promise<main.SyncerState>;
 
 export function StopMcp():Promise<main.McpStatus>;
@@ -237,6 +253,8 @@ export function StopMcp():Promise<main.McpStatus>;
 export function StopProfile(arg1:string):Promise<void>;
 
 export function StopProfiles(arg1:Array<string>):Promise<void>;
+
+export function StopRecording():Promise<main.RecordState>;
 
 export function StopSync():Promise<main.SyncerState>;
 
