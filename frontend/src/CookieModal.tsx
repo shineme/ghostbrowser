@@ -126,7 +126,7 @@ export const CookieModal: React.FC<{ profile: { id: string; name: string }; init
               <button type="button" className="btn sm" disabled={!exp || busy} onClick={copy}><Icon.copy s={13} /> 复制</button>
               <button type="button" className="btn sm" disabled={!exp || busy} onClick={download}><Icon.download s={13} /> 下载 .{fmtOut === 'json' ? 'json' : 'txt'}</button>
               <div className="spacer" />
-              {!busy && exp && <span className="sub num" style={{ fontSize: 12 }}>{nOut} 条{doms.length ? ` · ${doms.length} 个域名` : ''}{info && !info.running ? ' · 来自快照' : ' · 实时'}</span>}
+              {!busy && exp && <span className="sub num" style={{ fontSize: 12 }}>{nOut} 条{doms.length ? ` · ${doms.length} 个域名` : ''}{info && !info.running ? (info.snapshotAt ? ' · 来自快照' : ' · 来自待写入数据') : ' · 实时'}</span>}
             </div>
             {expErr && <div className="notice bad" style={{ marginTop: 12, marginBottom: 0 }}><Icon.alert /><span className="grow">导出失败：{expErr}</span></div>}
           </>}

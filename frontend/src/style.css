@@ -806,3 +806,8 @@ a { color: #aab6ff; }
 .mh-nmeta { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 20px; font-size: 11px; }
 .mh-testing { display: inline-grid; place-items: center; width: 20px; height: 20px; }
 .mh-nodes { max-height: none; }
+.mh-kv.ellip > span:first-child { margin-right: 6px; }
+.mh-nname .cc, .mh-now .cc, .mh-nodes .nm .cc { margin-right: 2px; flex: none; }
+.mh-nodes .nm { display: flex; align-items: center; gap: 4px; }
+.tb-mh { gap: 7px; }
+@media (max-width: 1440px) { .tb-mh span { display: none; } .tb-mh { padding: 0 11px; } }

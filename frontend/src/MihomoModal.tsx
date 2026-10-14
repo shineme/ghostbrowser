@@ -1,7 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api } from './api';
-import { Icon, Latency, Segmented, useExit, useToast, Field } from './ui';
+import { Icon, Latency, Segmented, useExit, useToast, Field, CC } from './ui';
+
+// Windows has no flag glyphs: turn a regional-indicator pair into the app's country chip.
+const RI = /^\s*([\u{1F1E6}-\u{1F1FF}])([\u{1F1E6}-\u{1F1FF}])\s*/u;
+const NodeName: React.FC<{ n: string }> = ({ n }) => {
+  const m = RI.exec(n);
+  if (!m) return <>{n}</>;
+  const cc = String.fromCharCode(m[1].codePointAt(0)! - 0x1F1E6 + 65, m[2].codePointAt(0)! - 0x1F1E6 + 65);
+  return <><CC cc={cc} />{n.slice(m[0].length)}</>;
+};
 
 type Status = { configured: boolean; connected: boolean; controller: string; hasSecret: boolean; version: string; meta: boolean; mode: string; listenHost: string; listenPort: number; listenKind: string; error: string };
 type Node = { name: string; type: string; now?: string; all?: string[]; delay: number; alive: boolean; udp: boolean; isGroup: boolean };
@@ -145,7 +154,7 @@ export const MihomoModal: React.FC<{ onClose: () => void; onAdded?: () => void }
                   <button className="mh-ghead" onClick={() => setOpen(isOpen ? '' : g.name)}>
                     <span className="mh-gname ellip">{g.name}</span>
                     <span className={`tag ${manual ? '' : 'auto'}`}>{GTYPE[g.type] || g.type}</span>
-                    <span className="mh-now ellip"><Icon.check s={12} />{g.now || '—'}</span>
+                    <span className="mh-now ellip"><Icon.check s={12} />{g.now ? <NodeName n={g.now} /> : '—'}</span>
                     {badge(g.now || '')}
                     <svg className="mh-chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M7 10l5 5 5-5" /></svg>
                   </button>
@@ -154,7 +163,7 @@ export const MihomoModal: React.FC<{ onClose: () => void; onAdded?: () => void }
                     {(g.all || []).map(n => {
                       const on = g.now === n; const sw = switching === `${g.name}\u0000${n}`;
                       return <button key={n} className={`mh-node ${on ? 'on' : ''}`} disabled={!manual || !!switching} onClick={() => select(g, n)} title={n}>
-                        <span className="mh-nname ellip">{byName[n]?.isGroup ? <Icon.layers s={12} /> : null}{n}</span>
+                        <span className="mh-nname ellip">{byName[n]?.isGroup ? <Icon.layers s={12} /> : null}<NodeName n={n} /></span>
                         <span className="mh-nmeta">{sw ? <ThinkingOrb state="connecting" size={20} theme="dark" /> : <>{byName[n] && <span className="sub">{byName[n].isGroup ? '策略组' : byName[n].type}</span>}{badge(n)}</>}</span>
                       </button>;
                     })}
@@ -167,7 +176,7 @@ export const MihomoModal: React.FC<{ onClose: () => void; onAdded?: () => void }
               <table>
                 <thead><tr><th>节点</th><th>协议</th><th>UDP</th><th>延迟</th><th style={{ textAlign: 'right' }}>操作</th></tr></thead>
                 <tbody>{nodes.map(n => <tr key={n.name}>
-                  <td><div className="nm ellip" style={{ maxWidth: 360 }} title={n.name}>{n.name}</div>{groups.filter(g => g.now === n.name).length > 0 && <div className="sub" style={{ fontSize: 11 }}>正在被 {groups.filter(g => g.now === n.name).map(g => g.name).join('、')} 使用</div>}</td>
+                  <td><div className="nm ellip" style={{ maxWidth: 360 }} title={n.name}><NodeName n={n.name} /></div>{groups.filter(g => g.now === n.name).length > 0 && <div className="sub" style={{ fontSize: 11 }}>正在被 {groups.filter(g => g.now === n.name).map(g => g.name).join('、')} 使用</div>}</td>
                   <td><span className="tag num">{n.type}</span></td>
                   <td>{n.udp ? <span className="badge ok">支持</span> : <span className="badge unknown">不支持</span>}</td>
                   <td>{badge(n.name)}</td>

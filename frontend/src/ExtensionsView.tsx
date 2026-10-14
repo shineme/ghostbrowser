@@ -89,7 +89,7 @@ export function ExtensionsView({ profiles, reload }: { profiles: Profile[]; relo
       <div className="empty">
         <div className="halo"><ThinkingOrb state="searching" size={64} theme="dark" /></div>
         <h3>还没有扩展</h3>
-        <div style={{ maxWidth: 520 }}>在上方粘贴 Chrome 应用商店的扩展 ID 或链接，一键下载安装，再分配给需要的环境。<br />定制内核（Undetectable）和开源内核（Chromium）都会在启动时加载已分配的扩展。</div>
+        <div style={{ maxWidth: 640 }}>在上方粘贴 Chrome 应用商店的扩展 ID 或链接，一键下载安装，再分配给环境。<br />定制内核（Undetectable）和开源内核（Chromium）都会在启动时加载已分配的扩展。</div>
         <div className="sub" style={{ fontSize: 12 }}>品牌版 Chrome 137 及以上版本可能会忽略命令行加载的扩展。</div>
       </div>
     </>

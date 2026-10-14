@@ -128,7 +128,7 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
         <button className="btn" onClick={() => runSpeed(target)} disabled={!!bulk} title={`测速${scope}（每个下载约 5 MB）`}>{bulk === '测速' ? <><ThinkingOrb state="searching" size={20} theme="dark" /> 测速中…</> : <><Icon.bolt s={14} /> 测速{sel.size ? '所选' : ''}</>}</button>
         {sel.size > 0 ? <button className="btn danger" onClick={() => delMany([...sel], '所选代理')}><Icon.trash s={14} /> 删除所选</button>
           : failIds.length > 0 && <button className="btn" onClick={() => delMany(failIds, '全部不可用的代理')}><Icon.trash s={14} /> 清理不可用 ({failIds.length})</button>}
-        <button className="btn" onClick={() => setMihomo(true)} title="连接 Clash Verge / Mihomo，切换节点并作为代理使用"><Icon.server s={15} /> Clash / Mihomo</button>
+        <button className="btn tb-mh" onClick={() => setMihomo(true)} title="Clash / Mihomo：连接 Clash Verge / Mihomo，切换节点并作为代理使用"><Icon.server s={15} /><span>Clash / Mihomo</span></button>
         <button className="btn primary" onClick={() => setImportText('')}><Icon.upload s={15} /> 批量导入</button>
       </div>
 
