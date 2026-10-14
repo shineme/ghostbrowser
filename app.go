@@ -45,6 +45,9 @@ func (a *App) startup(ctx context.Context) {
 	runReg.beforeStop = func(id, ws string) { _ = snapshotSession(a.store.ProfileDir(id), a.store.GetSettings().DeviceID, ws) }
 	a.auto = globalAuto
 	api.start(a.store)
+	if err := mcpSrv.start(a.store, false); err != nil {
+		println("mcp:", err.Error())
+	}
 	// Server-first reconcile on start-up, off the UI thread.
 	go func() { time.Sleep(800 * time.Millisecond); a.auto.Reconcile(); a.auto.WatchGlobal() }()
 	go a.proxyHealthLoop()
@@ -55,6 +58,20 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) ListProfiles() []Profile { return a.store.ListProfiles() }
 
 func (a *App) SaveProfile(p Profile) (Profile, error) {
+	act := "profile.edit"
+	if p.ID == "" {
+		act = "profile.create"
+	}
+	out, err := a.saveProfile(p)
+	id, name := out.ID, out.Name
+	if err != nil {
+		id, name = p.ID, p.Name
+	}
+	a.store.auditNamed("ui", act, id, name, err, "")
+	return out, err
+}
+
+func (a *App) saveProfile(p Profile) (Profile, error) {
 	if p.Fingerprint.UserAgent == "" && needsOpenKernel(p.Fingerprint) {
 		p.Fingerprint = GenerateTyped(p.Fingerprint.DeviceType, p.Fingerprint.OS, a.ChromiumMajor())
 	}
@@ -90,8 +107,13 @@ func (a *App) SaveProfile(p Profile) (Profile, error) {
 
 func (a *App) DeleteProfiles(ids []string) {
 	for _, id := range ids {
+		name := ""
+		if p, ok := a.store.GetProfile(id); ok {
+			name = p.Name
+		}
 		runReg.stop(id)
 		a.store.DeleteProfile(id)
+		a.store.auditNamed("ui", "profile.delete", id, name, nil, "")
 	}
 }
 
@@ -121,7 +143,9 @@ func (a *App) CreateTypedProfiles(prefix, devType, osName string, count int, pro
 				p.Fingerprint = fp
 			}
 		}
-		out = append(out, a.store.PutProfile(p))
+		np := a.store.PutProfile(p)
+		a.store.auditNamed("ui", "profile.create", np.ID, np.Name, nil, devType+"/"+osName)
+		out = append(out, np)
 	}
 	return out
 }
@@ -138,7 +162,9 @@ func (a *App) CloneProfile(id string) (Profile, error) {
 	} else {
 		cp.Fingerprint = a.NewDeviceFingerprint(p.Fingerprint.DeviceType, p.Fingerprint.OS)
 	}
-	return a.store.PutProfile(cp), nil
+	np := a.store.PutProfile(cp)
+	a.store.auditNamed("ui", "profile.clone", np.ID, np.Name, nil, "源: "+p.Name)
+	return np, nil
 }
 
 func (a *App) NewFingerprint(osName string) Fingerprint {
@@ -251,7 +277,9 @@ func (a *App) StartProfile(id string) (*RunState, error) {
 		return rs, nil
 	}
 	a.auto.BeforeLaunch(id)
-	return a.store.Launch(id)
+	rs, err := a.store.Launch(id)
+	a.store.auditProfile("ui", "profile.start", id, err, "")
+	return rs, err
 }
 
 // SyncNow runs the same server-first comparison as start-up.
@@ -272,6 +300,7 @@ func (a *App) Transfers() []TransferEvent { return ActiveTransfers() }
 func (a *App) SyncDecide(pull []string) bool { return a.auto.Decide(pull) }
 
 func (a *App) StopProfile(id string) {
+	a.store.auditProfile("ui", "profile.stop", id, nil, "")
 	if rs, ok := runReg.get(id); ok && strings.HasPrefix(rs.WSURL, "ws") {
 		if closeBrowser(rs.WSURL) == nil {
 			return
@@ -579,3 +608,67 @@ func (a *App) RetrySync(id, action string) error {
 }
 
 func (a *App) SyncBusy() []string { return a.auto.Busy() }
+
+// ---- mcp/audit ----
+
+// McpStatus reports the MCP server state plus ready-to-paste client configs.
+func (a *App) McpStatus() McpStatus { return mcpSrv.status(a.store) }
+
+// StartMcp enables the MCP HTTP server (remembered in mcp.json) on port (0 = keep current).
+func (a *App) StartMcp(port int) (McpStatus, error) {
+	cfg := readMcpConfig(a.store.dir)
+	if port > 0 && port <= 65535 && port != cfg.Port {
+		mcpSrv.stop()
+		cfg.Port = port
+	}
+	cfg.Enabled = true
+	writeMcpConfig(a.store.dir, cfg)
+	err := mcpSrv.start(a.store, true)
+	a.store.auditNamed("ui", "mcp.start", "", "", err, fmt.Sprintf("port %d", cfg.Port))
+	return mcpSrv.status(a.store), err
+}
+
+// StopMcp stops and disables the MCP HTTP server.
+func (a *App) StopMcp() McpStatus {
+	cfg := readMcpConfig(a.store.dir)
+	cfg.Enabled = false
+	writeMcpConfig(a.store.dir, cfg)
+	mcpSrv.stop()
+	a.store.auditNamed("ui", "mcp.stop", "", "", nil, "")
+	return mcpSrv.status(a.store)
+}
+
+func (a *App) AuditLog(f AuditFilter) AuditResult { return a.store.AuditQuery(f) }
+func (a *App) ClearAuditLog()                    { a.store.ClearAudit() }
+
+// ExportAuditLog saves the filtered log (format "csv" or "json") via a save
+// dialog; returns the written path, or "" when the user cancelled.
+func (a *App) ExportAuditLog(f AuditFilter, format string) (string, error) {
+	if format != "json" {
+		format = "csv"
+	}
+	f.Limit = 0
+	items := a.store.AuditQuery(f).Items
+	name := "ghostbrowser-audit-" + time.Now().Format("20060102-150405") + "." + format
+	path, err := wruntime.SaveFileDialog(a.ctx, wruntime.SaveDialogOptions{
+		Title:           "导出操作日志",
+		DefaultFilename: name,
+		Filters:         []wruntime.FileFilter{{DisplayName: strings.ToUpper(format) + " (*." + format + ")", Pattern: "*." + format}},
+	})
+	if err != nil || path == "" {
+		return "", err
+	}
+	if err := os.WriteFile(path, auditExport(items, format), 0o644); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func (a *App) ListGroups() []GroupInfo { return a.store.ListGroups() }
+func (a *App) CreateGroup(name string) (GroupInfo, error) {
+	g, err := a.store.CreateGroup(name)
+	a.store.auditNamed("ui", "group.create", "", name, err, "")
+	return g, err
+}
+func (a *App) ListTags() []TagInfo       { return a.store.ListTags() }
+func (a *App) ListKernels() []KernelInfo { return a.store.ListKernels() }

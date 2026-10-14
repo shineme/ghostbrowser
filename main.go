@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"os"
 	"time"
 
 	"github.com/wailsapp/wails/v2"
@@ -15,6 +16,9 @@ import (
 var assets embed.FS
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--mcp-stdio" {
+		os.Exit(runMcpStdio())
+	}
 	// Create an instance of the app structure
 	app := NewApp()
 

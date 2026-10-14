@@ -108,6 +108,10 @@ func (a *localAPI) start(store *Store) {
 		_, _ = w.Write([]byte(raw))
 	})
 	mux.HandleFunc("/profile/launch-json", a.handleLaunchJSON)
+	mux.HandleFunc("/groups", a.handleGroups)
+	mux.HandleFunc("/group", a.handleCreateGroup)
+	mux.HandleFunc("/tags", a.handleTags)
+	mux.HandleFunc("/kernels", a.handleKernels)
 	mux.HandleFunc("/profile/verify", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			http.Error(w, "POST required", 405)
@@ -197,6 +201,7 @@ func (a *localAPI) handleStart(w http.ResponseWriter, r *http.Request) {
 		globalAuto.BeforeLaunch(id)
 	}
 	rs, err := a.store.Launch(id)
+	a.store.auditProfile("api", "profile.start", id, err, "")
 	if err != nil {
 		writeJSON(w, map[string]any{"status": "error", "error": err.Error()})
 		return
@@ -211,6 +216,42 @@ func (a *localAPI) handleStop(w http.ResponseWriter, r *http.Request) {
 	if id == "" {
 		id = r.URL.Query().Get("uuid")
 	}
+	a.store.auditProfile("api", "profile.stop", id, nil, "")
 	runReg.stop(id)
 	writeJSON(w, map[string]any{"status": "ok"})
+}
+
+// GET /groups, POST /group (?name= or JSON {"name":...}), GET /tags, GET /kernels
+func (a *localAPI) handleGroups(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{"status": "ok", "data": a.store.ListGroups()})
+}
+
+func (a *localAPI) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "POST required", 405)
+		return
+	}
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		var body struct {
+			Name string `json:"name"`
+		}
+		_ = json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&body)
+		name = body.Name
+	}
+	g, err := a.store.CreateGroup(name)
+	a.store.auditNamed("api", "group.create", "", name, err, "")
+	if err != nil {
+		writeJSON(w, map[string]any{"status": "error", "error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"status": "ok", "data": g})
+}
+
+func (a *localAPI) handleTags(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{"status": "ok", "data": a.store.ListTags()})
+}
+
+func (a *localAPI) handleKernels(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{"status": "ok", "data": a.store.ListKernels()})
 }

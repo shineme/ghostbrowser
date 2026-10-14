@@ -52,6 +52,7 @@ func (s *Store) logSync(id, action string, bytes int64, t0 time.Time, err error)
 		e.Name = p.Name
 		e.Ver = p.CloudVer
 	}
+	s.auditNamed("sync", "sync."+action, id, e.Name, err, fmt.Sprintf("%d B, %d ms", bytes, e.Ms))
 	syncLogMu.Lock()
 	defer syncLogMu.Unlock()
 	list := append([]SyncLogEntry{e}, s.readSyncLog()...)

@@ -143,6 +143,7 @@ func (a *App) AssignProxies(profileIDs, proxyIDs []string, mode string) (int, er
 			}
 		}
 		a.store.PutProfile(*p)
+		a.store.auditNamed("ui", "proxy.assign", p.ID, p.Name, nil, p.ProxyID)
 		n++
 	}
 	return n, nil
@@ -172,6 +173,7 @@ func (a *App) SetProfilesGroup(ids []string, group, addTag string) int {
 			}
 		}
 		a.store.PutProfile(*p)
+		a.store.auditNamed("ui", "group.set", p.ID, p.Name, nil, strings.TrimSpace(p.Group+" "+addTag))
 		n++
 	}
 	return n
