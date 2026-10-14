@@ -217,3 +217,26 @@ func TestEnvCheckLive(t *testing.T) {
 		t.Errorf("items = %d", len(r.Items))
 	}
 }
+
+// Firefox profiles never get Chromium-only fixes (noise seed, font list,
+// launch flags), and strict mode pins language / time zone.
+func TestEnvFirefoxNoChromiumFixes(t *testing.T) {
+	p := badProfile()
+	p.Kernel = "firefox"
+	p.Fingerprint.FFStrict = true
+	px := &Proxy{ID: "x", Type: "socks5", Host: "1.2.3.4", Port: 1080, Country: "US"}
+	r := buildEnvReport(envInput{Profile: p, Proxy: px, Exit: usExit, Firefox: true, Now: time.Now(), Clock: ClockReport{Status: "unknown"}})
+	if r.Kernel != "firefox" {
+		t.Fatalf("kernel %s", r.Kernel)
+	}
+	if got := strings.Join(r.Fixable, ","); got != "geo,webrtc" {
+		t.Errorf("firefox fixable = %s", got)
+	}
+	if envFindItem(t, r, "seed").Status != "pass" {
+		t.Error("strict mode randomises canvas")
+	}
+	set, _, skipped := planRepair(p, []string{"seed", "fonts", "webdriver", "language", "webrtc"}, usExit, true, nil)
+	if len(set) != 1 || set["webrtc"] != "proxy" || len(skipped) != 4 {
+		t.Errorf("firefox repair plan %v skipped %v", set, skipped)
+	}
+}

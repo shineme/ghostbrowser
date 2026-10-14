@@ -4,6 +4,7 @@ import { Icon, Field, Toggle, useToast } from './ui';
 import type { EnvStatus } from './EnvSetup';
 import { KernelInstaller } from './KernelInstall';
 import { SessionScopeChips } from './SessionStore';
+import { FirefoxSettingsCard, FoxIcon, useFirefoxInfo } from './FirefoxKernel';
 
 const mb = (b: number) => b ? `${(b / 1048576).toFixed(b > 1e8 ? 0 : 1)} MB` : '';
 
@@ -31,6 +32,7 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
   const pickFolder = async () => { const f = await api.PickFolder(); if (f) set({ profilesDir: f }); };
   const test = async () => { setTesting(true); try { await api.TestSync(); toast('同步服务器连接正常', 'ok'); } catch (e: any) { toast(String(e?.message || e), 'bad'); } finally { setTesting(false); } };
 
+  const [ffInfo] = useFirefoxInfo((s as any).firefoxPath);
   const [envS, setEnvS] = useState<EnvStatus | null>(null);
   useEffect(() => { api.EnvStatus().then((x: any) => setEnvS(x)).catch(() => {}); return () => {}; }, []);
   const recheck = async (force: boolean) => {
@@ -49,6 +51,7 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
         <div className="head"><span className="ic"><Icon.cpu /></span><div><h4>浏览器内核</h4><span>定制 Chromium + 原生指纹模板</span></div></div>
         <div className="choice">
           <button className="on" onClick={() => set({ kernelMode: 'undetectable' })}><b><Icon.layers s={15} />定制 Chromium<span className="radio" /></b><small>本地指纹库 + 原生模板，环境缺失时自动下载安装</small></button>
+          <button className="ff-tile" onClick={() => document.getElementById('ff-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}><b><FoxIcon s={15} />Firefox 内核<span className={`badge ${ffInfo?.path ? 'ok' : 'warn'}`}><span className="d" />{ffInfo ? (ffInfo.path ? ffInfo.version || '已安装' : '未安装') : '检测中…'}</span></b><small>可选：新建环境时在「指纹配置 → 内核」里选择，独立 Firefox 配置目录</small></button>
         </div>
 
         <div className={`geo-card ${envS?.ready ? '' : envS?.phase === 'failed' ? 'bad' : 'warn'}`}>
@@ -88,6 +91,8 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
         <KernelInstaller source={(s as any).kernelSource} url={(s as any).kernelUrl} onInstalled={async path => { const out = await api.SaveSettings({ ...s, chromiumPath: path } as any); setS(out); onSaved(out); }} />
         <div className="sub" style={{ marginTop: 12 }}>指纹通过 CDP 注入，不依赖扩展，Chrome 137 以后的正式版也能用。支持 Chrome 110 及以上，推荐 120 以上的 Chromium 或 Chrome for Testing。UA 里的大版本自动跟随内核。需要保持 GhostBrowser 运行。</div>
       </div>
+
+      <FirefoxSettingsCard index={2} value={(s as any).firefoxPath || ''} onChange={v => set({ firefoxPath: v } as any)} onInstalled={async path => { const out = await api.SaveSettings({ ...s, firefoxPath: path } as any); setS(out); onSaved(out); }} />
 
       <div className="panel pad setting-card spot rise" style={{ ['--i' as any]: 2 }}>
         <div className="head"><span className="ic"><Icon.terminal /></span><div><h4>数据与本地 API</h4><span>供 Puppeteer / Playwright / Selenium 接管</span></div></div>

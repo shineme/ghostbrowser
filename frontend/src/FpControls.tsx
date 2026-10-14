@@ -24,7 +24,7 @@ export const NumberStepper: React.FC<{ value: number; onChange: (v: number) => v
 };
 
 /** One setting row: title + hint on the left, a control on the right, optional body below. */
-const Row: React.FC<{ title: string; hint?: string; tag?: boolean; dim?: boolean; control: React.ReactNode; onClick?: () => void; children?: React.ReactNode }> = ({ title, hint, tag, dim, control, onClick, children }) => (
+export const Row: React.FC<{ title: string; hint?: string; tag?: boolean; dim?: boolean; control: React.ReactNode; onClick?: () => void; children?: React.ReactNode }> = ({ title, hint, tag, dim, control, onClick, children }) => (
   <div className={`fprow ${dim ? 'dim' : ''} ${onClick ? 'click' : ''}`}>
     <div className="fprow-h" onClick={onClick}>
       <div className="fprow-t">
@@ -36,7 +36,7 @@ const Row: React.FC<{ title: string; hint?: string; tag?: boolean; dim?: boolean
     {children && <div className="fprow-b">{children}</div>}
   </div>
 );
-const Sw: React.FC<{ on: boolean; onChange: (v: boolean) => void }> = ({ on, onChange }) => <div className={`sw ${on ? 'on' : ''}`} onClick={() => onChange(!on)} />;
+export const Sw: React.FC<{ on: boolean; onChange: (v: boolean) => void }> = ({ on, onChange }) => <div className={`sw ${on ? 'on' : ''}`} onClick={() => onChange(!on)} />;
 
 // Tri-state noise mode; "" follows the old boolean (same rule as fpMode in chromium_fp.go).
 const mode = (m: string | undefined, old: boolean) => (m === 'off' || m === 'noise' || m === 'real') ? m : old ? 'noise' : 'real';

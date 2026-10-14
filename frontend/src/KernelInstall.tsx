@@ -27,16 +27,17 @@ export function useKernelInstall(onDone?: (p: KernelProgress) => void) {
   return p;
 }
 
-const Stepper: React.FC<{ p: KernelProgress }> = ({ p }) => {
+const FF_STEPS: [KernelProgress['phase'], string][] = [['resolve', '获取地址'], ['download', '下载'], ['verify', '校验'], ['extract', '安装'], ['done', '完成']];
+const Stepper: React.FC<{ p: KernelProgress; steps?: [KernelProgress['phase'], string][] }> = ({ p, steps = STEPS }) => {
   const failed = p.phase === 'error' || p.phase === 'cancelled';
   // On failure, mark the step that was running when it stopped.
   const [stopAt, setStopAt] = useState(0);
-  const cur = STEPS.findIndex(s => s[0] === p.phase);
+  const cur = steps.findIndex(s => s[0] === p.phase);
   useEffect(() => { if (cur >= 0) setStopAt(cur); }, [cur]);
   const at = failed ? stopAt : cur;
   return (
     <div className="ki-steps">
-      {STEPS.map(([k, label], i) => {
+      {steps.map(([k, label], i) => {
         const st = p.phase === 'done' || i < at ? 'ok' : i === at ? (failed ? 'bad' : 'cur') : '';
         return <React.Fragment key={k}>
           {i > 0 && <i className={`ki-line ${i <= at || p.phase === 'done' ? 'on' : ''}`} />}
@@ -47,14 +48,15 @@ const Stepper: React.FC<{ p: KernelProgress }> = ({ p }) => {
   );
 };
 
-export const KernelProgressView: React.FC<{ p: KernelProgress; onCancel: () => void; onRetry: () => void; compact?: boolean }> = ({ p, onCancel, onRetry, compact }) => {
+export const KernelProgressView: React.FC<{ p: KernelProgress; onCancel: () => void; onRetry: () => void; compact?: boolean; product?: string }> = ({ p, onCancel, onRetry, compact, product }) => {
+  const fx = product === 'Firefox';
   const indet = p.running && (p.phase === 'resolve' || p.phase === 'verify' || p.total <= 0);
   const state = p.phase === 'error' ? 'bad' : p.phase === 'done' ? 'ok' : p.phase === 'cancelled' ? 'muted' : 'down';
   const pct = p.phase === 'done' ? 100 : Math.max(0, Math.min(100, p.pct || 0));
-  const title = p.phase === 'done' ? `已安装 Chromium ${p.version || ''}` : p.phase === 'error' ? '安装失败' : p.phase === 'cancelled' ? '已取消' : p.message || '准备中…';
+  const title = p.phase === 'done' ? `已安装 ${product || 'Chromium'} ${p.version || ''}` : p.phase === 'error' ? '安装失败' : p.phase === 'cancelled' ? '已取消' : p.message || '准备中…';
   return (
     <div className={`ki-prog ${state} ${compact ? 'compact' : ''}`}>
-      {!compact && <Stepper p={p} />}
+      {!compact && <Stepper p={p} steps={fx ? FF_STEPS : STEPS} />}
       <div className="ki-top">
         <span className="ki-ic">{p.phase === 'done' ? <Icon.check s={15} /> : p.phase === 'error' ? <Icon.alert s={15} /> : p.phase === 'cancelled' ? <Icon.x s={14} /> : <Icon.download s={15} />}</span>
         <div className="ki-title">
@@ -63,7 +65,7 @@ export const KernelProgressView: React.FC<{ p: KernelProgress; onCancel: () => v
             {p.phase === 'error' ? (p.message || p.error)
               : p.phase === 'done' ? (p.path || '')
               : p.phase === 'cancelled' ? (p.hint || '')
-              : p.revision ? `快照 r${p.revision}${p.resumed ? ' · 断点续传' : ''}` : '正在连接下载源…'}
+              : fx && p.version ? `Firefox ${p.version} · 官方安装包${p.resumed ? ' · 断点续传' : ''}` : p.revision ? `快照 r${p.revision}${p.resumed ? ' · 断点续传' : ''}` : '正在连接下载源…'}
           </span>
         </div>
         {(p.phase === 'download' || p.phase === 'extract') && p.total > 0 && <span className="ki-pct num">{pct < 10 ? pct.toFixed(1) : Math.floor(pct)}%</span>}
@@ -75,8 +77,10 @@ export const KernelProgressView: React.FC<{ p: KernelProgress; onCancel: () => v
       <div className="ki-meta">
         {p.phase === 'download' && p.total > 0
           ? <><span className="num">{fmtBytes(p.done)} / {fmtBytes(p.total)}</span><span>{p.speed > 0 ? <><b className="num">{fmtSpeed(p.speed)}</b>{p.eta > 0 ? ` · 剩余约 ${fmtEta(p.eta)}` : ''}</> : '正在测速…'}</span></>
+          : fx && p.phase === 'extract' ? <><span>正在静默安装到程序数据目录…</span><span>请勿关闭程序</span></>
           : p.phase === 'extract' ? <><span>正在解压 <span className="num">{p.total > 0 ? `${fmtBytes(p.done)} / ${fmtBytes(p.total)}` : ''}</span></span><span>请勿关闭程序</span></>
           : p.phase === 'error' && p.hint ? <span className="ki-hint"><Icon.alert s={12} /> {p.hint}</span>
+          : p.phase === 'done' && fx ? <span>已设为 Firefox 内核，Firefox 环境将用它启动</span>
           : p.phase === 'done' ? <span>已设为默认开源内核，手机 / 平板 / Mac / Linux 环境将用它启动</span>
           : p.running ? <span>{p.message}</span> : null}
       </div>

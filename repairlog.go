@@ -169,6 +169,16 @@ func planRepair(p Profile, items []string, exit GeoMatch, hasProxy bool, rnd *ra
 	var skipped []string
 	put := func(item, field string, v any) { set[field] = v; itemOf[field] = item }
 	for _, it := range items {
+		if p.useFirefox() { // Chromium-only fixes never touch a Firefox profile
+			if it == "seed" || it == "fonts" || it == "webdriver" {
+				skipped = append(skipped, it+"：Firefox 内核不适用")
+				continue
+			}
+			if fp.FFStrict && (it == "language" || it == "timezone") {
+				skipped = append(skipped, it+"：Firefox 严格模式固定为 en-US / UTC")
+				continue
+			}
+		}
 		switch it {
 		case "language":
 			if !exit.OK || exit.Country == "" {
@@ -237,7 +247,7 @@ func (s *Store) RepairEnvironment(id string, items []string) (RepairResult, erro
 		exit = s.liveExit(px, 60*time.Second)
 	}
 	if len(items) == 0 {
-		rep := buildEnvReport(envInput{Profile: *p, Proxy: px, Exit: exit, Chromium: p.useChromium(), Now: time.Now(), Clock: ClockReport{Status: "unknown"}})
+		rep := buildEnvReport(envInput{Profile: *p, Proxy: px, Exit: exit, Chromium: p.useChromium(), Firefox: p.useFirefox(), Now: time.Now(), Clock: ClockReport{Status: "unknown"}})
 		items = rep.Fixable
 	}
 	return s.applyRepair(p, items, exit, px != nil)

@@ -61,6 +61,9 @@ func (s *Store) Launch(id string) (*RunState, error) {
 		return nil, fmt.Errorf("profile not found")
 	}
 	s.rotateBeforeLaunch(p)
+	if p.useFirefox() {
+		return s.launchFirefox(p, s.GetSettings())
+	}
 	if p.useChromium() {
 		return s.launchChromium(p, s.GetSettings())
 	}

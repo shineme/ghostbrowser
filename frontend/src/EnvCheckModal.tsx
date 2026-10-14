@@ -105,7 +105,7 @@ export const EnvCheckModal: React.FC<{ profileId: string; name: string; onClose:
         <div className="dhead">
           <div className="glyph"><Icon.shield s={18} /></div>
           <div className="cdel-h"><h3 title={`环境检测 · ${name}`}>环境检测 · {name}</h3>
-            <div className="sub">{rep ? `${rep.kernel === 'chromium' ? '开源内核' : '定制内核'} · 检测于 ${ago(rep.checkedAt)}` : '对照出口 IP 检查指纹配置的一致性'}</div></div>
+            <div className="sub">{rep ? `${rep.kernel === 'chromium' ? '开源内核' : rep.kernel === 'firefox' ? 'Firefox 内核' : '定制内核'} · 检测于 ${ago(rep.checkedAt)}` : '对照出口 IP 检查指纹配置的一致性'}</div></div>
           <div style={{ marginLeft: 'auto' }}><button className="btn ghost icon" disabled={busy} onClick={() => close()} aria-label="关闭"><Icon.x /></button></div>
         </div>
         <div className="ec-tabs">

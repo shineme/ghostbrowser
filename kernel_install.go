@@ -71,6 +71,7 @@ type kernelInstaller struct {
 	cancel context.CancelFunc
 	emit   func(KernelProgress)
 	last   time.Time
+	label  string // what is downloaded ("" = Chromium 内核); the Firefox installer reuses download()
 }
 
 var kernelInst = &kernelInstaller{st: KernelProgress{Phase: "idle", ETA: -1}}
@@ -403,6 +404,9 @@ func (k *kernelInstaller) download(ctx context.Context, cl *http.Client, u, dest
 	k.patch(true, func(s *KernelProgress) {
 		s.Phase, s.Done, s.Total, s.Resumed, s.Hint, s.Error = "download", have, total, resumed, "", ""
 		s.Message = "正在下载 Chromium 内核…"
+		if k.label != "" {
+			s.Message = "正在下载 " + k.label + "…"
+		}
 		if resumed {
 			s.Message = "正在从断点继续下载…"
 		}

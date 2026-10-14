@@ -226,5 +226,8 @@ func (a *App) FocusProfile(id string) error {
 	if !ok {
 		return fmt.Errorf("环境没有在运行")
 	}
+	if rs.Kernel == "firefox" {
+		return focusFirefox(id)
+	}
 	return focusBrowser(rs.DebugPort, rs.WSURL)
 }

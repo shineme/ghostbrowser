@@ -32,7 +32,7 @@ type EnvItem struct {
 type EnvReport struct {
 	ProfileID   string      `json:"profileId"`
 	ProfileName string      `json:"profileName"`
-	Kernel      string      `json:"kernel"` // custom | chromium
+	Kernel      string      `json:"kernel"` // custom | chromium | firefox
 	CheckedAt   int64       `json:"checkedAt"`
 	Exit        GeoMatch    `json:"exit"`
 	Items       []EnvItem   `json:"items"`
@@ -49,6 +49,7 @@ type envInput struct {
 	Proxy    *Proxy // nil = direct connection
 	Exit     GeoMatch
 	Chromium bool
+	Firefox  bool // Firefox kernel: no Chromium noise seed / font list / launch flags
 	Clock    ClockReport
 	Now      time.Time
 }
@@ -76,7 +77,7 @@ func (s *Store) CheckEnvironment(id string) (EnvReport, error) {
 		return EnvReport{}, fmt.Errorf("环境不存在")
 	}
 	px := profileProxy(s, p)
-	in := envInput{Profile: *p, Proxy: px, Chromium: p.useChromium(), Now: time.Now()}
+	in := envInput{Profile: *p, Proxy: px, Chromium: p.useChromium(), Firefox: p.useFirefox(), Now: time.Now()}
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() { defer wg.Done(); in.Exit = s.liveExit(px, 60*time.Second) }()
@@ -104,6 +105,11 @@ func buildEnvReport(in envInput) EnvReport {
 	add(checkSeed(fp))
 	add(checkUA(fp))
 	add(clockItem(in.Clock))
+
+	if in.Firefox {
+		r.Kernel = "firefox"
+		firefoxEnvItems(&r, fp)
+	}
 
 	for _, it := range r.Items {
 		switch it.Status {
@@ -683,3 +689,36 @@ func randomSeed() int64 {
 }
 
 func parseHTTPDate(d string) (time.Time, error) { return http.ParseTime(d) }
+
+// firefoxEnvItems replaces the Chromium-only checks for a Firefox profile:
+// Firefox has no GhostBrowser noise seed, font list or Chromium launch flags,
+// so none of those fixes apply; strict mode pins language / time zone.
+func firefoxEnvItems(r *EnvReport, fp Fingerprint) {
+	for i := range r.Items {
+		it := &r.Items[i]
+		switch it.Key {
+		case "seed":
+			it.Fixable, it.FixHint, it.Expected = false, "", "严格模式下由 Firefox 随机化"
+			if fp.FFStrict {
+				it.Status, it.Actual, it.Detail = "pass", "严格模式（resistFingerprinting）", "Firefox 严格模式会随机化 Canvas 读取"
+			} else {
+				it.Status, it.Actual, it.Detail = "warn", "Firefox 真实值", "Firefox 内核不注入噪声种子；需要随机化 Canvas 时请在编辑里开启严格模式"
+			}
+		case "fonts":
+			it.Fixable, it.FixHint, it.Expected = false, "", "限制字体可见性"
+			if fp.FFFontVisibility > 0 && fp.FFFontVisibility < 3 {
+				it.Status, it.Actual, it.Detail = "pass", fmt.Sprintf("字体可见性 %d 级", fp.FFFontVisibility), "Firefox 只向网页暴露基础字体"
+			} else {
+				it.Status, it.Actual, it.Detail = "warn", "Firefox 默认", "Firefox 内核不使用字体列表；可在编辑里限制字体可见性"
+			}
+		case "webdriver":
+			it.Fixable, it.FixHint = false, ""
+			it.Status, it.Actual, it.Detail = "pass", "按 Firefox 配置", "Firefox 内核不使用 Chromium 启动参数（按配置判断，未实时读取）"
+		case "language", "timezone":
+			if fp.FFStrict && it.Status != "pass" {
+				it.Fixable, it.FixHint = false, ""
+				it.Detail = strings.TrimSpace(it.Detail + "（Firefox 严格模式固定为 en-US / UTC，关闭严格模式后才能跟随 IP）")
+			}
+		}
+	}
+}
