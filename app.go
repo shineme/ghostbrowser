@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -224,8 +225,8 @@ func (a *App) ChromiumPath() string { return chromiumKernel(a.store.GetSettings(
 // ChromiumMajor is the open-source kernel's Chrome major version (141 when unknown).
 func (a *App) ChromiumMajor() string {
 	if k := chromiumKernel(a.store.GetSettings()); k != "" {
-		if m := chromeMajorFrom(filepath.Dir(k)); m != "" {
-			return m
+		if m := majorOf(kernelVersion(k)); m > 0 {
+			return strconv.Itoa(m)
 		}
 	}
 	return "141"
@@ -526,7 +527,8 @@ func chromeMajorFrom(dir string) string {
 			}
 		}
 	}
-	sort.Strings(vs)
+	// Numeric, not lexical: "99" must not beat "120".
+	sort.Slice(vs, func(i, j int) bool { a, _ := strconv.Atoi(vs[i]); b, _ := strconv.Atoi(vs[j]); return a < b })
 	if len(vs) > 0 {
 		return vs[len(vs)-1]
 	}
@@ -950,3 +952,12 @@ func (a *App) StopSync() SyncerState {
 
 // SyncerState returns the current group-control status.
 func (a *App) SyncerState() SyncerState { return groupSync.State() }
+
+// ---- chromium compat ----
+
+// ChromiumCompat reports the open-source kernel's version and whether it is
+// supported, for the warning on the settings page.
+func (a *App) ChromiumCompat() KernelCompat {
+	k := chromiumKernel(a.store.GetSettings())
+	return kernelCompatFor(k, kernelVersion(k))
+}
