@@ -788,7 +788,12 @@ func (a *App) rpa() *rpaService {
 				return rs.WSURL, nil
 			},
 			stop:      a.StopProfile,
-			emit:      func(e RpaEvent) { wruntime.EventsEmit(a.ctx, "rpa:event", e) },
+			emit: func(e RpaEvent) {
+				// Without a Wails context (tests, headless) EventsEmit would log.Fatal.
+				if a.ctx != nil && a.ctx.Value("events") != nil {
+					wruntime.EventsEmit(a.ctx, "rpa:event", e)
+				}
+			},
 			newDriver: newCDPDriver,
 			cancels:   map[string]context.CancelFunc{},
 		}

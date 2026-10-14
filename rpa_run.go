@@ -88,6 +88,28 @@ type rpaService struct {
 
 	mu      sync.Mutex
 	cancels map[string]context.CancelFunc
+	busy    map[string]string // profile id → run id driving its browser
+}
+
+// claim marks a profile as driven by runID; two runs on one browser would
+// fight over the same tab.
+func (s *rpaService) claim(pid, runID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.busy == nil {
+		s.busy = map[string]string{}
+	}
+	if _, ok := s.busy[pid]; ok {
+		return false
+	}
+	s.busy[pid] = runID
+	return true
+}
+
+func (s *rpaService) release(pid string) {
+	s.mu.Lock()
+	delete(s.busy, pid)
+	s.mu.Unlock()
 }
 
 func (s *rpaService) Run(wfID string, profileIDs []string, opt RpaRunOptions) (string, error) {
@@ -218,6 +240,11 @@ func (s *rpaService) runTarget(ctx context.Context, runID string, wf Workflow, p
 		finish("failed", "环境不存在或已删除", nil)
 		return
 	}
+	if !s.claim(pid, runID) {
+		finish("failed", "这个环境正在运行另一个自动化流程，请等它结束或先停止", nil)
+		return
+	}
+	defer s.release(pid)
 	ws, open := s.session(pid)
 	started := false
 	if !open {
