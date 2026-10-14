@@ -77,6 +77,7 @@ function mcpMockStatus() {
     configStdio: JSON.stringify({ mcpServers: { ghostbrowser: { command: exe, args: ['--mcp-stdio'] } } }, null, 2),
     claudeCodeCl: `claude mcp add --transport http ghostbrowser ${url}` + (keyRequired ? ` --header "X-API-Key: ${key}"` : '') };
 }
+if (!mock.settings.apiKey) mock.settings.apiKey = 'gb_7f3a9c21e84b4d06a5c1f2e9d3b87a40';
 const auditMock = { list: [] as any[] };
 const auditPush = (source: string, action: string, target: string, name: string, error: string, detail: string, time = Date.now()) =>
   auditMock.list.unshift({ id: rid(), time, source, action, target, name, ok: !error, error: error || undefined, detail: detail || undefined });
@@ -90,8 +91,8 @@ if (!location.hash.includes('auditempty')) {
     [5, 'mcp', 'mcp.call', -1, '代理 US Residential 01 连接超时 (10s)', 'assign_proxy {"proxy":"px1","ids":["FB-Ads-02"]} · cursor-vscode 1.7.2'],
     [7, 'ui', 'profile.stop', 0, '', ''],
     [9, 'sync', 'sync.push', 0, '', '24117248 B, 3180 ms'],
-    [12, 'api', 'profile.start', 4, '', 'POST /api/profiles/start · puppeteer'],
-    [12, 'api', 'profile.stop', 4, '', 'POST /api/profiles/stop'],
+    [12, 'api', 'profile.start', 4, '', '/profile/start · puppeteer'],
+    [12, 'api', 'profile.stop', 4, '', '/profile/stop'],
     [18, 'ui', 'proxy.assign', 2, '', 'px2'],
     [18, 'ui', 'proxy.assign', 3, '', 'px2'],
     [25, 'ui', 'group.set', 5, '', '电商 养号'],
@@ -102,20 +103,20 @@ if (!location.hash.includes('auditempty')) {
     [40, 'sync', 'sync.pull', 3, 'sync HTTP 413: Request Entity Too Large', '0 B, 912 ms'],
     [46, 'ui', 'profile.edit', 3, '', ''],
     [52, 'ui', 'profile.clone', 1, '', '源: FB-Ads-01'],
-    [58, 'api', 'profile.start', 2, '内核启动失败：chrome.exe 退出码 0xC0000005', 'POST /api/profiles/start'],
+    [58, 'api', 'profile.start', 2, '内核启动失败：chrome.exe 退出码 0xC0000005', '/profile/start'],
     [64, 'ui', 'mcp.start', -1, '', 'port 25326'],
     [70, 'ui', 'mcp.stop', -1, '', ''],
     [95, 'sync', 'sync.push', 1, '', '81264640 B, 9120 ms'],
     [120, 'ui', 'profile.start', 0, '', ''],
     [135, 'mcp', 'mcp.call', -1, '', 'list_proxies {} · claude-ai 0.9.4'],
     [140, 'mcp', 'profile.edit', 2, '', '分配代理「DE Datacenter」给 2 个环境'],
-    [160, 'api', 'group.create', -1, '', 'POST /api/groups'],
+    [160, 'api', 'group.create', -1, '', '/group'],
     [190, 'ui', 'profile.delete', 5, '', ''],
     [220, 'ui', 'profile.create', 5, '', 'phone/android'],
     [260, 'sync', 'sync.push', 2, 'dial tcp 203.0.113.8:443: i/o timeout', '0 B, 30004 ms'],
     [300, 'mcp', 'mcp.call', -1, 'unknown environment "Shopify-Store-Z"', 'stop_environment {"id":"Shopify-Store-Z"} · claude-ai 0.9.4'],
     [340, 'ui', 'group.create', -1, '', ''],
-    [420, 'api', 'profile.start', 3, '', 'POST /api/profiles/start · playwright'],
+    [420, 'api', 'profile.start', 3, '', '/profile/start · playwright'],
     [500, 'ui', 'profile.edit', 0, '', ''],
     [640, 'sync', 'sync.pull', 0, '', '18874368 B, 2410 ms'],
     [800, 'ui', 'proxy.assign', 1, '', 'px1'],

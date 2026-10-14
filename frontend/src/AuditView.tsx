@@ -106,6 +106,8 @@ const McpCard: React.FC<{ st: McpStatus | null; onChange: (s: McpStatus) => void
   const portBad = port !== '' && (portN < 1 || portN > 65535);
   const changed = !!st && portN > 0 && portN !== st.port;
   const errorText = err || st?.error || '';
+  const [recent, setRecent] = useState<AuditEntry[] | null>(null);
+  usePoll(() => { api.AuditLog({ category: 'mcp', action: 'mcp.call', source: '', target: '', query: '', onlyFail: false, since: 0, limit: 3 } as any).then(r => setRecent((r as any).items || [])).catch(() => setRecent([])); }, 5000);
 
   const start = async () => {
     if (portBad) return;
@@ -155,6 +157,16 @@ const McpCard: React.FC<{ st: McpStatus | null; onChange: (s: McpStatus) => void
         <Icon.alert /><div className="grow"><b>端口 {st?.port} 无法监听</b><div className="sub" title={errorText}>{errorText}</div><div className="sub">通常是端口被其他程序占用，换一个端口（如 {(st?.port || 25326) + 1}）再启动。</div></div>
       </div>}
 
+      {!(errorText && !running) && <div className="au-recent">
+        <div className="au-recent-h">最近调用</div>
+        {recent === null ? <div className="au-recent-e"><ThinkingOrb state="searching" size={20} theme="dark" /></div>
+          : recent.length === 0 ? <div className="au-recent-e">还没有 AI 客户端调用过，复制下方配置即可接入</div>
+          : recent.map(e => { const rest = (e.detail || '').startsWith(e.name) ? (e.detail || '').slice(e.name.length).trim() : e.detail; return (
+            <div key={e.id} className={`au-recent-r ${e.ok ? '' : 'bad'}`} title={[e.error, e.detail].filter(Boolean).join(' · ')}>
+              <i className="d" /><code className="mono">{e.name}</code><span className="a mono">{e.error || rest || ''}</span><span className="t" title={exact(e.time)}>{rel(e.time)}</span>
+            </div>); })}
+      </div>}
+
       <div className="au-metrics">
         <div><span>调用次数</span><b className="num">{running ? (st?.calls ?? 0).toLocaleString() : '—'}</b></div>
         <div><span>最近客户端</span><b title={st?.lastClient}>{running && st?.lastClient ? st.lastClient : '—'}</b></div>
@@ -191,9 +203,14 @@ const ApiCard: React.FC<{ settings: Settings | null; keyRequired: boolean; revea
         <button className="btn ghost icon sm" title={reveal ? '隐藏' : '显示'} disabled={!key} onClick={() => setReveal(!reveal)}><Eye off={reveal} /></button>
         <button className="btn ghost icon sm" title="复制 Key" disabled={!key} onClick={() => { copyText(key); toast('已复制 API Key'); }}><Icon.copy s={14} /></button>
       </div>
+      <div className="au-code cli au-sample">
+        <pre className="mono"><span className="pr">$ </span>curl http://{addr}/list{keyRequired ? <> -H "X-API-Key: {key ? (reveal ? key : mask(key)) : '…'}"</> : null}</pre>
+        <button className="btn sm au-copy" onClick={() => { copyText(`curl http://${addr}/list` + (keyRequired ? ` -H "X-API-Key: ${key}"` : '')); toast('已复制示例命令'); }}><Icon.copy s={13} /> 复制</button>
+      </div>
+      <div className="au-hint">返回全部环境；<code className="mono">/profile/start?id=</code> 启动后得到 CDP 地址供自动化框架接管。</div>
       <div className="au-foot">
         {keyRequired ? <span className="badge ok"><Icon.lock />需要 API Key</span> : <span className="badge warn"><Icon.alert />未要求 Key</span>}
-        <span className="sub grow">{keyRequired ? '本地 API 与 MCP 共用这个 Key' : '本机任何程序都能直接调用'}</span>
+        <span className="sub grow">{keyRequired ? '与 MCP 共用' : '本机程序可直接调用'}</span>
         <button className="btn sm ghost" onClick={goSettings}><Icon.settings s={13} /> 在设置中管理</button>
       </div>
     </div>
@@ -247,7 +264,7 @@ const ToolsCard: React.FC<{ st: McpStatus | null }> = ({ st }) => {
       {!st ? <div className="au-code-load"><ThinkingOrb state="searching" size={20} theme="dark" /></div>
         : tools.length === 0 ? <div className="sub">没有可用工具</div>
         : <div className="au-chips">{tools.map((t: string) => <span key={t} className={`au-tool ${read(t) ? 'ro' : 'rw'}`} title={`${TOOLS[t] || t}${read(t) ? '（只读）' : '（会修改数据，记入操作日志）'}`}>
-          <b>{TOOLS[t] || t}</b><code className="mono">{t}</code>
+          <b>{TOOLS[t] || t}</b><span className="mono">{t}</span>
         </span>)}</div>}
       <div className="au-legend"><span><i className="ro" />只读</span><span><i className="rw" />会修改数据</span></div>
     </div>
@@ -310,7 +327,7 @@ const AuditLog: React.FC<{ profiles: Profile[] }> = ({ profiles }) => {
         </div>
       ) : <>
         <div className="toolbar au-toolbar">
-          <div className="search"><Icon.search /><input type="text" placeholder="搜索环境名 / 工具 / 错误信息 / 详情" value={q} onChange={e => setQ(e.target.value)} /></div>
+          <div className="search"><Icon.search /><input type="text" placeholder="搜索环境 / 工具 / 错误" value={q} onChange={e => setQ(e.target.value)} /></div>
           <Pick label="分类" value={cat} onChange={setCat} icon={<Icon.layers />}
             options={[['', '全部分类', all], ...cats.map(([c, n]) => [c, CATS[c] || c, n] as [string, string, number])]} />
           <Pick label="来源" value={src} onChange={setSrc} icon={<Icon.server />}
@@ -354,6 +371,7 @@ const Row: React.FC<{ e: AuditEntry; i: number; p?: Profile }> = ({ e, i, p }) =
   const cat = e.action.split('.')[0];
   const I = Icon[CAT_IC[cat] || 'bolt'];
   const s = SRC[e.source] || [e.source, e.source, 'local'];
+  const det = e.action === 'mcp.call' && e.detail && e.name && e.detail.startsWith(e.name) ? e.detail.slice(e.name.length).trim() : e.detail;
   const detail = [e.error, e.detail].filter(Boolean).join(' · ');
   let obj: React.ReactNode;
   if (e.action === 'mcp.call') obj = <span className="au-obj"><code className="mono au-toolname" title={TOOLS[e.name] || ''}>{e.name || '—'}</code></span>;
@@ -369,7 +387,7 @@ const Row: React.FC<{ e: AuditEntry; i: number; p?: Profile }> = ({ e, i, p }) =
       <td><span className={`au-act c-${cat}`}><span className="ai"><I s={13} /></span>{actionLabel(e.action)}</span></td>
       <td>{obj}</td>
       <td>{e.ok ? <span className="badge ok"><i className="d" />成功</span> : <span className="badge fail" title={e.error}><i className="d" />失败</span>}</td>
-      <td className="au-detail" title={detail}>{e.error && <span className="err">{e.error}</span>}{e.error && e.detail && <span className="sep"> · </span>}{e.detail ? <span className="mono">{e.detail}</span> : !e.error && <span className="sub">—</span>}</td>
+      <td className="au-detail" title={detail}>{e.error && <span className="err">{e.error}</span>}{e.error && det && <span className="sep"> · </span>}{det ? <span className="mono">{det}</span> : !e.error && <span className="sub">—</span>}</td>
     </tr>
   );
 };
