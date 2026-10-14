@@ -147,7 +147,7 @@ export const LaunchPane: React.FC<{ fp: FP; setFP: SetFP; open: boolean }> = ({ 
     <div className={`field ${t ? 'dimf' : ''}`}>
       <textarea className="mono" value={fp.startupParameters || ''} onChange={e => setFP({ startupParameters: e.target.value })} placeholder={'--lang=en-US\n--disable-features=Translate'} spellCheck={false} />
       <span className="hint">每行或空格分隔一个 Chromium 参数，同名参数会覆盖默认值。{t && <span className="ktag">仅开源内核</span>}</span>
-      <div className="flagnote"><Icon.lock s={12} /><span>由 GhostBrowser 管理、填写会被忽略：</span>{BLOCKED.map(b => <code key={b}>{b}</code>)}</div>
+      <div className="flagnote"><Icon.lock s={12} /><span>以下参数由程序接管，会被忽略：</span>{BLOCKED.map(b => <code key={b}>{b}</code>)}</div>
     </div>
   </>;
 };
