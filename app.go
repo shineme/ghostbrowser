@@ -955,9 +955,15 @@ func (a *App) SyncerState() SyncerState { return groupSync.State() }
 
 // ---- chromium compat ----
 
-// ChromiumCompat reports the open-source kernel's version and whether it is
-// supported, for the warning on the settings page.
-func (a *App) ChromiumCompat() KernelCompat {
-	k := chromiumKernel(a.store.GetSettings())
+// ChromiumCompat reports an open-source kernel's version and whether it is
+// supported, for the warning on the settings page. path is the (possibly
+// unsaved) value of the path field; "" checks the auto-detected kernel.
+func (a *App) ChromiumCompat(path string) KernelCompat {
+	st := a.store.GetSettings()
+	st.ChromiumPath = path
+	k := chromiumKernel(st)
+	if p := strings.Trim(strings.TrimSpace(path), "\""); p != "" && k != p {
+		return KernelCompat{Path: p, Level: "missing", Message: "找不到这个文件，将改用自动检测到的内核"}
+	}
 	return kernelCompatFor(k, kernelVersion(k))
 }

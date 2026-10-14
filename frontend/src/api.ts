@@ -419,6 +419,14 @@ const M = {
   MihomoSelect: async (group: string, node: string) => { await wait(250); const g = mihomoMock.groups.find(x => x.name === group); if (!g) throw '策略组不存在'; if (g.type !== 'Selector') throw `${g.type} 策略组会自动选择节点，不能手动切换`; g.now = node; },
   MihomoTestDelay: async (node: string): Promise<number> => { await wait(400 + Math.random() * 900); const n = mihomoMock.nodes.find(x => x.name === node); if (n && /过期|故障/.test(n.name)) { n.alive = false; n.delay = 0; throw '测速超时（5 秒）'; } const d = 60 + Math.round(Math.random() * 420); if (n) { n.delay = d; n.alive = true; } return d; },
   MihomoAddProxy: async (): Promise<any> => { await wait(400); const s = mihomoMock.status; const ex = mock.proxies.find(p => p.host === s.listenHost && p.port === s.listenPort); if (ex) return ex; const p = { id: rid(), name: `Mihomo · ${s.listenHost}:${s.listenPort}`, type: s.listenKind === 'socks' ? 'socks5' : 'http', host: s.listenHost, port: s.listenPort, user: '', pass: '', tag: 'mihomo', changeIpUrl: '', status: 'unknown' }; mock.proxies.push(p); return p; },
+  // ---- chromium compat ----
+  ChromiumCompat: async (path: string) => {
+    const p = path || mock.settings.chromiumPath || 'C:\\Program Files\\Chromium\\Application\\chrome.exe';
+    if (/google[\\/]chrome[\\/]application/i.test(p)) return { path: p, version: '141.0.7390.122', major: 141, level: 'warn', message: '品牌版 Google Chrome 141 不再支持命令行加载扩展：扩展中心分配的扩展不会生效（指纹不受影响）。需要扩展请改用 Chromium 或 Chrome for Testing' };
+    if (/1[01]\d\./.test(p)) return { path: p, version: '115.0.5790.170', major: 115, level: 'warn', message: 'Chrome 115 可以使用，但新标签页会多加载一次以注入指纹，建议升级到 120 以上' };
+    if (/old|10\d\./i.test(p)) return { path: p, version: '104.0.5112.79', major: 104, level: 'unsupported', message: 'Chrome 104 版本过旧，不受支持：需要 110 及以上，推荐 120 以上' };
+    return { path: p, version: '141.0.7390.122', major: 141, level: 'ok', message: '' };
+  },
 };
 
 export const api: typeof M = inWails ? (Go as any) : M;
