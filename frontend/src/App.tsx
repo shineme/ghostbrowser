@@ -321,7 +321,7 @@ const ProfilesView: React.FC<{
                       {(p as any).shareId ? <button className="btn ghost icon" title="共享环境的配置为只读" disabled><Icon.edit s={15} /></button>
                         : <button className="btn ghost icon" title="编辑" onClick={() => { setEditing(p); setDrawer(true); }}><Icon.edit s={15} /></button>}
                       {!(p as any).shareId && <button className="btn ghost icon" title="分享给其他用户" onClick={() => setShareP(p)}><ShIc.share s={15} /></button>}
-                      <button className="btn ghost icon" title="复制" onClick={() => clone(p)}><Icon.copy s={15} /></button>
+                      {!(p as any).shareId && <button className="btn ghost icon" title="复制" onClick={() => clone(p)}><Icon.copy s={15} /></button>}
                       <button className="btn ghost icon danger" title="删除" onClick={() => del([p.id])}><Icon.trash s={15} /></button>
                     </span>
                   </div>

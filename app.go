@@ -154,6 +154,9 @@ func (a *App) CloneProfile(id string) (Profile, error) {
 	if !ok {
 		return Profile{}, errf("profile not found")
 	}
+	if p.ShareID != "" { // share: received copies cannot be duplicated
+		return Profile{}, fmt.Errorf("共享给你的环境不能复制")
+	}
 	cp := *p
 	cp.ID, cp.Name, cp.CloudVer, cp.SyncedAt, cp.Storage = "", p.Name+" (copy)", 0, 0, "local"
 	if cp.Native != nil {
