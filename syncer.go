@@ -3,14 +3,20 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
-// Group control ("同步器"): what the user does in the master browser's
-// current tab is replayed in every follower's tab.
+// Group control ("多窗口同步器"): what the user does in any tab of the master
+// browser is replayed in the matching tab of every follower. Tabs are mapped
+// master targetId -> follower targetId: a new tab, a tab switch and a closed
+// tab in the master are mirrored (when tab sync is on), and every captured
+// event goes to the follower tab mapped to the master tab it came from.
+// Per-type toggles (click/input/key/scroll/tabs) and a random per-follower
+// delay range can be changed while running (SyncOptions).
 //
 // Capture: a small script runs in an isolated world of the master tab
 // (Page.addScriptToEvaluateOnNewDocument with worldName, so the page's own
@@ -27,11 +33,13 @@ import (
 
 // SyncFollowerState is one follower in SyncerState.
 type SyncFollowerState struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	OK     bool   `json:"ok"`
-	Events int64  `json:"events"`
-	Error  string `json:"error,omitempty"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	OK        bool   `json:"ok"`
+	Events    int64  `json:"events"`
+	Error     string `json:"error,omitempty"`
+	LatencyMs int64  `json:"latencyMs"` // capture -> replayed, last event (includes the random delay)
+	Tabs      int    `json:"tabs"`      // master tabs mapped to a tab of this follower
 }
 
 // SyncerState is the syncer status emitted as "syncer:event".
@@ -44,6 +52,8 @@ type SyncerState struct {
 	LastEvent  string              `json:"lastEvent"` // click|scroll|key|text|select|nav
 	StartedAt  int64               `json:"startedAt"`
 	Reason     string              `json:"reason,omitempty"` // why it stopped / last problem
+	Options    SyncOptions         `json:"options"`
+	Tabs       int                 `json:"tabs"` // master's open tabs
 }
 
 // syncEvent is one captured action (shared shape from the capture script).
@@ -67,6 +77,10 @@ type syncEvent struct {
 	S     string  `json:"s,omitempty"`
 	Value string  `json:"value,omitempty"`
 	URL   string  `json:"url,omitempty"`
+
+	tab    string    // master targetId the event came from (tab events: the tab concerned)
+	at     time.Time // when Go received it; replay delay is measured from here
+	opener bool      // tabnew: opened by the page (link/window.open), not by the user
 }
 
 const syncWorld = "__gb_sync"
@@ -142,46 +156,130 @@ func syncCaptureScript() string {
 }
 
 // syncDrainExpr installs the capture script if this world doesn't have it yet
-// and returns (and clears) the queued events as a JSON string.
+// and returns "v|" or "h|" (tab visible = active, or hidden) followed by the
+// queued events as JSON (empty when none), clearing the queue.
 func syncDrainExpr() string {
-	return `(() => { ` + syncCaptureScript() + ` const q = window.__gbq || []; window.__gbq = []; window.__gbLast = Date.now(); return q.length ? JSON.stringify(q) : ''; })()`
+	return `(() => { ` + syncCaptureScript() + ` const q = window.__gbq || []; window.__gbq = []; window.__gbLast = Date.now(); return (document.visibilityState === 'visible' ? 'v|' : 'h|') + (q.length ? JSON.stringify(q) : ''); })()`
 }
 
 func jsStr(s string) string { b, _ := json.Marshal(s); return string(b) }
 
-type syncFollower struct {
-	id, name string
-	conn     *cdpConn
-	sid      string
-	tid      string
-	q        chan syncEvent
-	events   int64
-	ok       bool
-	err      string
+// ---------- options ----------
+
+// SyncOptions are the syncer's per-type switches and the random replay delay.
+// They can be changed while the syncer runs (SetOptions).
+type SyncOptions struct {
+	Click    bool `json:"click"`    // 同步点击 (left/right/middle clicks)
+	Input    bool `json:"input"`    // 同步输入 (typed text, IME, paste, <select>)
+	Key      bool `json:"key"`      // 同步按键 (Enter, Backspace, arrows, shortcuts)
+	Scroll   bool `json:"scroll"`   // 同步滚动 (mouse wheel)
+	Tabs     bool `json:"tabs"`     // 同步标签页 (new / switch / close tab)
+	DelayMin int  `json:"delayMin"` // ms, random delay per follower per event
+	DelayMax int  `json:"delayMax"`
+}
+
+const syncMaxDelay = 10000
+
+func defaultSyncOptions() SyncOptions {
+	return SyncOptions{Click: true, Input: true, Key: true, Scroll: true, Tabs: true}
+}
+
+// norm clamps the delay range to 0..10 s and orders it.
+func (o SyncOptions) norm() SyncOptions {
+	o.DelayMin, o.DelayMax = clampI(o.DelayMin, 0, syncMaxDelay), clampI(o.DelayMax, 0, syncMaxDelay)
+	if o.DelayMin > o.DelayMax {
+		o.DelayMin, o.DelayMax = o.DelayMax, o.DelayMin
+	}
+	return o
+}
+
+// allows reports whether an event type is synced under these options.
+// Navigation of a mapped tab is always followed.
+func (o SyncOptions) allows(t string) bool {
+	switch t {
+	case "click":
+		return o.Click
+	case "scroll":
+		return o.Scroll
+	case "text", "select":
+		return o.Input
+	case "key":
+		return o.Key
+	case "tabnew", "tabswitch", "tabclose":
+		return o.Tabs
+	}
+	return true
+}
+
+// sampleDelay draws a uniform delay in [min, max] ms.
+func sampleDelay(o SyncOptions, r *rand.Rand) time.Duration {
+	o = o.norm()
+	d := o.DelayMin
+	if o.DelayMax > o.DelayMin {
+		d += r.Intn(o.DelayMax - o.DelayMin + 1)
+	}
+	return time.Duration(d) * time.Millisecond
+}
+
+// ---------- state ----------
+
+// fTab is a follower tab with its attached session.
+type fTab struct {
+	tid, sid string
 	ctx      int // isolated world execution context, 0 = none yet
 }
 
-type syncer struct {
-	mu        sync.Mutex
-	running   bool
-	master    string
-	mname     string
-	mconn     *cdpConn
-	msid      string
-	mctx      int // master isolated-world context the poller drains
-	followers []*syncFollower
-	events    int64
-	last      string
-	started   int64
-	reason    string
-	stop      chan struct{}
-	stopOnce  sync.Once
-	emit      func(SyncerState)
-	lastEmit  time.Time
-	emitTimer *time.Timer
+type syncFollower struct {
+	id, name string
+	conn     *cdpConn
+	q        chan syncEvent
+	events   int64
+	latency  int64
+	ok       bool
+	err      string
+
+	mu     sync.Mutex
+	tabs   map[string]string // master targetId -> follower targetId
+	sess   map[string]*fTab  // follower targetId -> session
+	gone   map[string]bool   // follower targets already destroyed
+	opened chan string       // follower tabs opened by a page, not yet mapped
+	cur    *fTab             // tab the event being applied goes to
+	rnd    *rand.Rand
+	next   time.Time // replay schedule keeps events in order
 }
 
-var groupSync = &syncerHolder{}
+// masterTab is one tab of the master browser being captured.
+type masterTab struct {
+	tid, sid string
+	ctx      int
+}
+
+type syncer struct {
+	mu         sync.Mutex
+	running    bool
+	master     string
+	mname      string
+	mconn      *cdpConn
+	mtabs      map[string]*masterTab // by targetId, in attach order (see order)
+	order      []string
+	mgone      map[string]bool
+	active     string // master's active (visible) tab
+	opts       SyncOptions
+	tabsPaused int32 // >0 while a tab action runs: tab events are not mirrored
+	followers  []*syncFollower
+	events     int64
+	last       string
+	started    int64
+	reason     string
+	stop       chan struct{}
+	stopOnce   sync.Once
+	emit       func(SyncerState)
+	lastEmit   time.Time
+	emitTimer  *time.Timer
+	ctl        chan cdpMsg // master Target.* events, handled in order by one goroutine
+}
+
+var groupSync = &syncerHolder{opts: defaultSyncOptions()}
 
 // syncerHolder owns the single active syncer and the emit callback.
 type syncerHolder struct {
@@ -189,20 +287,50 @@ type syncerHolder struct {
 	cur  *syncer
 	emit func(SyncerState)
 	prev SyncerState
+	opts SyncOptions // options for the next start (and the running syncer)
 }
 
 func (h *syncerHolder) State() SyncerState {
 	h.mu.Lock()
 	s := h.cur
 	prev := h.prev
+	opts := h.opts
 	h.mu.Unlock()
 	if s == nil {
 		if prev.Followers == nil {
 			prev.Followers = []SyncFollowerState{}
 		}
+		prev.Running = false
+		prev.Options = opts
 		return prev
 	}
 	return s.state()
+}
+
+// Options returns the current sync options.
+func (h *syncerHolder) Options() SyncOptions {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.opts
+}
+
+// SetOptions changes the options, also for a running syncer (applies to the
+// next captured event).
+func (h *syncerHolder) SetOptions(o SyncOptions) SyncerState {
+	o = o.norm()
+	h.mu.Lock()
+	h.opts = o
+	s := h.cur
+	h.mu.Unlock()
+	if s != nil {
+		s.mu.Lock()
+		s.opts = o
+		s.mu.Unlock()
+		st := s.state()
+		s.emit(st)
+		return st
+	}
+	return h.State()
 }
 
 func (h *syncerHolder) Stop(reason string) {
@@ -214,7 +342,22 @@ func (h *syncerHolder) Stop(reason string) {
 	}
 }
 
-// Start begins syncing master's current tab to followers' current tabs.
+// running returns the active syncer, or nil.
+func (h *syncerHolder) running() *syncer {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.cur != nil {
+		h.cur.mu.Lock()
+		run := h.cur.running
+		h.cur.mu.Unlock()
+		if run {
+			return h.cur
+		}
+	}
+	return nil
+}
+
+// Start begins syncing master's tabs to followers' tabs.
 // wsOf returns the browser websocket of a running profile, name its display name.
 func (h *syncerHolder) Start(master string, followers []string, wsOf func(string) (string, bool), name func(string) string) (SyncerState, error) {
 	h.Stop("restart")
@@ -222,7 +365,8 @@ func (h *syncerHolder) Start(master string, followers []string, wsOf func(string
 	if !ok {
 		return SyncerState{}, fmt.Errorf("主控环境没有在运行")
 	}
-	s := &syncer{master: master, mname: name(master), stop: make(chan struct{}), started: time.Now().UnixMilli(), followers: []*syncFollower{}}
+	s := &syncer{master: master, mname: name(master), stop: make(chan struct{}), started: time.Now().UnixMilli(), followers: []*syncFollower{},
+		mtabs: map[string]*masterTab{}, mgone: map[string]bool{}, ctl: make(chan cdpMsg, 256), opts: h.Options()}
 	h.mu.Lock()
 	s.emit = func(st SyncerState) {
 		h.mu.Lock()
@@ -271,6 +415,9 @@ func (h *syncerHolder) Start(master string, followers []string, wsOf func(string
 		}
 		return SyncerState{}, fmt.Errorf("连接主控环境失败：%v", err)
 	}
+	for _, f := range s.followers {
+		s.mapTabs(f)
+	}
 	if len(ferrs) > 0 {
 		s.reason = "部分环境未加入：" + strings.Join(ferrs, "；")
 	}
@@ -281,31 +428,72 @@ func (h *syncerHolder) Start(master string, followers []string, wsOf func(string
 	for _, f := range s.followers {
 		go s.replay(f)
 	}
+	go s.poll()
+	go s.control()
 	st := s.state()
 	s.emit(st)
 	return st, nil
 }
 
+// ---------- tabs ----------
+
+type pageTab struct {
+	TargetID string `json:"targetId"`
+	Type     string `json:"type"`
+	URL      string `json:"url"`
+	Title    string `json:"title"`
+	OpenerID string `json:"openerId"`
+}
+
+// isPageTab: a normal tab (not DevTools, not browser UI).
+func isPageTab(t pageTab) bool {
+	return t.Type == "page" && !strings.HasPrefix(t.URL, "devtools://")
+}
+
+// pageTabs lists a browser's normal tabs in creation order.
+func pageTabs(c *cdpConn) ([]pageTab, error) {
+	raw, err := c.call("", "Target.getTargets", nil)
+	if err != nil {
+		return nil, err
+	}
+	var tl struct {
+		TargetInfos []pageTab `json:"targetInfos"`
+	}
+	_ = json.Unmarshal(raw, &tl)
+	out := []pageTab{}
+	for _, t := range tl.TargetInfos {
+		if isPageTab(t) {
+			out = append(out, t)
+		}
+	}
+	return out, nil
+}
+
 // firstPageTarget returns the first normal page tab of a browser.
 func firstPageTarget(c *cdpConn) (string, string, error) {
-	raw, err := c.call("", "Target.getTargets", nil)
+	tabs, err := pageTabs(c)
 	if err != nil {
 		return "", "", err
 	}
-	var tl struct {
-		TargetInfos []struct {
-			TargetID string `json:"targetId"`
-			Type     string `json:"type"`
-			URL      string `json:"url"`
-		} `json:"targetInfos"`
+	if len(tabs) == 0 {
+		return "", "", fmt.Errorf("浏览器没有打开的标签页")
 	}
-	_ = json.Unmarshal(raw, &tl)
-	for _, t := range tl.TargetInfos {
-		if t.Type == "page" && !strings.HasPrefix(t.URL, "devtools://") {
-			return t.TargetID, t.URL, nil
-		}
+	return tabs[0].TargetID, tabs[0].URL, nil
+}
+
+func attachTarget(c *cdpConn, tid string) (string, error) {
+	raw, err := c.call("", "Target.attachToTarget", map[string]any{"targetId": tid, "flatten": true})
+	if err != nil {
+		return "", err
 	}
-	return "", "", fmt.Errorf("浏览器没有打开的标签页")
+	var at struct {
+		SessionID string `json:"sessionId"`
+	}
+	_ = json.Unmarshal(raw, &at)
+	if at.SessionID == "" {
+		return "", fmt.Errorf("无法连接标签页")
+	}
+	return at.SessionID, nil
 }
 
 func attachPage(c *cdpConn) (tid, sid string, err error) {
@@ -313,69 +501,196 @@ func attachPage(c *cdpConn) (tid, sid string, err error) {
 	if err != nil {
 		return
 	}
-	raw, err := c.call("", "Target.attachToTarget", map[string]any{"targetId": tid, "flatten": true})
+	sid, err = attachTarget(c, tid)
+	return
+}
+
+// tabVisible reports document.visibilityState == "visible" for a session
+// (the active tab of a non-minimised window).
+func tabVisible(c *cdpConn, sid string) bool {
+	raw, err := c.call(sid, "Runtime.evaluate", map[string]any{"expression": "document.visibilityState", "returnByValue": true})
 	if err != nil {
-		return
+		return false
 	}
-	var at struct {
-		SessionID string `json:"sessionId"`
+	var r struct {
+		Result struct {
+			Value string `json:"value"`
+		} `json:"result"`
 	}
-	_ = json.Unmarshal(raw, &at)
-	if at.SessionID == "" {
-		err = fmt.Errorf("无法连接标签页")
-	}
-	return tid, at.SessionID, err
+	_ = json.Unmarshal(raw, &r)
+	return r.Result.Value == "visible"
 }
 
 func attachFollower(id, name, ws string) (*syncFollower, error) {
-	c, err := dialCDP(ws, nil)
+	f := &syncFollower{id: id, name: name, q: make(chan syncEvent, 512), ok: true, tabs: map[string]string{}, sess: map[string]*fTab{},
+		gone: map[string]bool{}, opened: make(chan string, 16), rnd: rand.New(rand.NewSource(time.Now().UnixNano() ^ int64(len(id))<<40 ^ int64(rand.Int63())))}
+	c, err := dialCDP(ws, f.onEvent)
 	if err != nil {
 		return nil, err
 	}
-	tid, sid, err := attachPage(c)
+	f.conn = c
+	tabs, err := pageTabs(c)
+	if err == nil && len(tabs) == 0 {
+		err = fmt.Errorf("浏览器没有打开的标签页")
+	}
+	if err == nil {
+		_, err = c.call("", "Target.setDiscoverTargets", map[string]any{"discover": true})
+	}
 	if err != nil {
 		c.c.Close()
 		return nil, err
 	}
-	return &syncFollower{id: id, name: name, conn: c, sid: sid, tid: tid, q: make(chan syncEvent, 512), ok: true}, nil
+	return f, nil
 }
+
+func (f *syncFollower) onEvent(m cdpMsg) {
+	var p struct {
+		TargetInfo pageTab `json:"targetInfo"`
+		TargetID   string  `json:"targetId"`
+	}
+	_ = json.Unmarshal(m.Params, &p)
+	switch m.Method {
+	case "Target.targetCreated":
+		if isPageTab(p.TargetInfo) && p.TargetInfo.OpenerID != "" {
+			select {
+			case f.opened <- p.TargetInfo.TargetID:
+			default:
+			}
+		}
+	case "Target.targetDestroyed":
+		f.mu.Lock()
+		f.gone[p.TargetID] = true
+		delete(f.sess, p.TargetID)
+		for m, t := range f.tabs {
+			if t == p.TargetID {
+				delete(f.tabs, m)
+			}
+		}
+		f.mu.Unlock()
+	}
+}
+
+// session returns (attaching on first use) the session of a follower tab.
+func (f *syncFollower) session(tid string) (*fTab, error) {
+	f.mu.Lock()
+	t := f.sess[tid]
+	f.mu.Unlock()
+	if t != nil {
+		return t, nil
+	}
+	sid, err := attachTarget(f.conn, tid)
+	if err != nil {
+		return nil, err
+	}
+	t = &fTab{tid: tid, sid: sid}
+	f.mu.Lock()
+	f.sess[tid] = t
+	f.mu.Unlock()
+	return t, nil
+}
+
+// activeOf picks the visible tab of a list of sessions (fallback: first).
+func activeOf(c *cdpConn, tabs []pageTab) string {
+	for _, t := range tabs {
+		sid, err := attachTarget(c, t.TargetID)
+		if err != nil {
+			continue
+		}
+		v := tabVisible(c, sid)
+		_, _ = c.call("", "Target.detachFromTarget", map[string]any{"sessionId": sid})
+		if v {
+			return t.TargetID
+		}
+	}
+	if len(tabs) > 0 {
+		return tabs[0].TargetID
+	}
+	return ""
+}
+
+// mapTabs (re)builds a follower's tab mapping: the master's active tab goes
+// to the follower's active tab, the remaining tabs pair up in creation order.
+func (s *syncer) mapTabs(f *syncFollower) {
+	tabs, err := pageTabs(f.conn)
+	if err != nil {
+		return
+	}
+	s.mu.Lock()
+	order := append([]string(nil), s.order...)
+	active := s.active
+	s.mu.Unlock()
+	fact := activeOf(f.conn, tabs)
+	m := map[string]string{}
+	used := map[string]bool{}
+	if active != "" && fact != "" {
+		m[active], used[fact] = fact, true
+	}
+	i := 0
+	for _, mt := range order {
+		if _, ok := m[mt]; ok {
+			continue
+		}
+		for i < len(tabs) && used[tabs[i].TargetID] {
+			i++
+		}
+		if i >= len(tabs) {
+			break
+		}
+		m[mt], used[tabs[i].TargetID] = tabs[i].TargetID, true
+		i++
+	}
+	f.mu.Lock()
+	f.tabs = m
+	f.mu.Unlock()
+	for {
+		select {
+		case <-f.opened:
+			continue
+		default:
+		}
+		break
+	}
+}
+
+// ---------- master ----------
 
 func (s *syncer) attachMaster(ws string) error {
 	c, err := dialCDP(ws, s.onMasterEvent)
 	if err != nil {
 		return err
 	}
-	_, sid, err := attachPage(c)
+	s.mconn = c
+	tabs, err := pageTabs(c)
+	if err == nil && len(tabs) == 0 {
+		err = fmt.Errorf("浏览器没有打开的标签页")
+	}
+	if err == nil {
+		_, err = c.call("", "Target.setDiscoverTargets", map[string]any{"discover": true})
+	}
 	if err != nil {
 		c.c.Close()
 		return err
 	}
-	s.mconn, s.msid = c, sid
-	// Runtime bindings only report calls while the Runtime domain is enabled,
-	// and Runtime.enable is detectable by pages, so events are queued inside
-	// the isolated world and drained by polling with Runtime.evaluate (which
-	// works without Runtime.enable). The new-document script makes capture
-	// start before page scripts run on every navigation.
-	for _, st := range []struct {
-		m string
-		p map[string]any
-	}{
-		{"Page.enable", nil},
-		{"Page.addScriptToEvaluateOnNewDocument", map[string]any{"source": syncCaptureScript(), "worldName": syncWorld, "runImmediately": true}},
-	} {
-		if _, err := c.call(sid, st.m, st.p); err != nil {
-			c.c.Close()
-			return err
+	for _, t := range tabs {
+		mt, err := s.attachMasterTab(t.TargetID)
+		if err != nil {
+			continue
+		}
+		s.mu.Lock()
+		s.mtabs[t.TargetID] = mt
+		s.order = append(s.order, t.TargetID)
+		s.mu.Unlock()
+		if s.active == "" && tabVisible(c, mt.sid) {
+			s.active = t.TargetID
 		}
 	}
-	// Prime the capture world before Start returns: whatever a previous
-	// syncer left queued there is discarded, not replayed.
-	if id, err := worldContext(c, sid); err == nil {
-		if _, err := c.call(sid, "Runtime.evaluate", map[string]any{"expression": syncDrainExpr(), "contextId": id, "returnByValue": true}); err == nil {
-			s.mctx = id
-		}
+	if len(s.order) == 0 {
+		c.c.Close()
+		return fmt.Errorf("无法连接标签页")
 	}
-	go s.poll()
+	if s.active == "" {
+		s.active = s.order[0]
+	}
 	go func() {
 		select {
 		case <-c.done:
@@ -384,6 +699,40 @@ func (s *syncer) attachMaster(ws string) error {
 		}
 	}()
 	return nil
+}
+
+// attachMasterTab installs capture in a master tab. Runtime bindings only
+// report calls while the Runtime domain is enabled, and Runtime.enable is
+// detectable by pages, so events are queued inside the isolated world and
+// drained by polling with Runtime.evaluate (which works without
+// Runtime.enable). The new-document script makes capture start before page
+// scripts run on every navigation.
+func (s *syncer) attachMasterTab(tid string) (*masterTab, error) {
+	c := s.mconn
+	sid, err := attachTarget(c, tid)
+	if err != nil {
+		return nil, err
+	}
+	for _, st := range []struct {
+		m string
+		p map[string]any
+	}{
+		{"Page.enable", nil},
+		{"Page.addScriptToEvaluateOnNewDocument", map[string]any{"source": syncCaptureScript(), "worldName": syncWorld, "runImmediately": true}},
+	} {
+		if _, err := c.call(sid, st.m, st.p); err != nil {
+			return nil, err
+		}
+	}
+	mt := &masterTab{tid: tid, sid: sid}
+	// Prime the capture world: whatever a previous syncer left queued there
+	// is discarded, not replayed.
+	if id, err := worldContext(c, sid); err == nil {
+		if _, err := c.call(sid, "Runtime.evaluate", map[string]any{"expression": syncDrainExpr(), "contextId": id, "returnByValue": true}); err == nil {
+			mt.ctx = id
+		}
+	}
+	return mt, nil
 }
 
 // worldContext creates (or reuses, when Chromium keeps one per name) the sync
@@ -412,6 +761,35 @@ func worldContext(c *cdpConn, sid string) (int, error) {
 	return w.ID, nil
 }
 
+func (s *syncer) masterTabs() []*masterTab {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]*masterTab, 0, len(s.order))
+	for _, id := range s.order {
+		if t := s.mtabs[id]; t != nil {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func (s *syncer) dropMasterTab(tid string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mgone[tid] = true
+	if _, ok := s.mtabs[tid]; !ok {
+		return false
+	}
+	delete(s.mtabs, tid)
+	for i, id := range s.order {
+		if id == tid {
+			s.order = append(s.order[:i], s.order[i+1:]...)
+			break
+		}
+	}
+	return true
+}
+
 func (s *syncer) poll() {
 	tick := time.NewTicker(50 * time.Millisecond)
 	defer tick.Stop()
@@ -421,57 +799,83 @@ func (s *syncer) poll() {
 			return
 		case <-tick.C:
 		}
-		s.mu.Lock()
-		ctx := s.mctx
-		s.mu.Unlock()
-		if ctx == 0 {
-			id, err := worldContext(s.mconn, s.msid)
-			if err != nil {
-				if isSessionGone(err) {
-					s.shutdown("主控标签页已关闭")
-					return
-				}
-				continue
-			}
-			s.mu.Lock()
-			s.mctx, ctx = id, id
-			s.mu.Unlock()
-		}
-		raw, err := s.mconn.call(s.msid, "Runtime.evaluate", map[string]any{"expression": syncDrainExpr(), "contextId": ctx, "returnByValue": true})
-		if err != nil {
-			if isSessionGone(err) {
-				s.shutdown("主控标签页已关闭")
-				return
-			}
-			s.mu.Lock()
-			if s.mctx == ctx {
-				s.mctx = 0
-			}
-			s.mu.Unlock()
-			continue
-		}
-		var r struct {
-			Result struct {
-				Value string `json:"value"`
-			} `json:"result"`
-		}
-		if json.Unmarshal(raw, &r) != nil || r.Result.Value == "" {
-			continue
-		}
-		var evs []syncEvent
-		_ = json.Unmarshal([]byte(r.Result.Value), &evs)
-		for _, ev := range evs {
-			if ev.T != "" && ev.T != "nav" {
-				s.dispatch(ev)
-			}
+		for _, mt := range s.masterTabs() {
+			s.drain(mt)
 		}
 	}
+}
+
+func (s *syncer) drain(mt *masterTab) {
+	s.mu.Lock()
+	ctx := mt.ctx
+	s.mu.Unlock()
+	if ctx == 0 {
+		id, err := worldContext(s.mconn, mt.sid)
+		if err != nil {
+			return
+		}
+		s.mu.Lock()
+		mt.ctx, ctx = id, id
+		s.mu.Unlock()
+	}
+	raw, err := s.mconn.call(mt.sid, "Runtime.evaluate", map[string]any{"expression": syncDrainExpr(), "contextId": ctx, "returnByValue": true})
+	if err != nil {
+		s.mu.Lock()
+		if mt.ctx == ctx {
+			mt.ctx = 0
+		}
+		s.mu.Unlock()
+		return
+	}
+	var r struct {
+		Result struct {
+			Value string `json:"value"`
+		} `json:"result"`
+	}
+	if json.Unmarshal(raw, &r) != nil || len(r.Result.Value) < 2 {
+		return
+	}
+	vis, body := r.Result.Value[:1] == "v", r.Result.Value[2:]
+	if vis {
+		s.mu.Lock()
+		switched := s.active != mt.tid && s.mtabs[mt.tid] != nil
+		if switched {
+			s.active = mt.tid
+		}
+		s.mu.Unlock()
+		if switched {
+			s.dispatch(syncEvent{T: "tabswitch", tab: mt.tid})
+		}
+	}
+	if body == "" {
+		return
+	}
+	var evs []syncEvent
+	_ = json.Unmarshal([]byte(body), &evs)
+	for _, ev := range evs {
+		if ev.T != "" && ev.T != "nav" {
+			ev.tab = mt.tid
+			s.dispatch(ev)
+		}
+	}
+}
+
+func (s *syncer) tabOfSession(sid string) *masterTab {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, t := range s.mtabs {
+		if t.sid == sid {
+			return t
+		}
+	}
+	return nil
 }
 
 func (s *syncer) onMasterEvent(m cdpMsg) {
 	switch m.Method {
 	case "Page.frameNavigated":
-		if m.Session != s.msid {
+		mt := s.tabOfSession(m.Session)
+		if mt == nil {
 			return
 		}
 		var p struct {
@@ -483,39 +887,87 @@ func (s *syncer) onMasterEvent(m cdpMsg) {
 		}
 		if json.Unmarshal(m.Params, &p) == nil && p.Frame.ParentID == "" && p.Frame.URL != "" {
 			s.mu.Lock()
-			s.mctx = 0
+			mt.ctx = 0
 			s.mu.Unlock()
-			s.dispatch(syncEvent{T: "nav", URL: p.Frame.URL + p.Frame.Fragment})
+			s.dispatch(syncEvent{T: "nav", URL: p.Frame.URL + p.Frame.Fragment, tab: mt.tid})
 		}
 	case "Page.navigatedWithinDocument":
-		if m.Session != s.msid {
+		mt := s.tabOfSession(m.Session)
+		if mt == nil {
 			return
 		}
 		var p struct {
 			URL string `json:"url"`
 		}
 		if json.Unmarshal(m.Params, &p) == nil && p.URL != "" {
-			s.dispatch(syncEvent{T: "nav", URL: p.URL})
+			s.dispatch(syncEvent{T: "nav", URL: p.URL, tab: mt.tid})
 		}
-	case "Target.detachedFromTarget", "Inspector.detached":
+	case "Target.targetCreated", "Target.targetDestroyed":
+		select {
+		case s.ctl <- m:
+		case <-s.stop:
+		}
+	}
+}
+
+// control handles master tab creation/closing in order (attaching needs CDP
+// round trips, which can't run on the connection's reader).
+func (s *syncer) control() {
+	for {
+		var m cdpMsg
+		select {
+		case <-s.stop:
+			return
+		case m = <-s.ctl:
+		}
 		var p struct {
-			SessionID string `json:"sessionId"`
+			TargetInfo pageTab `json:"targetInfo"`
+			TargetID   string  `json:"targetId"`
 		}
 		_ = json.Unmarshal(m.Params, &p)
-		if m.Method == "Inspector.detached" || p.SessionID == s.msid {
-			s.shutdown("主控标签页已关闭")
+		switch m.Method {
+		case "Target.targetCreated":
+			t := p.TargetInfo
+			s.mu.Lock()
+			known := s.mtabs[t.TargetID] != nil || s.mgone[t.TargetID]
+			s.mu.Unlock()
+			if !isPageTab(t) || known {
+				continue
+			}
+			mt, err := s.attachMasterTab(t.TargetID)
+			if err != nil {
+				continue
+			}
+			s.dispatch(syncEvent{T: "tabnew", tab: t.TargetID, URL: t.URL, opener: t.OpenerID != ""})
+			s.mu.Lock()
+			if !s.mgone[t.TargetID] {
+				s.mtabs[t.TargetID] = mt
+				s.order = append(s.order, t.TargetID)
+			}
+			s.mu.Unlock()
+			s.emitSoon()
+		case "Target.targetDestroyed":
+			if s.dropMasterTab(p.TargetID) {
+				s.dispatch(syncEvent{T: "tabclose", tab: p.TargetID})
+				s.emitSoon()
+			}
 		}
 	}
 }
 
 func (s *syncer) dispatch(ev syncEvent) {
 	s.mu.Lock()
-	if !s.running {
+	if !s.running || !s.opts.allows(ev.T) {
+		s.mu.Unlock()
+		return
+	}
+	if strings.HasPrefix(ev.T, "tab") && atomic.LoadInt32(&s.tabsPaused) > 0 {
 		s.mu.Unlock()
 		return
 	}
 	s.events++
 	s.last = ev.T
+	ev.at = time.Now()
 	fs := append([]*syncFollower(nil), s.followers...)
 	s.mu.Unlock()
 	for _, f := range fs {
@@ -525,6 +977,39 @@ func (s *syncer) dispatch(ev syncEvent) {
 		}
 	}
 	s.emitSoon()
+}
+
+// pauseTabs stops tab mirroring while a tab action changes tabs itself;
+// the returned func re-maps every follower and resumes.
+func (s *syncer) pauseTabs() func() {
+	atomic.AddInt32(&s.tabsPaused, 1)
+	return func() {
+		// let the Target events of the action arrive before re-mapping
+		time.Sleep(400 * time.Millisecond)
+		if tabs, err := pageTabs(s.mconn); err == nil {
+			s.mu.Lock()
+			act := s.active
+			s.mu.Unlock()
+			if a := activeOf(s.mconn, tabs); a != "" {
+				act = a
+			}
+			s.mu.Lock()
+			if s.mtabs[act] != nil {
+				s.active = act
+			}
+			s.mu.Unlock()
+		}
+		s.mu.Lock()
+		fs := append([]*syncFollower(nil), s.followers...)
+		s.mu.Unlock()
+		for _, f := range fs {
+			if f.ok {
+				s.mapTabs(f)
+			}
+		}
+		atomic.AddInt32(&s.tabsPaused, -1)
+		s.emitSoon()
+	}
 }
 
 // emitSoon throttles state emission during bursts of events.
@@ -553,9 +1038,19 @@ func (s *syncer) emitSoon() {
 func (s *syncer) state() SyncerState {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	st := SyncerState{Running: s.running, Master: s.master, MasterName: s.mname, Events: s.events, LastEvent: s.last, StartedAt: s.started, Reason: s.reason, Followers: []SyncFollowerState{}}
+	st := SyncerState{Running: s.running, Master: s.master, MasterName: s.mname, Events: s.events, LastEvent: s.last, StartedAt: s.started, Reason: s.reason,
+		Followers: []SyncFollowerState{}, Options: s.opts, Tabs: len(s.order)}
 	for _, f := range s.followers {
-		st.Followers = append(st.Followers, SyncFollowerState{ID: f.id, Name: f.name, OK: f.ok, Events: atomic.LoadInt64(&f.events), Error: f.err})
+		f.mu.Lock()
+		n := 0
+		for mt := range f.tabs {
+			if s.mtabs[mt] != nil {
+				n++
+			}
+		}
+		f.mu.Unlock()
+		st.Followers = append(st.Followers, SyncFollowerState{ID: f.id, Name: f.name, OK: f.ok, Events: atomic.LoadInt64(&f.events), Error: f.err,
+			LatencyMs: atomic.LoadInt64(&f.latency), Tabs: n})
 	}
 	return st
 }
@@ -613,35 +1108,67 @@ func (s *syncer) replay(f *syncFollower) {
 			s.dropFollower(f, fmt.Errorf("浏览器已关闭"))
 			return
 		case ev := <-f.q:
+			// Human-like jitter: each follower waits its own random delay
+			// after the master's action. Events keep their order, so an
+			// event never runs before the previous one (latency stays <= max).
+			s.mu.Lock()
+			o := s.opts
+			s.mu.Unlock()
+			due := ev.at.Add(sampleDelay(o, f.rnd))
+			if due.Before(f.next) {
+				due = f.next
+			}
+			f.next = due
+			if w := time.Until(due); w > 0 {
+				select {
+				case <-s.stop:
+					return
+				case <-time.After(w):
+				}
+			}
 			if err := f.apply(ev); err != nil {
+				if isSessionGone(err) && f.conn.isOpen() {
+					// only that tab closed; the browser is still there
+					continue
+				}
 				s.dropFollower(f, err)
 				return
 			}
+			atomic.StoreInt64(&f.latency, time.Since(ev.at).Milliseconds())
 			atomic.AddInt64(&f.events, 1)
 		}
+	}
+}
+
+func (c *cdpConn) isOpen() bool {
+	select {
+	case <-c.done:
+		return false
+	default:
+		return true
 	}
 }
 
 // ---------- follower replay ----------
 
 func (f *syncFollower) call(method string, p map[string]any) (json.RawMessage, error) {
-	return f.conn.call(f.sid, method, p)
+	return f.conn.call(f.cur.sid, method, p)
 }
 
 // eval runs an expression in an isolated world of the follower's main frame
 // (never in the page's own world) and returns the JSON value.
 func (f *syncFollower) eval(expr string) (json.RawMessage, error) {
 	for attempt := 0; attempt < 2; attempt++ {
-		if f.ctx == 0 {
-			id, err := worldContext(f.conn, f.sid)
+		if f.cur.ctx == 0 {
+			id, err := worldContext(f.conn, f.cur.sid)
 			if err != nil {
 				return nil, err
 			}
-			f.ctx = id
+			f.cur.ctx = id
 		}
-		raw, err := f.call("Runtime.evaluate", map[string]any{"expression": expr, "contextId": f.ctx, "returnByValue": true})
+		raw, err := f.call("Runtime.evaluate", map[string]any{"expression": expr, "contextId": f.cur.ctx, "returnByValue": true})
 		if err != nil {
-			f.ctx = 0 // context gone after a navigation: make a new world and retry
+			f.cur.ctx = 0 // context gone after a navigation: make a new world and retry
 			if isSessionGone(err) {
 				return nil, err
 			}
@@ -673,7 +1200,7 @@ func soft(err error) error {
 }
 
 func (f *syncFollower) url() string {
-	raw, err := f.conn.call("", "Target.getTargetInfo", map[string]any{"targetId": f.tid})
+	raw, err := f.conn.call("", "Target.getTargetInfo", map[string]any{"targetId": f.cur.tid})
 	if err != nil {
 		return ""
 	}
@@ -690,7 +1217,26 @@ var mouseButtons = []string{"left", "middle", "right", "back", "forward"}
 
 func cdpMods(m int) int { return m } // same bit layout as CDP (Alt=1 Ctrl=2 Meta=4 Shift=8)
 
+// apply replays one event in the follower tab mapped to the event's master tab.
 func (f *syncFollower) apply(ev syncEvent) error {
+	switch ev.T {
+	case "tabnew", "tabswitch", "tabclose":
+		return f.applyTab(ev)
+	}
+	f.mu.Lock()
+	tid := f.tabs[ev.tab]
+	f.mu.Unlock()
+	if tid == "" {
+		return nil // master tab has no counterpart here (统一标签页 aligns them)
+	}
+	t, err := f.session(tid)
+	if err != nil {
+		if isSessionGone(err) && f.conn.isOpen() {
+			return nil
+		}
+		return soft(err)
+	}
+	f.cur = t
 	switch ev.T {
 	case "click":
 		x, y := ev.X, ev.Y
@@ -777,8 +1323,84 @@ func (f *syncFollower) apply(ev syncEvent) error {
 		if cur == ev.URL || !(strings.HasPrefix(ev.URL, "http") || ev.URL == "about:blank") {
 			return nil
 		}
-		f.ctx = 0
+		f.cur.ctx = 0
 		_, err := f.call("Page.navigate", map[string]any{"url": ev.URL})
+		return soft(err)
+	}
+	return nil
+}
+
+// applyTab mirrors a master tab being opened, activated or closed.
+func (f *syncFollower) applyTab(ev syncEvent) error {
+	f.mu.Lock()
+	tid := f.tabs[ev.tab]
+	f.mu.Unlock()
+	switch ev.T {
+	case "tabnew":
+		if tid != "" {
+			return nil
+		}
+		nt := ""
+		if ev.opener {
+			// The replayed click usually opens the follower's tab by itself:
+			// adopt it instead of opening a second one.
+			deadline := time.After(1500 * time.Millisecond)
+		wait:
+			for {
+				select {
+				case id := <-f.opened:
+					f.mu.Lock()
+					mapped, gone := false, f.gone[id]
+					for _, v := range f.tabs {
+						mapped = mapped || v == id
+					}
+					f.mu.Unlock()
+					if !mapped && !gone {
+						nt = id
+						break wait
+					}
+				case <-deadline:
+					break wait
+				}
+			}
+		}
+		if nt == "" {
+			u := ev.URL
+			if u == "" {
+				u = "about:blank"
+			}
+			raw, err := f.conn.call("", "Target.createTarget", map[string]any{"url": u})
+			if err != nil {
+				return soft(err)
+			}
+			var r struct {
+				TargetID string `json:"targetId"`
+			}
+			_ = json.Unmarshal(raw, &r)
+			nt = r.TargetID
+		}
+		if nt != "" {
+			f.mu.Lock()
+			f.tabs[ev.tab] = nt
+			f.mu.Unlock()
+		}
+	case "tabswitch":
+		if tid != "" {
+			_, err := f.conn.call("", "Target.activateTarget", map[string]any{"targetId": tid})
+			return soft(err)
+		}
+	case "tabclose":
+		if tid == "" {
+			return nil
+		}
+		f.mu.Lock()
+		delete(f.tabs, ev.tab)
+		f.mu.Unlock()
+		// Never close a follower's last tab (that would close its window).
+		if tabs, err := pageTabs(f.conn); err == nil && len(tabs) <= 1 {
+			return nil
+		}
+		_, err := f.conn.call("", "Target.closeTarget", map[string]any{"targetId": tid})
 		return soft(err)
 	}
 	return nil
