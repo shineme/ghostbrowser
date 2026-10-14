@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -328,20 +329,38 @@ type geo struct {
 	Lat, Lon                            float64
 }
 
-func geoIPAPI(cl *http.Client) (geo, error) {
-	resp, err := cl.Get("http://ip-api.com/json/?fields=status,message,query,countryCode,regionName,city,timezone,lat,lon,isp,org,mobile,proxy,hosting")
-	if err != nil {
-		return geo{}, err
-	}
-	defer resp.Body.Close()
+// geoSource is one exit-IP lookup service. detectGeo tries them in order
+// through the proxy and the first answer wins, so one service being down,
+// rate-limited or blocked by the proxy provider does not fail the check.
+type geoSource struct {
+	Name  string
+	URL   string
+	Parse func(body []byte) (geo, error)
+}
+
+var geoSources = []geoSource{
+	{"ip-api.com", "http://ip-api.com/json/?fields=status,message,query,countryCode,regionName,city,timezone,lat,lon,isp,org,mobile,proxy,hosting", parseIPAPI},
+	{"ipwho.is", "https://ipwho.is/", parseIPWho},
+	{"ipapi.co", "https://ipapi.co/json/", parseIPAPICo},
+	{"ip.sb", "https://api.ip.sb/geoip", parseIPSB},
+	{"realip.cc", "https://realip.cc/", parseRealIP},
+}
+
+// geoChainBudget caps the whole chain so a dead proxy is not tried five times
+// at the full per-request timeout.
+var geoChainBudget = 30 * time.Second
+
+func parseIPAPI(b []byte) (geo, error) {
 	var v struct {
 		Status, Message, Query, CountryCode, RegionName, City, Timezone, ISP, Org string
 		Lat, Lon                                                                  float64
 		Mobile, Hosting                                                           bool
 	}
-	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
-	if json.Unmarshal(b, &v) != nil || v.Status != "success" {
-		return geo{}, fmt.Errorf("ip-api: %s %s", resp.Status, v.Message)
+	if err := json.Unmarshal(b, &v); err != nil {
+		return geo{}, err
+	}
+	if v.Status != "success" {
+		return geo{}, fmt.Errorf("%s %s", v.Status, v.Message)
 	}
 	kind := "residential"
 	if v.Mobile {
@@ -356,12 +375,7 @@ func geoIPAPI(cl *http.Client) (geo, error) {
 	return geo{v.Query, v.CountryCode, v.RegionName, v.City, v.Timezone, isp, kind, v.Lat, v.Lon}, nil
 }
 
-func geoIPWho(cl *http.Client) (geo, error) {
-	resp, err := cl.Get("https://ipwho.is/")
-	if err != nil {
-		return geo{}, err
-	}
-	defer resp.Body.Close()
+func parseIPWho(b []byte) (geo, error) {
 	var v struct {
 		Success     bool    `json:"success"`
 		Message     string  `json:"message"`
@@ -376,24 +390,156 @@ func geoIPWho(cl *http.Client) (geo, error) {
 		} `json:"timezone"`
 		Connection struct {
 			ISP string `json:"isp"`
+			Org string `json:"org"`
 		} `json:"connection"`
 	}
-	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
-	if json.Unmarshal(b, &v) != nil || !v.Success {
-		return geo{}, fmt.Errorf("ipwho.is: %s", v.Message)
+	if err := json.Unmarshal(b, &v); err != nil {
+		return geo{}, err
 	}
-	return geo{v.IP, v.CountryCode, v.Region, v.City, v.Timezone.ID, v.Connection.ISP, "", v.Lat, v.Lon}, nil
+	if !v.Success {
+		return geo{}, fmt.Errorf("%s", v.Message)
+	}
+	isp := v.Connection.ISP
+	if isp == "" {
+		isp = v.Connection.Org
+	}
+	return geo{v.IP, v.CountryCode, v.Region, v.City, v.Timezone.ID, isp, "", v.Lat, v.Lon}, nil
+}
+
+func parseIPAPICo(b []byte) (geo, error) {
+	var v struct {
+		Error       bool    `json:"error"`
+		Reason      string  `json:"reason"`
+		IP          string  `json:"ip"`
+		CountryCode string  `json:"country_code"`
+		Region      string  `json:"region"`
+		City        string  `json:"city"`
+		Timezone    string  `json:"timezone"`
+		Lat         float64 `json:"latitude"`
+		Lon         float64 `json:"longitude"`
+		Org         string  `json:"org"`
+	}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return geo{}, err
+	}
+	if v.Error {
+		return geo{}, fmt.Errorf("%s", v.Reason)
+	}
+	return geo{v.IP, v.CountryCode, v.Region, v.City, v.Timezone, v.Org, "", v.Lat, v.Lon}, nil
+}
+
+func parseIPSB(b []byte) (geo, error) {
+	var v struct {
+		IP           string  `json:"ip"`
+		CountryCode  string  `json:"country_code"`
+		Region       string  `json:"region"`
+		City         string  `json:"city"`
+		Timezone     string  `json:"timezone"`
+		Lat          float64 `json:"latitude"`
+		Lon          float64 `json:"longitude"`
+		ISP          string  `json:"isp"`
+		Organization string  `json:"organization"`
+	}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return geo{}, err
+	}
+	isp := v.ISP
+	if isp == "" {
+		isp = v.Organization
+	}
+	return geo{v.IP, v.CountryCode, v.Region, v.City, v.Timezone, isp, "", v.Lat, v.Lon}, nil
+}
+
+func parseRealIP(b []byte) (geo, error) {
+	var v struct {
+		IP       string  `json:"ip"`
+		City     string  `json:"city"`
+		Province string  `json:"province"`
+		ISO      string  `json:"iso_code"`
+		ISP      string  `json:"isp"`
+		TZ       string  `json:"time_zone"`
+		Lat      float64 `json:"latitude"`
+		Lon      float64 `json:"longitude"`
+	}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return geo{}, err
+	}
+	return geo{v.IP, strings.ToUpper(v.ISO), v.Province, v.City, v.TZ, v.ISP, "", v.Lat, v.Lon}, nil
+}
+
+// fetchGeo asks one source; any non-200, non-JSON or IP-less answer is an error.
+func fetchGeo(ctx context.Context, cl *http.Client, src geoSource) (geo, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", src.URL, nil)
+	if err != nil {
+		return geo{}, err
+	}
+	// some services refuse Go's default User-Agent
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json")
+	resp, err := cl.Do(req)
+	if err != nil {
+		return geo{}, err
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	if resp.StatusCode != http.StatusOK {
+		return geo{}, fmt.Errorf("%s: HTTP %d", src.Name, resp.StatusCode)
+	}
+	g, err := src.Parse(b)
+	if err != nil {
+		return geo{}, fmt.Errorf("%s: %v", src.Name, err)
+	}
+	if net.ParseIP(strings.TrimSpace(g.IP)) == nil {
+		return geo{}, fmt.Errorf("%s: no IP in answer", src.Name)
+	}
+	g.IP = strings.TrimSpace(g.IP)
+	g.CC = strings.ToUpper(g.CC)
+	return g, nil
+}
+
+// proxyLevelErr: the proxy itself refused us (dead port, wrong protocol, bad
+// login). Every other source would fail the same way, so the chain stops.
+func proxyLevelErr(err error) bool {
+	s := err.Error()
+	for _, k := range []string{"proxyconnect", "socks connect", "Proxy Authentication Required", "407", "username/password authentication failed", "malformed HTTP response"} {
+		if strings.Contains(s, k) {
+			return true
+		}
+	}
+	return false
+}
+
+// detectGeo walks the sources in order; the first success wins. It returns
+// the name of the source that answered. When all fail, the first error is
+// returned (it is usually the most telling one).
+func detectGeo(cl *http.Client, sources []geoSource) (geo, string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), geoChainBudget)
+	defer cancel()
+	var first error
+	for _, src := range sources {
+		g, err := fetchGeo(ctx, cl, src)
+		if err == nil {
+			return g, src.Name, nil
+		}
+		if first == nil {
+			first = err
+		}
+		if proxyLevelErr(err) || ctx.Err() != nil {
+			break
+		}
+	}
+	if first == nil {
+		first = fmt.Errorf("no exit-IP source configured")
+	}
+	return geo{}, "", first
 }
 
 func probe(p Proxy) (Proxy, error) {
 	cl := p.client(15 * time.Second)
 	start := time.Now()
-	g, err := geoIPAPI(cl)
+	g, _, err := detectGeo(cl, geoSources)
 	if err != nil {
-		var e2 error
-		if g, e2 = geoIPWho(cl); e2 != nil {
-			return p, err
-		}
+		return p, err
 	}
 	p.Connect = time.Since(start).Milliseconds()
 	// Warm round trips over the same tunnel: the latency a page would feel.
