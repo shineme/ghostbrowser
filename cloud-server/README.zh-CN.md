@@ -115,3 +115,38 @@
 - `ping` 会返回 `features`（含 `tombstones`）、`tombstoneDays`、`keepVersions`、`maxBody`、`usedBytes`、`freeBytes`
 - 版本冲突返回 412
 - 设备、密钥、公钥目录、分享接口见上文「设备管理、恢复密钥与环境分享」，完整列表在 `ghostsync.php` 文件头注释和项目 README 的 Sync server contract
+
+## 在线更新与快捷入口（静态文件）
+
+以下接口同样需要令牌（开启「设备批准」时还要求设备已获批准），只是读取 `ghostsync.php` 同目录下的静态文件，不涉及加密数据：
+
+- `GET ?r=/api/update/latest`：返回 `update/latest.json`；没有发布时返回 404
+- `GET ?r=/api/update/file/<文件名>`：下载 `update/<文件名>`（只允许字母、数字、`.`、`_`、`-`）
+- `GET ?r=/api/catalog`：返回 `catalog.json`（网站快捷入口 + 公告）；文件不存在时返回空列表
+
+目录结构：
+
+```
+ghostsync.php
+catalog.json              ← 可选，示例见同目录
+update/
+  latest.json             ← sign-release 生成
+  GhostBrowser-0.8.0.exe
+```
+
+`latest.json`：`{"version","notes","url","sha256","sig"}`。`url` 写文件名时从 `update/` 下载，也可以写完整的 https 地址（例如 CDN）。客户端会校验 SHA-256 和 Ed25519 签名（公钥内置在客户端，私钥只在维护者手里），服务器被入侵也无法推送恶意更新。
+
+`catalog.json`：
+
+```json
+{
+  "revision": 1,
+  "groups": [{ "id": "ai", "name": "AI", "sites": [{ "id": "chatgpt", "name": "ChatGPT", "url": "https://chatgpt.com/", "icon": "" }] }],
+  "announcements": [{ "id": "notice-1", "title": "标题", "body": "支持 **Markdown**", "level": "info", "start": "2026-10-01T00:00:00+08:00", "end": "" }]
+}
+```
+
+- 网站只接受 http / https 地址；`icon` 可留空（客户端显示首字母）
+- 公告 `level`：`info` / `warn` / `critical`；`start` / `end` 可写时间字符串或 Unix 秒，留空表示不限
+- 改 `id` 会被当作新公告（重新显示未读）
+

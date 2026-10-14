@@ -349,16 +349,22 @@ func (a *App) ExportNativeJSON(id string) (string, error) {
 		return "", err
 	}
 	b, err := json.MarshalIndent(spec, "", "  ")
-	return string(b), err
+	return string(withDocSchema(b)), err // portable document schema (docschema.go)
 }
 
 func (a *App) ImportNativeJSON(raw string) (Profile, error) {
 	if len(raw) > 10<<20 {
 		return Profile{}, fmt.Errorf("JSON 超过 10 MiB")
 	}
+	if err := checkDocSchema([]byte(raw), "环境 JSON"); err != nil {
+		return Profile{}, err
+	}
 	var spec undetectable.Spec
 	if err := json.Unmarshal([]byte(strings.TrimPrefix(raw, "\ufeff")), &spec); err != nil {
 		return Profile{}, err
+	}
+	if spec.SchemaVersion > 1 {
+		return Profile{}, fmt.Errorf("这个环境 JSON 来自更新版本（schemaVersion %d，当前最高支持 1），请先升级 GhostBrowser 再导入", spec.SchemaVersion)
 	}
 	if spec.SchemaVersion != 1 {
 		return Profile{}, fmt.Errorf("schemaVersion 必须是 1")

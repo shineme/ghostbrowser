@@ -198,6 +198,12 @@ type Settings struct {
 	Terminal *TerminalPrefs `json:"terminal,omitempty"`
 	// Firefox kernel: firefox.exe ("" = auto-detect).
 	FirefoxPath string `json:"firefoxPath,omitempty"`
+	// app shell: tray, updater, site shortcuts catalog.
+	CloseToTrayOff bool   `json:"closeToTrayOff,omitempty"` // closing the window quits instead of hiding to the tray
+	UpdateAutoOff  bool   `json:"updateAutoOff,omitempty"`  // no automatic update check (start + every 6 h)
+	UpdateURL      string `json:"updateUrl,omitempty"`      // custom latest.json URL ("" = the sync server)
+	UpdateGitHub   string `json:"updateGithub,omitempty"`   // fallback: owner/repo of a PUBLIC GitHub repo with releases
+	CatalogURL     string `json:"catalogUrl,omitempty"`     // custom catalog.json URL ("" = the sync server)
 }
 
 type RunState struct {

@@ -1,0 +1,47 @@
+{
+  "revision": 1,
+  "groups": [
+    {
+      "id": "ai",
+      "name": "AI",
+      "sites": [
+        { "id": "chatgpt", "name": "ChatGPT", "url": "https://chatgpt.com/", "icon": "https://chatgpt.com/favicon.ico" },
+        { "id": "claude", "name": "Claude", "url": "https://claude.ai/", "icon": "https://claude.ai/favicon.ico" },
+        { "id": "gemini", "name": "Gemini", "url": "https://gemini.google.com/", "icon": "" },
+        { "id": "perplexity", "name": "Perplexity", "url": "https://www.perplexity.ai/", "icon": "" }
+      ]
+    },
+    {
+      "id": "shop",
+      "name": "电商",
+      "sites": [
+        { "id": "amazon", "name": "Amazon 卖家中心", "url": "https://sellercentral.amazon.com/", "icon": "" },
+        { "id": "shopee", "name": "Shopee 卖家中心", "url": "https://seller.shopee.cn/", "icon": "" },
+        { "id": "tiktokshop", "name": "TikTok Shop", "url": "https://seller.tiktokglobalshop.com/", "icon": "" },
+        { "id": "ebay", "name": "eBay", "url": "https://www.ebay.com/", "icon": "" },
+        { "id": "etsy", "name": "Etsy", "url": "https://www.etsy.com/", "icon": "" }
+      ]
+    },
+    {
+      "id": "social",
+      "name": "社媒",
+      "sites": [
+        { "id": "facebook", "name": "Facebook", "url": "https://www.facebook.com/", "icon": "" },
+        { "id": "instagram", "name": "Instagram", "url": "https://www.instagram.com/", "icon": "" },
+        { "id": "x", "name": "X", "url": "https://x.com/", "icon": "" },
+        { "id": "tiktok", "name": "TikTok", "url": "https://www.tiktok.com/", "icon": "" },
+        { "id": "youtube", "name": "YouTube", "url": "https://www.youtube.com/", "icon": "" }
+      ]
+    }
+  ],
+  "announcements": [
+    {
+      "id": "welcome-2026-10",
+      "title": "欢迎使用网站快捷入口",
+      "body": "在环境列表点 **启动** 旁的箭头，可以直接打开常用网站。\n\n- 快捷入口由你的同步服务器下发（`catalog.json`）\n- 离线时使用上次缓存",
+      "level": "info",
+      "start": "2026-10-01T00:00:00+08:00",
+      "end": ""
+    }
+  ]
+}

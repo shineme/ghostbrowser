@@ -33,6 +33,9 @@
  *   GET|POST /api/directory[/{user}]  (X25519 public keys of the users on this server)
  *   GET|POST /api/shares, PUT|GET /api/shares/{sid}/blob, POST /api/shares/{sid}/accept|decline|leave|revoke|extend
  *   GET|POST ?r=/admin                (metadata-only admin page, needs GHOST_ADMIN_TOKEN)
+ *   GET  /api/update/latest           -> update/latest.json next to this file (in-app updater; 404 when none)
+ *   GET  /api/update/file/{name}      -> update/{name} (the signed EXE named in latest.json)
+ *   GET  /api/catalog                 -> catalog.json next to this file (site shortcuts + announcements)
  */
 
 // ------------------------------------------------------------- settings
@@ -382,6 +385,7 @@ function gs_serve(): void
     gs_init_dir($c);
     $GLOBALS['gs_sec_ctx'] = ['user' => $user, 'path' => $path, 'base' => $c['base']];
     gs_sec_gate($c, $user, $path);
+    gs_app_routes($path, $method); // update / catalog static files (after the device gate)
     gs_sec_routes($c, $user, $path, $method);
 
     if ($path === '/api/ping' && $method === 'GET') {
@@ -1174,6 +1178,40 @@ function gs_admin_page(array $c): void
         . "<div class=note>令牌、密码、密钥与环境内容从不显示，也不会写入本页。</div></div>");
 }
 
+
+// ---- app shell: in-app updater + site shortcuts catalog / announcements ----
+// Static files next to this script: update/latest.json, update/<exe>, catalog.json.
+// The client verifies the EXE's sha256 and Ed25519 signature; this server only serves files.
+function gs_app_routes(string $path, string $method): void
+{
+    if ($method !== 'GET') return;
+    if ($path === '/api/update/latest') {
+        $f = __DIR__ . '/update/latest.json';
+        if (!is_file($f)) throw new GsFail(404, '服务器上还没有发布更新（缺少 update/latest.json）。');
+        $doc = json_decode((string)file_get_contents($f), true);
+        if (!is_array($doc) || !isset($doc['version'])) throw new GsFail(500, 'update/latest.json 格式不对。');
+        gs_reply(200, $doc);
+    }
+    if (strpos($path, '/api/update/file/') === 0) {
+        $name = substr($path, strlen('/api/update/file/'));
+        if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/', $name) || $name === 'latest.json') throw new GsFail(400, 'Bad file name.');
+        $f = __DIR__ . '/update/' . $name;
+        if (!is_file($f)) throw new GsFail(404, 'File not found.');
+        header('Content-Type: application/octet-stream');
+        header('Content-Length: ' . filesize($f));
+        header('Content-Disposition: attachment; filename="' . $name . '"');
+        header('Cache-Control: no-store');
+        readfile($f);
+        exit;
+    }
+    if ($path === '/api/catalog') {
+        $f = __DIR__ . '/catalog.json';
+        $doc = is_file($f) ? json_decode((string)file_get_contents($f), true) : null;
+        if (is_file($f) && !is_array($doc)) throw new GsFail(500, 'catalog.json 格式不对。');
+        if (!is_array($doc)) $doc = ['revision' => 0, 'groups' => [], 'announcements' => []];
+        gs_reply(200, $doc);
+    }
+}
 
 try {
     gs_serve();

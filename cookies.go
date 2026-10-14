@@ -85,6 +85,9 @@ func (c *Cookie) normalize() bool {
 // (expires) and Puppeteer, or an object with a "cookies" array.
 func parseCookiesJSON(data string) ([]Cookie, int, error) {
 	data = strings.TrimSpace(strings.TrimPrefix(data, "\ufeff"))
+	if err := checkDocSchema([]byte(data), " Cookie 文件"); err != nil { // {"schema":N,"cookies":[…]}
+		return nil, 0, err
+	}
 	var arr []map[string]any
 	if err := json.Unmarshal([]byte(data), &arr); err != nil {
 		var wrap struct {

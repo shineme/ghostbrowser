@@ -177,6 +177,25 @@ go test -run TestEnsureAgainstRealShop -v .
 ### 界面
 - 左侧边栏可收起为图标栏（侧栏底部按钮或 Ctrl+B），悬停显示名称和快捷键，数量变为圆点；状态会记住，下次启动保持；系统开启「减少动态效果」时不播放动画
 
+### 应用外壳（托盘 / 更新 / 快捷入口 / 公告）
+- **待重启**：环境运行中修改代理、指纹、内核、启动参数或语言时区后，环境列表、运行条和编辑抽屉显示「待重启」，一键重启生效；只改名称、分组、标签、备注不会提示
+- **托盘常驻**（Windows）：关闭主窗口后隐藏到托盘，运行中的环境和代理继续运行；托盘菜单：显示主窗口、运行中的环境（点击切到前台）、全部关闭、退出。可在「设置 → 应用与更新」关闭
+- **在线更新**：启动时和每 6 小时检查一次（也可手动「检查更新」），有新版本时顶栏出现提示，查看更新说明后「立即更新」，带下载进度。更新源默认是你的同步服务器（`update/latest.json`），也可填自定义地址或公开 GitHub 仓库。安装前校验 SHA-256 和 Ed25519 签名，签名不符拒绝安装；替换 EXE 后自动重启（旧文件改名为 `.old`，下次启动清理）
+- **网站快捷入口**：环境列表「启动」旁的箭头，启动环境并直接打开常用网站（运行中的环境在新标签页打开），也可输入任意网址；列表由同步服务器的 `catalog.json` 下发，离线时用缓存
+- **公告中心**：顶栏铃铛显示未读数，公告支持 Markdown（安全渲染，不执行 HTML），按开始 / 结束时间显示
+- **导入导出版本号**：导出的环境 JSON 带 `schema` 字段（当前 1）；旧版本客户端导入更新版本导出的文档时会明确提示先升级，而不是悄悄丢掉字段
+
+#### 发布更新（维护者）
+```bash
+go run ./cmd/sign-release keygen -out keys        # 只需一次；私钥 keys/ghostbrowser-update.key 务必离线保管、不要提交
+# 把 keys/ghostbrowser-update.pub 的内容写进 updater.go 的 updatePubKey（或 -ldflags "-X main.updatePubKey=..."）
+wails build -platform windows/amd64 -clean -trimpath -ldflags "-s -w"
+go run ./cmd/sign-release sign -key keys/ghostbrowser-update.key -file build/bin/GhostBrowser.exe \
+  -version 0.8.0 -url GhostBrowser-0.8.0.exe -notes-file CHANGELOG.md -out latest.json
+# 上传到服务器 ghostsync.php 同目录：update/latest.json 和 update/GhostBrowser-0.8.0.exe（文件名与 -url 一致）
+```
+版本号取自 `mcp.go` 的 `mcpAppVersion()`，发布前记得改。私钥丢失后只能换新密钥对，旧客户端将无法自动更新到用新密钥签名的版本。
+
 ### 本地自动化 API
 - 地址 `127.0.0.1:25325`：`/list`、`/profile/start?profile=ID`（返回 CDP 端口和 websocket 地址）、`/profile/stop?profile=ID`、`/status`
 - 除 `/status` 外，每个请求都要带 API Key：请求头 `X-API-Key: <key>`，或网址参数 `?key=<key>`。Key 在「设置 → 数据与本地 API」中复制或重新生成

@@ -19,6 +19,7 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "--mcp-stdio" {
 		os.Exit(runMcpStdio())
 	}
+	handleAfterUpdate(os.Args[1:]) // updater: wait for the previous version to exit
 	// Create an instance of the app structure
 	app := NewApp()
 
@@ -40,8 +41,10 @@ func main() {
 			DisableFramelessWindowDecorations: true,
 			Theme:                             windows.Dark,
 		},
-		OnStartup: app.startup,
+		OnStartup:     app.startup,
+		OnBeforeClose: app.beforeClose, // close-to-tray (appshell.go)
 		OnShutdown: func(_ context.Context) {
+			stopTray()
 			runReg.stopAll()
 			globalAuto.Drain(90 * time.Second)
 			globalAuto.FlushGlobal()

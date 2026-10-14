@@ -17,7 +17,9 @@ const opt = <T,>(list: T[], cur: T): T[] => (cur === '' || cur === undefined || 
 
 export const ProfileDrawer: React.FC<{
   profile: Profile | null; proxies: Proxy[]; onClose: () => void; onSaved: () => void;
-}> = ({ profile, proxies, onClose, onSaved }) => {
+  // app shell: 待重启
+  runningNow?: boolean; pendingRestart?: boolean; restarting?: boolean; onRestart?: () => void;
+}> = ({ profile, proxies, onClose, onSaved, runningNow, pendingRestart, restarting, onRestart }) => {
   const toast = useToast();
   const ask = useConfirm();
   const [pxText, setPxText] = useState('');
@@ -193,6 +195,8 @@ export const ProfileDrawer: React.FC<{
         </div>
 
         <div className="dbody">
+          {runningNow && <div className={`notice ${pendingRestart ? 'warn' : 'ok'} restart-notice`}><Icon.refresh /><span className="grow">{pendingRestart ? <><b>待重启</b> · 代理、指纹、内核或启动参数已修改，重启环境后生效</> : <>环境正在运行 · 修改代理、指纹、语言时区或启动参数后需要重启才会生效</>}</span>
+            {pendingRestart && onRestart && <button className="btn sm" disabled={restarting} onClick={onRestart}>{restarting ? '重启中…' : '立即重启'}</button>}</div>}
           <div key={flash} className={`fpcard ${flash ? 'flash' : ''}`}>
             <Avatar seed={fp.noiseSeed} os={fp.os} />
             <div style={{ minWidth: 0 }}>

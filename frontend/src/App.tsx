@@ -24,6 +24,7 @@ import { EnvCheckModal } from './EnvCheckModal';
 import { TerminalView } from './TerminalView';
 import { FoxIcon, useFirefoxInfo, ffVersionLabel } from './FirefoxKernel';
 import { ShareDialog, ShIc, shareLeft } from './SharingView'; // share
+import { TopbarExtras, usePendingRestart, RestartTag, useRestart, SiteLaunch } from './AppShell';
 
 type Tab = 'profiles' | 'proxies' | 'rpa' | 'extensions' | 'terminal' | 'cloud' | 'audit' | 'settings';
 
@@ -146,6 +147,7 @@ function Shell() {
             <h2>{titles[tab][0]}</h2>
             <div className="sub">{titles[tab][1]}</div>
           </div>
+          <TopbarExtras />
         </div>
         <div className="content">
           <div key={tab} className="page">
@@ -189,6 +191,8 @@ const ProfilesView: React.FC<{
   const [envChk, setEnvChk] = useState<Profile | null>(null); // 环境检测
   const [syncBusy, setSyncBusy] = useState<Set<string>>(new Set());
   const [runs, setRuns] = useState<Record<string, number>>({});
+  const [pending, refreshPending] = usePendingRestart([profiles, proxyName, running]);
+  const { restart, restarting } = useRestart(useCallback(() => { reload(); refreshPending(); }, [reload, refreshPending]));
   const [, tick] = useState(0);
   useEffect(() => { api.SyncBusy().then((b: any) => setSyncBusy(new Set(b || []))).catch(() => {}); }, []);
   useEffect(() => onEvent('sync:event', (e: any) => {
@@ -294,7 +298,8 @@ const ProfilesView: React.FC<{
         <span className="lbl"><Icon.bolt /> 运行中 {runningList.length}</span>
         {runningList.map(p => { const px = proxyName[p.proxyId]; const st = runs[p.id]; return <div key={p.id} className="run-chip">
           <Avatar seed={p.fingerprint.noiseSeed || p.id} os={p.fingerprint.os} running />
-          <div className="t"><b>{p.name}</b><span className="num">{st ? dur(st) : '启动中'} · {px ? (px.ip || px.host) : '直连'}</span></div>
+          <div className="t"><b>{p.name}{pending.has(p.id) && <RestartTag compact />}</b><span className="num">{st ? dur(st) : '启动中'} · {px ? (px.ip || px.host) : '直连'}</span></div>
+          {pending.has(p.id) && <button className="ib restart" title="待重启：点击重启使新设置生效" disabled={restarting.has(p.id)} onClick={() => restart(p)}><Icon.refresh /></button>}
           <button className="ib" title="切到前台" onClick={() => focus(p.id)}><Icon.laptop /></button>
           <button className="ib stop" title="停止" onClick={() => stop(p)}><Icon.stop /></button>
         </div>; })}
@@ -310,14 +315,14 @@ const ProfilesView: React.FC<{
           <tbody>
             {list.map((p, i) => {
               const px = proxyName[p.proxyId];
-              const isRun = running.has(p.id); const isBusy = busy.has(p.id);
+              const isRun = running.has(p.id); const isBusy = busy.has(p.id) || restarting.has(p.id); const needRestart = isRun && pending.has(p.id);
               return <tr key={p.id} className={`rise ${sel.has(p.id) ? 'sel' : ''} ${isRun ? 'running' : ''}`} style={{ ['--i' as any]: i }}>
                 <td><Chk on={sel.has(p.id)} onClick={() => toggleSel(p.id)} /></td>
                 <td>
                   <div className="cell-id">
                     <Avatar seed={p.fingerprint.noiseSeed || p.id} os={p.fingerprint.os} running={isRun} />
                     <div>
-                      <div className="nm">{p.name}</div>
+                      <div className="nm">{p.name}{needRestart && <RestartTag />}</div>
                       {(p as any).shareId ? <div className="sub sh-rowtag"><span className="badge cloud" title={`由 ${(p as any).sharedFrom} 共享，配置只读`}><ShIc.share s={11} /> 共享 · {(p as any).sharedFrom}</span><span className={`sh-left ${shareLeft((p as any).shareExpires)[1]}`}>{shareLeft((p as any).shareExpires)[0]}</span></div> :
                       <div className="sub">{p.group || '未分组'}{(p.tags || []).length ? <span style={{ marginLeft: 6 }}>{(p.tags || []).map(t => <span key={t} className="tag">{t}</span>)}</span> : null}</div>}
                     </div>
@@ -329,9 +334,11 @@ const ProfilesView: React.FC<{
                 <td><span className="sub">{ago(p.lastRun)}</span></td>
                 <td>
                   <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
-                    {isBusy ? <span style={{ width: 74, display: 'grid', placeItems: 'center' }}><ThinkingOrb state={isRun ? 'breathing' : 'connecting'} size={20} theme="dark" /></span>
-                      : isRun ? <button className="btn sm stop" style={{ width: 74 }} onClick={() => stop(p)}><Icon.stop s={12} /> 停止</button>
-                        : <button className="btn sm go" style={{ width: 74 }} onClick={() => start(p)}><Icon.play s={12} /> 启动</button>}
+                    {needRestart && !isBusy && <button className="btn sm icon restart-btn" onClick={() => restart(p)} title="重启：代理、指纹或启动参数已修改，重启后生效" aria-label="重启"><Icon.refresh s={13} /></button>}
+                    {isBusy ? <span style={{ width: 98, display: 'grid', placeItems: 'center' }}><ThinkingOrb state={isRun ? 'breathing' : 'connecting'} size={20} theme="dark" /></span>
+                      : <span className="split-btn">{isRun ? <button className="btn sm stop" style={{ width: 70 }} onClick={() => stop(p)}><Icon.stop s={12} /> 停止</button>
+                        : <button className="btn sm go" style={{ width: 70 }} onClick={() => start(p)}><Icon.play s={12} /> 启动</button>}
+                        <SiteLaunch profile={p} running={isRun} onLaunched={() => setRunning(s => new Set(s).add(p.id))} /></span>}
                     <span className="acts" style={{ display: 'flex', gap: 2 }}>
                       {(p as any).shareId ? <button className="btn ghost icon" title="共享环境的配置为只读" disabled><Icon.edit s={15} /></button>
                         : <button className="btn ghost icon" title="编辑" onClick={() => { setEditing(p); setDrawer(true); }}><Icon.edit s={15} /></button>}
@@ -361,7 +368,8 @@ const ProfilesView: React.FC<{
         <button className="btn sm ghost danger" onClick={() => del([...sel])}><Icon.trash s={13} /></button>
         <button className="btn ghost icon" title="取消选择" onClick={() => setSel(new Set())}><Icon.x /></button>
       </div>}
-      {drawer && <ProfileDrawer profile={editing} proxies={Object.values(proxyName)} onClose={() => setDrawer(false)} onSaved={reload} />}
+      {drawer && <ProfileDrawer profile={editing} proxies={Object.values(proxyName)} onClose={() => setDrawer(false)} onSaved={reload}
+        runningNow={!!editing && running.has(editing.id)} pendingRestart={!!editing && pending.has(editing.id)} restarting={!!editing && restarting.has(editing.id)} onRestart={editing ? () => restart(editing) : undefined} />}
       {bulk && <BulkModal proxies={Object.values(proxyName)} onClose={() => setBulk(false)} onDone={reload} />}
       {nativeTools && <NativeTools profiles={profiles} onClose={() => setNativeTools(false)} onChanged={reload} />}
       {delT && delT.length > 0 && <DeleteModal targets={delT} onClose={() => setDelT(null)} onDone={() => { setSel(new Set()); reload(); refreshTrash(); }} />}
