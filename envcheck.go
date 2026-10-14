@@ -713,7 +713,8 @@ func firefoxEnvItems(r *EnvReport, fp Fingerprint) {
 			}
 		case "webdriver":
 			it.Fixable, it.FixHint = false, ""
-			it.Status, it.Actual, it.Detail = "pass", "按 Firefox 配置", "Firefox 内核不使用 Chromium 启动参数（按配置判断，未实时读取）"
+			it.Status, it.Actual, it.Expected = "warn", "true（Firefox 远程控制固有）", "false"
+			it.Detail = "Firefox 通过 WebDriver BiDi 控制时 navigator.webdriver 固定为 true，无法通过配置修复；对此敏感的网站请改用定制内核或开源内核"
 		case "language", "timezone":
 			if fp.FFStrict && it.Status != "pass" {
 				it.Fixable, it.FixHint = false, ""

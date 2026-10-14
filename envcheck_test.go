@@ -235,6 +235,9 @@ func TestEnvFirefoxNoChromiumFixes(t *testing.T) {
 	if envFindItem(t, r, "seed").Status != "pass" {
 		t.Error("strict mode randomises canvas")
 	}
+	if it := envFindItem(t, r, "webdriver"); it.Status != "warn" || it.Fixable {
+		t.Errorf("firefox webdriver is true under BiDi and not fixable: %+v", it)
+	}
 	set, _, skipped := planRepair(p, []string{"seed", "fonts", "webdriver", "language", "webrtc"}, usExit, true, nil)
 	if len(set) != 1 || set["webrtc"] != "proxy" || len(skipped) != 4 {
 		t.Errorf("firefox repair plan %v skipped %v", set, skipped)

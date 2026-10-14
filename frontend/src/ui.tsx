@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 // ---- icons (lucide-style, stroke) ----
 type IP = { s?: number };
@@ -47,6 +48,7 @@ export const Icon = {
   alert: (p: IP) => <svg {...S(p)}><path d="M12 9v4M12 17h.01" /><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /></svg>,
   sidebar: (p: IP) => <svg {...S(p)}><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M9 4v16" /></svg>,
   ghost: (p: IP) => <svg {...S(p)}><path d="M9 10h.01M15 10h.01M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 21l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8Z" /></svg>,
+  more: (p: IP) => <svg {...S(p)}><circle cx="5" cy="12" r="1.3" /><circle cx="12" cy="12" r="1.3" /><circle cx="19" cy="12" r="1.3" /></svg>,
 };
 
 // ---- toast ----
@@ -176,6 +178,39 @@ export function Pick<T extends string>({ label, value, options, onChange, icon, 
     </div>
   );
 }
+
+/** Row "更多" menu: a ⋯ icon button with a Pick-style popover of actions.
+ * Rendered in a portal with fixed position so table panels never clip it. */
+export type MoreItem = { label: string; icon?: React.ReactNode; onClick: () => void; danger?: boolean; disabled?: boolean; hint?: string } | 'sep' | null | false;
+export const MoreMenu: React.FC<{ items: MoreItem[]; title?: string }> = ({ items, title = '更多' }) => {
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; right: number; up: boolean } | null>(null);
+  const btn = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!pos) return;
+    const down = (e: MouseEvent) => { if (!menu.current?.contains(e.target as Node) && !btn.current?.contains(e.target as Node)) setPos(null); };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setPos(null); };
+    const close = () => setPos(null);
+    window.addEventListener('mousedown', down); window.addEventListener('keydown', key); window.addEventListener('resize', close); window.addEventListener('scroll', close, true);
+    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('keydown', key); window.removeEventListener('resize', close); window.removeEventListener('scroll', close, true); };
+  }, [pos]);
+  const toggle = () => {
+    if (pos) return setPos(null);
+    const r = btn.current!.getBoundingClientRect();
+    const up = window.innerHeight - r.bottom < 220;
+    setPos(up ? { bottom: window.innerHeight - r.top + 6, right: window.innerWidth - r.right, up } : { top: r.bottom + 6, right: window.innerWidth - r.right, up });
+  };
+  const list = items.filter(Boolean) as Exclude<MoreItem, null | false>[];
+  return <>
+    <button ref={btn} type="button" className={`btn ghost icon more-btn ${pos ? 'on' : ''}`} title={title} aria-label={title} onClick={toggle}><Icon.more s={15} /></button>
+    {pos && createPortal(<div ref={menu} className={`pick-menu more-menu ${pos.up ? 'up' : ''}`} style={{ position: 'fixed', top: pos.top ?? 'auto', bottom: pos.bottom ?? 'auto', right: pos.right, left: 'auto' }}>
+      {list.map((it, i) => it === 'sep' ? <div key={i} className="more-sep" /> :
+        <button type="button" key={i} className={it.danger ? 'danger' : ''} disabled={it.disabled} title={it.hint} onClick={() => { setPos(null); it.onClick(); }}>
+          <span className="more-ic">{it.icon}</span><span className="pick-o">{it.label}</span>
+        </button>)}
+    </div>, document.body)}
+  </>;
+};
 
 /** Animated number that eases from its previous value. */
 /** Full-width form dropdown in the Pick style (replaces native <select> in forms). */

@@ -2339,3 +2339,15 @@ tbody tr .acts .btn.icon { width: 27px; } /* room for the share action */
 .ann-h { padding-left: 16px; }
 .ann.unread .ann-h::before { left: 5px; }
 .upd-prog .env-bar i { transition: none; }
+
+/* ---- v0.8.0 integration: row "更多" menu, toolbar fit at 1280px ---- */
+.toolbar .search { flex: 3 1 200px; min-width: 180px; }
+.btn.more-btn.on { background: rgba(255,255,255,.07); color: #fff; }
+.more-menu { min-width: 196px; z-index: 300; }
+.more-menu button .more-ic { width: 16px; display: inline-grid; place-items: center; color: var(--txt-3); flex: none; }
+.more-menu button:hover .more-ic { color: var(--txt-2); }
+.more-menu button.danger { color: var(--bad); }
+.more-menu button.danger .more-ic { color: var(--bad); }
+.more-menu button.danger:hover { background: rgba(255,107,122,.1); color: var(--bad); }
+.more-menu button:disabled { opacity: .45; cursor: default; }
+.more-sep { height: 1px; margin: 4px 6px; background: var(--hair); }

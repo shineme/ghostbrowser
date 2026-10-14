@@ -5,7 +5,7 @@ import { api, Profile, Proxy, Settings, onEvent } from './api';
 import { MetalFx } from 'metal-fx';
 import { DeleteModal, DelTarget } from './DeleteModal';
 import { TrashModal, useTrashCount } from './TrashView';
-import { Icon, Field, flag, ago, useToast, useConfirm, useExit, ToastHost, WindowControls, useMaximised, StatCard, Avatar, CC, CountUp, OsIcon, Ambient, Splash, useSpotlight, Pick, Segmented, DevIcon } from './ui';
+import { Icon, Field, flag, ago, useToast, useConfirm, useExit, ToastHost, WindowControls, useMaximised, StatCard, Avatar, CC, CountUp, OsIcon, Ambient, Splash, useSpotlight, Pick, Segmented, DevIcon, MoreMenu } from './ui';
 import { DEVICE_TYPES, devType, devName, osName as osNameOf, needsOpen } from './devices';
 import { ProfileDrawer } from './ProfileDrawer';
 import { ProxyView } from './ProxyView';
@@ -342,10 +342,13 @@ const ProfilesView: React.FC<{
                     <span className="acts" style={{ display: 'flex', gap: 2 }}>
                       {(p as any).shareId ? <button className="btn ghost icon" title="共享环境的配置为只读" disabled><Icon.edit s={15} /></button>
                         : <button className="btn ghost icon" title="编辑" onClick={() => { setEditing(p); setDrawer(true); }}><Icon.edit s={15} /></button>}
-                      {!(p as any).shareId && <button className="btn ghost icon" title="环境检测 / 一键修复" onClick={() => setEnvChk(p)}><Icon.shield s={15} /></button>}
-                      {!(p as any).shareId && <button className="btn ghost icon" title="分享给其他用户" onClick={() => setShareP(p)}><ShIc.share s={15} /></button>}
-                      {!(p as any).shareId && <button className="btn ghost icon" title="复制" onClick={() => clone(p)}><Icon.copy s={15} /></button>}
-                      <button className="btn ghost icon danger" title="删除" onClick={() => del([p.id])}><Icon.trash s={15} /></button>
+                      <MoreMenu title="更多操作" items={[
+                        !(p as any).shareId && { label: '环境检测 / 一键修复', icon: <Icon.shield s={14} />, onClick: () => setEnvChk(p) },
+                        !(p as any).shareId && { label: '分享给其他用户', icon: <ShIc.share s={14} />, onClick: () => setShareP(p) },
+                        !(p as any).shareId && { label: '复制环境', icon: <Icon.copy s={14} />, onClick: () => clone(p) },
+                        !(p as any).shareId && 'sep',
+                        { label: '删除', icon: <Icon.trash s={14} />, danger: true, onClick: () => del([p.id]) },
+                      ]} />
                     </span>
                   </div>
                 </td>
