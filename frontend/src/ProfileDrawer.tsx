@@ -50,7 +50,12 @@ export const ProfileDrawer: React.FC<{
   const fp = p.fingerprint;
   const [out, close] = useExit(onClose);
   const [flash, setFlash] = useState(0);
-  const setFP = (patch: Partial<Fingerprint>) => setP(s => ({ ...s, fingerprint: { ...s.fingerprint, ...patch } as Fingerprint }));
+  // Firefox strict mode wins over "language / time zone follows IP" (same rule as normalizeFirefoxFP).
+  const setFP = (patch: Partial<Fingerprint>) => setP(s => {
+    const f: any = { ...s.fingerprint, ...patch };
+    if ((s as any).kernel === 'firefox' && f.ffStrict) { f.languageFromIP = false; f.timezoneFromIP = false; }
+    return { ...s, fingerprint: f as Fingerprint };
+  });
   // Exit-IP match: what timezone / languages / coordinates the selected proxy implies.
   const [geo, setGeo] = useState<any>(null);
   const [geoBusy, setGeoBusy] = useState(false);
@@ -80,7 +85,7 @@ export const ProfileDrawer: React.FC<{
         <b>{p.proxyId || p.inlineProxy ? '代理出口' : '本机出口（未选代理）'}</b>
         <div className="spacer" style={{ flex: 1 }} />
         <button type="button" className="btn sm" disabled={geoBusy} onClick={() => runGeo()}>{geoBusy ? '检测中…' : '重新检测'}</button>
-        {geo?.ok && !(fp.timezoneFromIP && fp.languageFromIP && fp.geoFromIP) && <button type="button" className="btn sm primary" onClick={() => runGeo(true)}>全部跟随 IP</button>}
+        {geo?.ok && !(fp.timezoneFromIP && fp.languageFromIP && fp.geoFromIP) && !((p as any).kernel === 'firefox' && (fp as any).ffStrict) && <button type="button" className="btn sm primary" onClick={() => runGeo(true)}>全部跟随 IP</button>}
       </div>
       {!geo && <div className="sub">{geoBusy ? '正在检测出口 IP…' : '尚未检测'}</div>}
       {geo && !geo.ok && <div className="sub">检测失败：{geo.error}。启动时会再试一次；仍失败会拒绝启动，避免时区和 IP 对不上。</div>}

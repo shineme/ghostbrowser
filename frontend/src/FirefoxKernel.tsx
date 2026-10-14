@@ -28,7 +28,7 @@ export function useFirefoxInfo(dep?: any): [FirefoxInfo | null, () => void] {
   return [info, load];
 }
 
-export const ffVersionLabel = (i: FirefoxInfo | null) => !i ? '检测中…' : i.path ? `Firefox ${i.version || '版本未知'}` : '未安装';
+export const ffVersionLabel = (i: FirefoxInfo | null) => !i ? '检测中…' : i.path ? `Firefox ${i.version || '版本未知'}` : 'Firefox 未安装';
 
 const ffIdle: KernelProgress = { phase: 'idle', running: false, source: 'esr', done: 0, total: 0, pct: 0, speed: 0, eta: -1, message: '' };
 
@@ -76,7 +76,7 @@ export const FirefoxSettingsCard: React.FC<{ value: string; onChange: (path: str
   return (
     <div id="ff-card" className="panel pad setting-card spot rise" style={{ ['--i' as any]: index }}>
       <div className="head"><span className="ic ff"><FoxIcon s={17} /></span><div><h4>Firefox 内核</h4><span>Mozilla Firefox + 偏好设置（user.js），通过 WebDriver BiDi 控制</span></div>
-        <span className={`badge ${info?.path ? 'ok' : 'warn'} ff-ver`} title={info?.path || ''}><span className="d" />{ffVersionLabel(info)}{info?.esr ? ' · ESR' : ''}</span></div>
+        <span className={`badge ${info?.path ? 'ok' : 'warn'} ff-ver`} title={info?.path || ''}><span className="d" />{info ? (info.path ? info.version || '版本未知' : '未安装') : '检测中…'}</span></div>
       <Field label="firefox.exe 路径" hint={`留空自动检测：${info?.auto || '没找到已安装的 Firefox'}`}>
         <div className="row"><input type="text" value={value} onChange={e => onChange(e.target.value)} placeholder="C:\Program Files\Mozilla Firefox\firefox.exe" />
           <button className="btn" style={{ flex: 'none' }} onClick={pick}><Icon.folder s={15} /> 选择</button>

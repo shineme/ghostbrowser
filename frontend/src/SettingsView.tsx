@@ -3,7 +3,7 @@ import { api, Settings } from './api';
 import { Icon, Field, Toggle, useToast } from './ui';
 import type { EnvStatus } from './EnvSetup';
 import { KernelInstaller } from './KernelInstall';
-import { FirefoxSettingsCard, FoxIcon, useFirefoxInfo, ffVersionLabel } from './FirefoxKernel';
+import { FirefoxSettingsCard, FoxIcon, useFirefoxInfo } from './FirefoxKernel';
 
 const mb = (b: number) => b ? `${(b / 1048576).toFixed(b > 1e8 ? 0 : 1)} MB` : '';
 
@@ -50,6 +50,7 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
         <div className="head"><span className="ic"><Icon.cpu /></span><div><h4>浏览器内核</h4><span>定制 Chromium + 原生指纹模板</span></div></div>
         <div className="choice">
           <button className="on" onClick={() => set({ kernelMode: 'undetectable' })}><b><Icon.layers s={15} />定制 Chromium<span className="radio" /></b><small>本地指纹库 + 原生模板，环境缺失时自动下载安装</small></button>
+          <button className="ff-tile" onClick={() => document.getElementById('ff-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}><b><FoxIcon s={15} />Firefox 内核<span className={`badge ${ffInfo?.path ? 'ok' : 'warn'}`}><span className="d" />{ffInfo ? (ffInfo.path ? ffInfo.version || '已安装' : '未安装') : '检测中…'}</span></b><small>可选：新建环境时在「指纹配置 → 内核」里选择，独立 Firefox 配置目录</small></button>
         </div>
 
         <div className={`geo-card ${envS?.ready ? '' : envS?.phase === 'failed' ? 'bad' : 'warn'}`}>
@@ -75,7 +76,6 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
         </Field>
         <div className="rise">
           <Field label="本地指纹包目录" hint="包含 runtime/chrome 和 fingerprints/library.json"><input type="text" value={s.undetectableKit || ''} onChange={e => set({ undetectableKit: e.target.value })} placeholder="项目目录\\undetectable-kit" /></Field>
-          <button className="ff-tile" onClick={() => document.getElementById('ff-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}><b><FoxIcon s={15} />Firefox 内核<span className={`badge ${ffInfo?.path ? 'ok' : 'warn'}`}><span className="d" />{ffVersionLabel(ffInfo)}</span></b><small>可选：新建环境时在「指纹配置 → 内核」里选择，独立 Firefox 配置目录</small></button>
           <button className="btn" onClick={useKit}><Icon.layers s={14} /> 使用当前已安装的 Chromium 与指纹库</button>
           <div className="sub" style={{ marginTop: 10 }}>标准 Chrome / Edge 无法运行原生模板。关闭 GhostBrowser 会停止它启动的环境，内置模板已验证 Windows。</div>
         </div>
