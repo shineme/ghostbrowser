@@ -76,7 +76,7 @@ export const GuardPane: React.FC<{ fp: FP; setFP: SetFP; open: boolean; onRegenS
     <div className="seedcard">
       <div className="seed-glyph"><Icon.fingerprint s={18} /></div>
       <div className="seed-t">
-        <div className="seed-l">指纹种子 <b key={flip} className="mono seed-id">{seedShort(fp.noiseSeed)}</b></div>
+        <div className="seed-l">指纹种子 <b className="mono seed-id" data-v={flip}>{seedShort(fp.noiseSeed)}</b></div>
         <small>Canvas、WebGL、音频、ClientRects 噪声与媒体设备 ID 都由它派生；同一种子 = 指纹永远一致</small>
       </div>
       {onRegenSeed && <button type="button" className="btn ghost seed-btn" disabled={regen} onClick={doRegen}><Icon.dice s={14} /> {regen ? '生成中…' : '重新生成指纹种子'}</button>}

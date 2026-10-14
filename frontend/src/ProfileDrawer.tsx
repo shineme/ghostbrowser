@@ -54,7 +54,7 @@ export const ProfileDrawer: React.FC<{
   // ---- fingerprint extras: new noise seed (saved at once for existing profiles; cookies untouched) ----
   const regenSeed = async () => {
     const ok = await ask({
-      title: '重新生成指纹种子？', ok: '重新生成', danger: true,
+      title: '重新生成指纹种子？', ok: '重新生成',
       body: <>Canvas、WebGL、音频、ClientRects 噪声和媒体设备 ID 会全部换新，网站会把它当成另一台设备。<br />Cookie、登录状态、代理和其他指纹参数<b>保持不变</b>。{profile?.id ? '新种子立即保存，运行中的环境需重启后生效。' : ''}</>,
     });
     if (!ok) return;

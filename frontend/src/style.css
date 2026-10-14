@@ -1815,10 +1815,9 @@ input.mono, textarea.mono { font-family: "JBMono", Consolas, monospace; }
 .seed-glyph { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 10px; color: #c9d1ff; background: rgba(124,140,255,.14); border: 1px solid rgba(124,140,255,.25); }
 .seed-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .seed-l { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--txt); }
-.seed-id { font-size: 13px; letter-spacing: .08em; padding: 1px 8px; border-radius: 6px; background: rgba(0,0,0,.28); border: 1px solid var(--hair-2); color: #dfe3ff; animation: seedflip var(--t-slow) var(--ease-out); }
+.seed-id { font-size: 13px; letter-spacing: .08em; padding: 1px 8px; border-radius: 6px; background: rgba(0,0,0,.28); border: 1px solid var(--hair-2); color: #dfe3ff; }
 .seed-t small { font-size: 11.5px; color: var(--txt-3); line-height: 1.5; }
 .seed-btn { flex: none; white-space: nowrap; }
-@keyframes seedflip { from { opacity: 0; transform: translateY(5px); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
 .subsw { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,.025); border: 1px solid var(--hair); cursor: pointer; transition: background var(--t-fast); }
 .subsw:hover { background: rgba(255,255,255,.045); }
 .subsw-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

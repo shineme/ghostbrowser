@@ -163,7 +163,7 @@ export function TerminalView({ profiles, proxyName }: { profiles: Profile[]; pro
                 {profiles.length === 0 ? <div className="tf-hint bad"><Icon.alert s={12} /><span>还没有环境，先在「环境」页创建一个</span></div> : <>
                   <Pick label="环境" value={pr.profileId} onChange={v => set({ profileId: v })} icon={<Icon.layers />}
                     options={[['', '选择一个环境'] as [string, string], ...profiles.map(p => [p.id, p.name || p.id] as [string, string])]} />
-                  {prof && <span className="tf-prof"><Avatar seed={prof.fingerprint.noiseSeed || prof.id} os={prof.fingerprint.os} /><span className="ell">{prof.name}</span></span>}
+                  {prof && <span className="tf-prof"><Avatar seed={prof.fingerprint.noiseSeed || prof.id} os={prof.fingerprint.os} /><span className="ell">{prof.group ? `${prof.group} · ` : ''}{px && px.type !== 'none' && px.host ? `${String(px.type).toUpperCase()} 代理` : '未设置代理'}</span></span>}
                 </>}
               </div>}
               {pr.envMode === 'custom' && <div className="tf-custom">
@@ -175,7 +175,7 @@ export function TerminalView({ profiles, proxyName }: { profiles: Profile[]; pro
           </div>
 
           <div className="tf-row">
-            <div className="tf-l"><b>窗口</b><small>{pr.host === 'wt' ? 'Windows Terminal 新窗口' : '独立的 PowerShell 控制台窗口'}</small></div>
+            <div className="tf-l"><b>窗口</b><small>{pr.host === 'wt' && info?.wt ? 'Windows Terminal 新窗口' : '独立 PowerShell 窗口'}</small></div>
             <div className="tf-c">
               <Segmented className="compact" value={info?.wt ? pr.host : 'console'} onChange={v => set({ host: v })} items={info?.wt ? [['console', 'PowerShell 窗口'], ['wt', 'Windows Terminal']] : [['console', 'PowerShell 窗口']]} />
               {info && !info.wt && <div className="tf-hint"><span>未检测到 Windows Terminal (wt.exe)，使用 PowerShell 窗口</span></div>}
