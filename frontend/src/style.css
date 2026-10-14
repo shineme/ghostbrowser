@@ -1825,3 +1825,7 @@ input.mono, textarea.mono { font-family: "JBMono", Consolas, monospace; }
 .ss-k { flex: none; color: var(--txt-3); line-height: 24px; }
 .ss-v { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; line-height: 24px; }
 .ss-size { color: var(--txt-3); font-size: 11.5px; margin-left: 2px; }
+.ss-opts input[type=number] { max-width: 220px; }
+/* the cookie dialog's running state reused the global .live dot class (pre-existing): undo the dot sizing */
+.ck-status.live { width: auto; height: auto; border-radius: 12px; box-shadow: none; flex-shrink: 1; }
+.ck-status.live::after { content: none; }
