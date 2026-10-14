@@ -244,7 +244,7 @@ const ConfigCard: React.FC<{ st: McpStatus | null; hideKey: (s: string) => strin
         {st ? <pre className="mono">{mode === 'cli' && <span className="pr">$ </span>}{hideKey(raw)}</pre> : <div className="au-code-load"><ThinkingOrb state="searching" size={20} theme="dark" /></div>}
         <button className={`btn sm au-copy ${copied ? 'done' : ''}`} disabled={!st} onClick={copy}>{copied ? <><Icon.check s={13} /> 已复制</> : <><Icon.copy s={13} /> 复制</>}</button>
       </div>
-      <div className="au-hint">{MODE_HINT[mode]}{st?.keyRequired && mode !== 'stdio' ? ' 复制的内容包含完整 API Key。' : ''}</div>
+      <div className="au-hint">{MODE_HINT[mode]}{st?.keyRequired && mode !== 'stdio' ? '复制的内容包含完整 API Key。' : ''}</div>
       {needsServer && <div className="notice warn au-warn"><Icon.alert /><span className="grow">MCP 服务未启动，这种接入方式暂时连不上。</span></div>}
     </div>
   );
@@ -298,6 +298,8 @@ const AuditLog: React.FC<{ profiles: Profile[] }> = ({ profiles }) => {
   usePoll(load, 5000);
 
   const byId = useMemo(() => Object.fromEntries(profiles.map(p => [p.id, p])), [profiles]);
+  const [pxName, setPxName] = useState<Record<string, string>>({});
+  useEffect(() => { api.ListProxies().then(l => setPxName(Object.fromEntries((l || []).map(x => [x.id, x.name])))).catch(() => {}); }, []);
   const filtered = !!(cat || src || target || dq || onlyFail);
   const reset = () => { setCat(''); setSrc(''); setTarget(''); setQ(''); setDq(''); setOnlyFail(false); };
 
@@ -327,7 +329,7 @@ const AuditLog: React.FC<{ profiles: Profile[] }> = ({ profiles }) => {
         </div>
       ) : <>
         <div className="toolbar au-toolbar">
-          <div className="search"><Icon.search /><input type="text" placeholder="搜索环境 / 工具 / 错误" value={q} onChange={e => setQ(e.target.value)} /></div>
+          <div className="search"><Icon.search /><input type="text" placeholder="搜索日志…" title="按环境名、工具、错误信息或详情搜索" value={q} onChange={e => setQ(e.target.value)} /></div>
           <Pick label="分类" value={cat} onChange={setCat} icon={<Icon.layers />}
             options={[['', '全部分类', all], ...cats.map(([c, n]) => [c, CATS[c] || c, n] as [string, string, number])]} />
           <Pick label="来源" value={src} onChange={setSrc} icon={<Icon.server />}
@@ -350,7 +352,7 @@ const AuditLog: React.FC<{ profiles: Profile[] }> = ({ profiles }) => {
               <th style={{ width: 118 }}>时间</th><th style={{ width: 84 }}>来源</th><th style={{ width: 150 }}>操作</th><th style={{ width: 210 }}>对象</th><th style={{ width: 86 }}>结果</th><th>详情</th>
             </tr></thead>
             <tbody>
-              {(res?.items || []).map((e, i) => <Row key={e.id} e={e} i={i} p={byId[e.target]} />)}
+              {(res?.items || []).map((e, i) => <Row key={e.id} e={e} i={i} p={byId[e.target]} px={pxName} />)}
             </tbody>
           </table>
           {loading && !res && <div className="au-loading"><ThinkingOrb state="searching" size={32} theme="dark" /><span>读取操作日志…</span></div>}
@@ -367,11 +369,12 @@ const AuditLog: React.FC<{ profiles: Profile[] }> = ({ profiles }) => {
   );
 };
 
-const Row: React.FC<{ e: AuditEntry; i: number; p?: Profile }> = ({ e, i, p }) => {
+const Row: React.FC<{ e: AuditEntry; i: number; p?: Profile; px: Record<string, string> }> = ({ e, i, p, px }) => {
   const cat = e.action.split('.')[0];
   const I = Icon[CAT_IC[cat] || 'bolt'];
   const s = SRC[e.source] || [e.source, e.source, 'local'];
-  const det = e.action === 'mcp.call' && e.detail && e.name && e.detail.startsWith(e.name) ? e.detail.slice(e.name.length).trim() : e.detail;
+  let det = e.action === 'mcp.call' && e.detail && e.name && e.detail.startsWith(e.name) ? e.detail.slice(e.name.length).trim() : e.detail;
+  if (e.action === 'proxy.assign') det = e.detail ? `→ ${px[e.detail] || e.detail}` : '→ 直连';
   const detail = [e.error, e.detail].filter(Boolean).join(' · ');
   let obj: React.ReactNode;
   if (e.action === 'mcp.call') obj = <span className="au-obj"><code className="mono au-toolname" title={TOOLS[e.name] || ''}>{e.name || '—'}</code></span>;
