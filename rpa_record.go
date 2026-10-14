@@ -482,13 +482,13 @@ func finalizeRecording(steps []RpaStep, o RecordFinalizeOptions, secrets map[str
 // ---------- CDP side ----------
 
 type recTabConn struct {
-	id     string
-	sid    string
-	ctx    int
-	reqAt  time.Time
-	reason string
-	dialog bool
-	stall  time.Time
+	id      string
+	sid     string
+	ctx     int
+	reqAt   time.Time
+	reason  string
+	dialog  bool
+	stall   time.Time
 	pickSeq int // last pick-mode change delivered to this tab's top document
 }
 
@@ -518,9 +518,7 @@ type recorder struct {
 	pickMode  string // current click-to-pick mode in the current tab: extract | assert | ""
 	pickSeq   int    // bumped on every pick-mode change; frames catch up on drain
 	ws        string
-	frames    map[string]*recFrame // iframe id → frame (rpa_record_frames.go)
-	fsess     map[string]string    // iframe target session → tab
-	treeDirty map[string]bool      // sessions whose frame tree changed
+	*frameReg // iframes of the recorded tabs (frames_reg.go)
 }
 
 // recHolder owns the single active recording (one browser at a time).
@@ -564,7 +562,6 @@ func (h *recHolderT) Start(pid, pname, ws string, opts RecordOptions, release fu
 		return RecordState{}, fmt.Errorf("已经在录制另一个环境，请先停止")
 	}
 	r := &recorder{core: newRecCore(opts), pid: pid, pname: pname, tabs: map[string]*recTabConn{}, bySid: map[string]string{},
-		frames: map[string]*recFrame{}, fsess: map[string]string{}, treeDirty: map[string]bool{},
 		evq: make(chan cdpMsg, 4096), stopc: make(chan struct{}), done: make(chan struct{}), started: time.Now(), release: release}
 	r.emit = func(st RecordState) {
 		h.mu.Lock()
@@ -609,6 +606,7 @@ func (r *recorder) attach(ws string) error {
 		return fmt.Errorf("连接浏览器失败：%v", err)
 	}
 	r.conn, r.ws = c, ws
+	r.initFrames()
 	d := &cdpDriver{conn: c}
 	pages, err := d.pages()
 	for i := 0; err == nil && i < 15 && len(pages) == 0; i++ {
@@ -738,7 +736,7 @@ func (r *recorder) handle(m cdpMsg) {
 			TargetInfo struct {
 				TargetID string `json:"targetId"`
 				Type     string `json:"type"`
- 				URL      string `json:"url"`
+				URL      string `json:"url"`
 				OpenerID string `json:"openerId"`
 				Parent   string `json:"parentFrameId"`
 			} `json:"targetInfo"`
