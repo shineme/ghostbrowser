@@ -3,8 +3,8 @@ package main
 // Fingerprint is the full per-profile fingerprint config. It is written to the
 // native startInfo blob that the bundled custom Chromium reads at launch.
 type Fingerprint struct {
-	OS              string   `json:"os"`         // windows | macos | linux | android | chromeos | tizen | webos
-	DeviceType      string   `json:"deviceType"` // desktop | laptop | phone | tablet | foldable | chromebook | tv ("" = desktop)
+	OS              string   `json:"os"`                    // windows | macos | linux | android | chromeos | tizen | webos
+	DeviceType      string   `json:"deviceType"`            // desktop | laptop | phone | tablet | foldable | chromebook | tv ("" = desktop)
 	DeviceModel     string   `json:"deviceModel,omitempty"` // UA-CH model, e.g. SM-S928B (phones / tablets)
 	DeviceName      string   `json:"deviceName,omitempty"`  // marketing name shown in the UI
 	OSVersion       string   `json:"osVersion"`
@@ -36,6 +36,33 @@ type Fingerprint struct {
 	Fonts           []string `json:"fonts"`
 	DoNotTrack      bool     `json:"doNotTrack"`
 	HideMedia       bool     `json:"hideMediaDevices"`
+
+	// ---- extra fingerprint + launch controls (open-source kernel) ----
+	// Modes: "" = follow the old boolean above; off | noise | real.
+	CanvasMode      string `json:"canvasMode,omitempty"`
+	WebGLImageMode  string `json:"webglImageMode,omitempty"`
+	AudioMode       string `json:"audioMode,omitempty"`
+	ClientRectsMode string `json:"clientRectsMode,omitempty"`
+	// real | custom | off ("" = follow HideMedia)
+	MediaDevicesMode          string `json:"mediaDevicesMode,omitempty"`
+	MediaMics                 int    `json:"mediaMics,omitempty"`
+	MediaSpeakers             int    `json:"mediaSpeakers,omitempty"`
+	MediaCameras              int    `json:"mediaCameras,omitempty"`
+	SpeechVoices              string `json:"speechVoices,omitempty"` // real | custom | off
+	WebGPU                    string `json:"webgpu,omitempty"`       // real | off
+	PortScanProtection        bool   `json:"portScanProtection,omitempty"`
+	ScanWhitelist             string `json:"scanWhitelist,omitempty"`        // ports / host:port, comma or newline separated
+	HardwareAcceleration      *bool  `json:"hardwareAcceleration,omitempty"` // nil = on
+	RandomFingerprintOnLaunch bool   `json:"randomFingerprintOnLaunch,omitempty"`
+	WindowMode                string `json:"windowMode,omitempty"` // auto | custom | maximized
+	WindowWidth               int    `json:"windowWidth,omitempty"`
+	WindowHeight              int    `json:"windowHeight,omitempty"`
+	WindowX                   int    `json:"windowX,omitempty"`
+	WindowY                   int    `json:"windowY,omitempty"`
+	BlockImages               bool   `json:"blockImages,omitempty"`
+	BlockVideo                bool   `json:"blockVideo,omitempty"`
+	BlockSound                bool   `json:"blockSound,omitempty"`
+	StartupParameters         string `json:"startupParameters,omitempty"`
 }
 
 type Proxy struct {

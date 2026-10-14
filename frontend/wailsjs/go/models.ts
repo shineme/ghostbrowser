@@ -202,6 +202,29 @@ export namespace main {
 	    fonts: string[];
 	    doNotTrack: boolean;
 	    hideMediaDevices: boolean;
+    canvasMode?: string;
+    webglImageMode?: string;
+    audioMode?: string;
+    clientRectsMode?: string;
+    mediaDevicesMode?: string;
+    mediaMics?: number;
+    mediaSpeakers?: number;
+    mediaCameras?: number;
+    speechVoices?: string;
+    webgpu?: string;
+    portScanProtection?: boolean;
+    scanWhitelist?: string;
+    hardwareAcceleration?: boolean;
+    randomFingerprintOnLaunch?: boolean;
+    windowMode?: string;
+    windowWidth?: number;
+    windowHeight?: number;
+    windowX?: number;
+    windowY?: number;
+    blockImages?: boolean;
+    blockVideo?: boolean;
+    blockSound?: boolean;
+    startupParameters?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Fingerprint(source);
@@ -242,6 +265,29 @@ export namespace main {
 	        this.fonts = source["fonts"];
 	        this.doNotTrack = source["doNotTrack"];
 	        this.hideMediaDevices = source["hideMediaDevices"];
+        this.canvasMode = source["canvasMode"];
+        this.webglImageMode = source["webglImageMode"];
+        this.audioMode = source["audioMode"];
+        this.clientRectsMode = source["clientRectsMode"];
+        this.mediaDevicesMode = source["mediaDevicesMode"];
+        this.mediaMics = source["mediaMics"];
+        this.mediaSpeakers = source["mediaSpeakers"];
+        this.mediaCameras = source["mediaCameras"];
+        this.speechVoices = source["speechVoices"];
+        this.webgpu = source["webgpu"];
+        this.portScanProtection = source["portScanProtection"];
+        this.scanWhitelist = source["scanWhitelist"];
+        this.hardwareAcceleration = source["hardwareAcceleration"];
+        this.randomFingerprintOnLaunch = source["randomFingerprintOnLaunch"];
+        this.windowMode = source["windowMode"];
+        this.windowWidth = source["windowWidth"];
+        this.windowHeight = source["windowHeight"];
+        this.windowX = source["windowX"];
+        this.windowY = source["windowY"];
+        this.blockImages = source["blockImages"];
+        this.blockVideo = source["blockVideo"];
+        this.blockSound = source["blockSound"];
+        this.startupParameters = source["startupParameters"];
 	    }
 	}
 	export class GeoMatch {
