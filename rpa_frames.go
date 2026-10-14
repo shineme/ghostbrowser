@@ -407,7 +407,9 @@ func (d *cdpDriver) evalInFrame(fc *frameCtx, expr string, main bool) (json.RawM
 		} `json:"object"`
 	}
 	_ = json.Unmarshal(r, &o)
-	defer func() { _, _ = d.conn.call(fc.sid, "Runtime.releaseObject", map[string]any{"objectId": o.Object.ObjectID}) }()
+	defer func() {
+		_, _ = d.conn.call(fc.sid, "Runtime.releaseObject", map[string]any{"objectId": o.Object.ObjectID})
+	}()
 	return d.conn.call(fc.sid, "Runtime.callFunctionOn", map[string]any{"objectId": o.Object.ObjectID,
 		"functionDeclaration": "function() { return (0, eval)(" + jsq(expr) + "); }", "returnByValue": true, "awaitPromise": true, "userGesture": true})
 }
@@ -454,6 +456,15 @@ func (d *cdpDriver) ScreenshotElement(sel string) ([]byte, error) {
 	if len(b) < 4 || b[2] <= 0 || b[3] <= 0 {
 		return nil, fmt.Errorf("元素没有可见区域：%s", sel)
 	}
-	clip := map[string]any{"x": fc.ox + b[0]*fc.scale, "y": fc.oy + b[1]*fc.scale, "width": b[2] * fc.scale, "height": b[3] * fc.scale, "scale": 1}
+	// The clip is in document coordinates of the top page: add its scroll.
+	var px, py float64
+	if raw, err := d.call("Page.getLayoutMetrics", nil); err == nil {
+		var m struct {
+			VV struct{ PageX, PageY float64 } `json:"cssVisualViewport"`
+		}
+		_ = json.Unmarshal(raw, &m)
+		px, py = m.VV.PageX, m.VV.PageY
+	}
+	clip := map[string]any{"x": px + fc.ox + b[0]*fc.scale, "y": py + fc.oy + b[1]*fc.scale, "width": b[2] * fc.scale, "height": b[3] * fc.scale, "scale": 1}
 	return d.capture(map[string]any{"format": "png", "clip": clip})
 }
