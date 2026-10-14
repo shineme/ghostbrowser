@@ -645,8 +645,14 @@ func jsq(s string) string { b, _ := json.Marshal(s); return string(b) }
 
 // rpaFind resolves a selector: CSS by default, "xpath:" or a leading "//" for
 // XPath, "text:" for the smallest element whose visible text contains it.
+// "a || b" tries each alternative in turn (the recorder stores a fallback
+// XPath this way).
 const rpaFind = `const __gbq = (sel) => {
   sel = String(sel).trim();
+  if (sel.includes(' || ')) {
+    for (const p of sel.split(' || ')) { let e = null; try { e = __gbq(p); } catch (err) {} if (e) return e; }
+    return null;
+  }
   if (sel.startsWith('xpath:') || sel.startsWith('//') || sel.startsWith('(//')) {
     return document.evaluate(sel.replace(/^xpath:/, ''), document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
   }

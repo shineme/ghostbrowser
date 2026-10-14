@@ -1024,3 +1024,101 @@ func (a *App) KernelDelete(dir string) error {
 	}
 	return nil
 }
+
+// ---- rpa recorder ----
+
+func (a *App) recEmit() {
+	recordings.setEmit(func(st RecordState) {
+		if a.ctx != nil && a.ctx.Value("events") != nil {
+			wruntime.EventsEmit(a.ctx, "rpa:record", st)
+		}
+	})
+}
+
+// StartRecording opens the profile's browser (or attaches to the open one)
+// and records what the user does there; steps arrive as "rpa:record" events.
+func (a *App) StartRecording(profileID string, opts RecordOptions) (RecordState, error) {
+	a.recEmit()
+	p, ok := a.store.GetProfile(profileID)
+	if !ok {
+		return RecordState{}, fmt.Errorf("环境不存在或已删除")
+	}
+	if recordings.active() != nil {
+		return RecordState{}, fmt.Errorf("已经在录制另一个环境，请先停止")
+	}
+	if !a.rpa().claim(profileID, "record") {
+		return RecordState{}, fmt.Errorf("这个环境正在运行自动化流程，请等它结束再录制")
+	}
+	release := func() { a.rpa().release(profileID) }
+	rs, err := a.StartProfile(profileID)
+	if err != nil {
+		release()
+		return RecordState{}, fmt.Errorf("启动浏览器失败：%v", err)
+	}
+	if !strings.HasPrefix(rs.WSURL, "ws") {
+		release()
+		return RecordState{}, fmt.Errorf("这个环境的内核没有调试接口（CDP），无法录制")
+	}
+	st, err := recordings.Start(profileID, p.Name, rs.WSURL, opts, release)
+	if err != nil {
+		release()
+	}
+	return st, err
+}
+
+// StopRecording ends the recording and returns every captured step.
+func (a *App) StopRecording() RecordState {
+	if r := recordings.active(); r != nil {
+		return r.Stop()
+	}
+	return recordings.State()
+}
+
+func (a *App) PauseRecording() RecordState {
+	if r := recordings.active(); r != nil {
+		return r.Pause(true)
+	}
+	return recordings.State()
+}
+
+func (a *App) ResumeRecording() RecordState {
+	if r := recordings.active(); r != nil {
+		return r.Pause(false)
+	}
+	return recordings.State()
+}
+
+// RecordingState returns the active (or last finished) recording.
+func (a *App) RecordingState() RecordState { return recordings.State() }
+
+// RecordRemoveStep deletes a captured step while recording.
+func (a *App) RecordRemoveStep(stepID string) RecordState {
+	if r := recordings.active(); r != nil {
+		return r.edit(func(c *recCore) { c.remove(stepID) })
+	}
+	return recordings.State()
+}
+
+// RecordUpdateStep replaces a captured step (edited in the recording panel).
+func (a *App) RecordUpdateStep(step RpaStep) RecordState {
+	if r := recordings.active(); r != nil {
+		return r.edit(func(c *recCore) { c.update(step) })
+	}
+	return recordings.State()
+}
+
+// FinalizeRecording applies the review toggles to the reviewed steps.
+func (a *App) FinalizeRecording(steps []RpaStep, opts RecordFinalizeOptions) RecordFinalized {
+	var secrets map[string]string
+	recordings.mu.Lock()
+	if r := recordings.last; r != nil {
+		r.mu.Lock()
+		secrets = map[string]string{}
+		for k, v := range r.core.secrets {
+			secrets[k] = v
+		}
+		r.mu.Unlock()
+	}
+	recordings.mu.Unlock()
+	return finalizeRecording(steps, opts, secrets)
+}
