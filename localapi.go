@@ -125,6 +125,20 @@ func (a *localAPI) start(store *Store) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(raw))
 	})
+	// recycle bin: read-only list of trashed profiles (restore/purge stay in the UI)
+	mux.HandleFunc("/trash", func(w http.ResponseWriter, r *http.Request) {
+		type row struct {
+			ID        string `json:"id"`
+			Name      string `json:"name"`
+			TrashedAt int64  `json:"trashedAt"`
+			ExpiresAt int64  `json:"expiresAt"`
+		}
+		out := []row{}
+		for _, t := range a.store.ListTrash() {
+			out = append(out, row{t.ID, t.Name, t.TrashedAt, t.ExpiresAt})
+		}
+		writeJSON(w, map[string]any{"data": out})
+	})
 	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": true, "running": runReg.list()})
 	})

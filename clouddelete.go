@@ -474,12 +474,6 @@ func (s *Store) CloudOnly() CloudOnlyList {
 // RestoreLocalDeleted downloads a profile deleted only on this device and lets
 // auto sync follow it again.
 func (s *Store) RestoreLocalDeleted(id string) error {
-	if _, ok := s.trashed(id); ok { // still in the recycle bin: bring back the local copy
-		if r := s.RestoreFromTrash("ui", []string{id}); len(r) == 1 && r[0].Error != "" {
-			return fmt.Errorf("%s", r[0].Error)
-		}
-		return nil
-	}
 	if _, ok := s.GetProfile(id); ok {
 		s.clearLocalDeleted(id)
 		return nil

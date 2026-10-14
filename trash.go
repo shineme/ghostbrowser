@@ -164,7 +164,10 @@ func (s *Store) ListTrash() []TrashItem {
 			}
 		}
 		_, isPend := pend[p.ID]
+		_, live := s.GetProfile(p.ID)
 		switch {
+		case live:
+			it.CloudNote = "本机已从云端重新下载此环境"
 		case isPend:
 			it.CloudNote = "云端删除排队中"
 			it.RestoreAsNew = true
@@ -217,7 +220,7 @@ func (s *Store) RestoreFromTrash(source string, ids []string) []RestoreResult {
 			if _, e := os.Stat(p.TrashDir); e == nil && p.TrashDir != dst {
 				if e := moveDir(p.TrashDir, dst); e != nil {
 					r.Error = "数据文件夹移回失败（可能被占用）：" + e.Error()
-					s.auditNamed(source, "trash.restore", id, p.Name, e, "")
+					s.auditNamed(source, "profile.restore", id, p.Name, e, "")
 					out = append(out, r)
 					continue
 				}
@@ -241,7 +244,7 @@ func (s *Store) RestoreFromTrash(source string, ids []string) []RestoreResult {
 		if !asNew {
 			s.clearLocalDeleted(id) // auto sync follows it again
 		}
-		s.auditNamed(source, "trash.restore", np.ID, np.Name, nil, detail)
+		s.auditNamed(source, "profile.restore", np.ID, np.Name, nil, detail)
 		out = append(out, r)
 	}
 	return out
@@ -283,7 +286,7 @@ func (s *Store) PurgeTrash(source string, ids []string, detail string) int {
 		delete(s.Trash, id)
 		s.saveLocked()
 		s.mu.Unlock()
-		s.auditNamed(source, "trash.purge", id, p.Name, err, detail)
+		s.auditNamed(source, "profile.purge", id, p.Name, err, detail)
 		n++
 	}
 	return n
@@ -314,5 +317,5 @@ func (s *Store) PurgeExpiredTrash() int {
 	if len(ids) == 0 {
 		return 0
 	}
-	return s.PurgeTrash("system", ids, fmt.Sprintf("超过 %d 天自动彻底删除", trashDays(s.GetSettings())))
+	return s.PurgeTrash("ui", ids, fmt.Sprintf("超过 %d 天自动彻底删除", trashDays(s.GetSettings())))
 }
