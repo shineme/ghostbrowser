@@ -175,6 +175,9 @@ func (a *autoSyncer) plan() (prompt, auto []SyncItem, cloud map[string]cloudMeta
 		}
 	}
 	for _, p := range local {
+		if p.ShareID != "" {
+			continue // received from another user: never pushed to this account
+		}
 		c, ok := cloud[p.ID]
 		it := SyncItem{ID: p.ID, Name: p.Name, Action: "push", LocalVersion: p.CloudVer, LocalRun: p.LastRun, CloudVersion: c.Version}
 		switch {
@@ -446,7 +449,9 @@ func (a *autoSyncer) AfterExit(id string) {
 		}
 		defer a.release(id)
 		name := ""
-		if p, ok := a.s.GetProfile(id); ok {
+		if p, ok := a.s.GetProfile(id); ok && p.ShareID != "" {
+			return // shared to this user: its runtime session stays local
+		} else if ok {
 			name = p.Name
 		} else {
 			return // deleted

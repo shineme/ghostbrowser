@@ -121,6 +121,12 @@ type Profile struct {
 	Kernel string `json:"kernel,omitempty"`
 	// Extension Center: IDs of extensions loaded with --load-extension at launch.
 	ExtensionIDs []string `json:"extensionIds,omitempty"`
+	// profile sharing: set on a copy received from another user on the same
+	// sync server (read-only config, never pushed to this user's cloud).
+	ShareID      string `json:"shareId,omitempty"`
+	SharedFrom   string `json:"sharedFrom,omitempty"`
+	ShareMode    string `json:"shareMode,omitempty"` // session | config
+	ShareExpires int64  `json:"shareExpires,omitempty"`
 }
 
 // needsOpenKernel: the custom kernel only carries Windows desktop templates.

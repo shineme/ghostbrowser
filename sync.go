@@ -225,6 +225,7 @@ func (c *syncClient) req(method, path string, body io.Reader, ct string) (*http.
 	if c.lockToken != "" {
 		req.Header.Set("X-Lock-Token", c.lockToken)
 	}
+	req.Header.Set("X-Device-OS", runtime.GOOS) // device management
 	return c.hc.Do(req)
 }
 
@@ -281,6 +282,9 @@ func syncStatus(resp *http.Response) error {
 	}
 	if resp.StatusCode == 410 || resp.StatusCode == 423 {
 		return cloudStatusErr(resp.StatusCode, b)
+	}
+	if e := secStatusErr(resp.StatusCode, b); e != nil { // device / key / share errors
+		return e
 	}
 	return fmt.Errorf("sync HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
 }
@@ -420,6 +424,13 @@ func (s *Store) pushProfileInner(id string, sent *int64, t *transfer) error {
 	if !ok {
 		return fmt.Errorf("profile not found")
 	}
+	if p.ShareID != "" {
+		return fmt.Errorf("共享给你的环境不会上传到你的云端")
+	}
+	secret, e := s.dataSecret()
+	if e != nil {
+		return e
+	}
 	root, dir, e := s.syncDir(id)
 	if e != nil {
 		return e
@@ -447,7 +458,7 @@ func (s *Store) pushProfileInner(id string, sent *int64, t *transfer) error {
 	var refs []string
 	var files []manifestFile
 	if si, err := s.ServerInfo(false); err == nil && si.has("chunks") {
-		enc, refs, *sent, files, e = s.buildChunked(dir, root, &archived, st.SyncPassword, t)
+		enc, refs, *sent, files, e = s.buildChunked(dir, root, &archived, string(secret), t)
 		if e != nil {
 			return e
 		}
@@ -460,7 +471,7 @@ func (s *Store) pushProfileInner(id string, sent *int64, t *transfer) error {
 		if e != nil {
 			return e
 		}
-		enc, e = encrypt(raw, []byte(st.SyncPassword))
+		enc, e = encrypt(raw, secret)
 		if e != nil {
 			return e
 		}
@@ -623,7 +634,11 @@ func (s *Store) pullProfileInner(id string, want int64, got *int64, t *transfer)
 	if !strings.EqualFold(hex.EncodeToString(sum[:]), wantHash) {
 		return fmt.Errorf("download SHA-256 does not match")
 	}
-	raw, e := decrypt(enc, []byte(st.SyncPassword))
+	secret, e := s.dataSecret()
+	if e != nil {
+		return e
+	}
+	raw, e := decrypt(enc, secret)
 	if e != nil {
 		return fmt.Errorf("decrypt failed; check the sync password: %w", e)
 	}
