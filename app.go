@@ -51,7 +51,7 @@ func (a *App) startup(ctx context.Context) {
 		println("mcp:", err.Error())
 	}
 	// Server-first reconcile on start-up, off the UI thread.
-	go func() { time.Sleep(800 * time.Millisecond); a.auto.Reconcile(); go a.auto.WatchDeletes(); a.auto.WatchGlobal() }()
+	go func() { time.Sleep(800 * time.Millisecond); a.auto.Reconcile(); go a.auto.WatchDeletes(); go a.watchShares(); a.auto.WatchGlobal() }()
 	go a.proxyHealthLoop()
 }
 
@@ -60,6 +60,9 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) ListProfiles() []Profile { return a.store.ListProfiles() }
 
 func (a *App) SaveProfile(p Profile) (Profile, error) {
+	if old, ok := a.store.GetProfile(p.ID); ok && old.ShareID != "" { // share: received copies are read-only
+		return *old, fmt.Errorf("这是「%s」共享给你的环境，配置为只读", old.SharedFrom)
+	}
 	act := "profile.edit"
 	if p.ID == "" {
 		act = "profile.create"
@@ -271,6 +274,9 @@ func (a *App) StartProfile(id string) (*RunState, error) {
 	if _, ok := runReg.get(id); ok {
 		rs, _ := runReg.get(id)
 		return rs, nil
+	}
+	if err := a.store.shareLaunchGuard(id); err != nil { // share: revoked / expired
+		return nil, err
 	}
 	if err := a.auto.BeforeLaunch(id); err != nil {
 		a.store.auditNamed("ui", "profile.start", id, "", err, "")
@@ -1218,3 +1224,100 @@ func (a *App) PendingCloudDeletes() int { return len(a.store.pendingDeletes()) }
 
 // RetryCloudDeletes sends queued cloud deletes now; returns how many are left.
 func (a *App) RetryCloudDeletes() int { return a.syncer().RetryPendingDeletes() }
+
+// ---- share: devices, recovery key, profile sharing ----
+
+// CloudDevices lists the sync account's devices (this device marked).
+func (a *App) CloudDevices() DeviceList { return a.store.ListDevices() }
+
+func (a *App) ApproveCloudDevice(id string) error {
+	e := a.store.ApproveDevice(id)
+	a.store.auditNamed("ui", "device.approve", "", id, e, "")
+	return e
+}
+
+func (a *App) RevokeCloudDevice(id string) error {
+	e := a.store.RevokeDevice(id)
+	a.store.auditNamed("ui", "device.revoke", "", id, e, "")
+	return e
+}
+
+func (a *App) ForgetCloudDevice(id string) error { return a.store.ForgetDevice(id) }
+
+// SetDeviceApproval: new devices of this account need approval.
+func (a *App) SetDeviceApproval(on bool) error { return a.store.SetRequireApproval(on) }
+
+func (a *App) RecoveryStatus() RecoveryState { return a.store.RecoveryStatus() }
+
+// SetupRecoveryKey enables the account master key and returns the recovery key (shown once).
+func (a *App) SetupRecoveryKey() (string, error) {
+	rk, e := a.store.SetupRecovery()
+	a.store.auditNamed("ui", "keys.setup", "", "", e, "")
+	return rk, e
+}
+
+func (a *App) UnlockSyncWithPassword(pw string) error { return a.store.UnlockWithPassword(pw) }
+
+func (a *App) UnlockSyncWithRecoveryKey(rk, newPassword string) error {
+	e := a.store.UnlockWithRecoveryKey(rk, newPassword)
+	a.store.auditNamed("ui", "keys.recover", "", "", e, "")
+	return e
+}
+
+func (a *App) ChangeSyncPassword(oldPassword, newPassword string) error {
+	e := a.store.ChangeSyncPassword(oldPassword, newPassword)
+	a.store.auditNamed("ui", "keys.password", "", "", e, "")
+	return e
+}
+
+func (a *App) RotateRecoveryKey(password string) (string, error) {
+	rk, e := a.store.RotateRecoveryKey(password)
+	a.store.auditNamed("ui", "keys.rotate", "", "", e, "")
+	return rk, e
+}
+
+// SaveRecoveryKeyFile writes the recovery key to a .txt the user picks.
+func (a *App) SaveRecoveryKeyFile(rk string) (string, error) {
+	path, err := wruntime.SaveFileDialog(a.ctx, wruntime.SaveDialogOptions{Title: "保存恢复密钥", DefaultFilename: "GhostBrowser-恢复密钥.txt",
+		Filters: []wruntime.FileFilter{{DisplayName: "文本文件 (*.txt)", Pattern: "*.txt"}}})
+	if err != nil || path == "" {
+		return "", err
+	}
+	st := a.store.GetSettings()
+	body := "GhostBrowser 云同步恢复密钥\r\n\r\n" + rk + "\r\n\r\n同步服务器: " + st.SyncServer + "\r\n生成时间: " + time.Now().Format("2006-01-02 15:04") +
+		"\r\n\r\n忘记同步密码时，用它在新设备上解锁云端数据。请离线妥善保管，不要发给任何人。\r\n"
+	return path, os.WriteFile(path, []byte(body), 0600)
+}
+
+func (a *App) ShareList() ShareList { return a.store.ListShares() }
+
+func (a *App) ShareUsers() ([]string, error) { return a.store.ShareUsers() }
+
+func (a *App) CreateShare(r ShareRequest) (ShareInfo, error) { return a.store.CreateShare(r) }
+
+func (a *App) AcceptShare(id string) (Profile, error) { return a.store.AcceptShare(id) }
+
+func (a *App) DeclineShare(id string) error { return a.store.DeclineShare(id) }
+
+func (a *App) RevokeShare(id string) error {
+	e := a.store.RevokeShare(id)
+	a.store.auditNamed("ui", "share.revoke", "", id, e, "")
+	return e
+}
+
+func (a *App) ExtendShare(id string, days int) error { return a.store.ExtendShare(id, days) }
+
+func (a *App) LeaveShare(id string) error { return a.store.LeaveShare(id) }
+
+// watchShares removes local copies of revoked / expired shares every 5 minutes.
+func (a *App) watchShares() {
+	for {
+		time.Sleep(5 * time.Minute)
+		if a.store.GetSettings().SyncServer == "" {
+			continue
+		}
+		if n, _ := a.store.SyncShares(); n > 0 && a.ctx != nil {
+			wruntime.EventsEmit(a.ctx, "shares:changed", n)
+		}
+	}
+}
