@@ -29,7 +29,7 @@ const cstr = (s) => String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 const bad = (v) => !v || v.length > 48 || /\d{3,}|^\d|[:{}]|[a-f0-9]{8,}|^(css|sc|jsx|ember|react|mui|ng|v)-[\w-]*\d/i.test(v);
 const all = (s) => { try { return document.querySelectorAll(s); } catch (e) { return []; } };
 const uniq = (s, el) => { const n = all(s); return n.length === 1 && n[0] === el; };
-const byText = (t) => { let best = null, bl = Infinity; for (const e of document.body ? document.body.querySelectorAll('*') : []) { if (host && (e === host)) continue; const s = (e.innerText || '').trim(); if (s && s.includes(t) && s.length < bl) { best = e; bl = s.length; } } return best; };
+const byText = (t) => { let best = null, bl = Infinity; for (const e of document.body ? document.body.querySelectorAll('*') : []) { if (host && (e === host)) continue; const s = (e.innerText || '').trim(); if (s && s.includes(t) && (s.length < bl || (s.length === bl && best.contains(e)))) { best = e; bl = s.length; } } return best; };
 const CLICKABLE = 'a,button,label,summary,option,[role=button],[role=link],[role=tab],[role=menuitem],[role=option],[role=checkbox],[role=radio],input[type=submit],input[type=button]';
 const cssPath = (el) => {
   const parts = [];

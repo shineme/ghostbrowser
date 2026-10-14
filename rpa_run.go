@@ -644,8 +644,8 @@ func (d *cdpDriver) eval(expr string, out any) error {
 func jsq(s string) string { b, _ := json.Marshal(s); return string(b) }
 
 // rpaFind resolves a selector: CSS by default, "xpath:" or a leading "//" for
-// XPath, "text:" for the smallest element whose visible text contains it.
-// "a || b" tries each alternative in turn (the recorder stores a fallback
+// XPath, "text:" for the smallest element whose visible text contains it
+// (the innermost one when a wrapper has the same text). "a || b" tries each alternative in turn (the recorder stores a fallback
 // XPath this way).
 const rpaFind = `const __gbq = (sel) => {
   sel = String(sel).trim();
@@ -660,7 +660,7 @@ const rpaFind = `const __gbq = (sel) => {
     const t = sel.slice(5).trim(); let best = null, bl = Infinity;
     for (const el of document.body ? document.body.querySelectorAll('*') : []) {
       const s = (el.innerText || '').trim();
-      if (s && s.includes(t) && s.length < bl) { best = el; bl = s.length; }
+      if (s && s.includes(t) && (s.length < bl || (s.length === bl && best.contains(el)))) { best = el; bl = s.length; }
     }
     return best;
   }

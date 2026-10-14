@@ -380,8 +380,8 @@ func TestRecordReplayLive(t *testing.T) {
 		"fill #city = sh",
 		"click text:记住我",
 		"upload #avatar ← {{upload_file}}",
-		"wait_for button.late", // its wrapper has the same text, so no text: selector
-		"click button.late",
+		"wait_for text:加载更多",
+		"click text:加载更多",
 		"click text:登录",
 		"fill #q = 幽灵",
 		"execute_js 按回车键",
@@ -450,4 +450,102 @@ func TestRecordReplayLive(t *testing.T) {
 		t.Fatalf("double click not replayed: %q", txt)
 	}
 	t.Logf("replay ok: %s", p2)
+}
+
+const recSelectorPage = `<!doctype html><html><head><meta charset="utf-8"></head><body>
+<input id="email" class="x">
+<div id="react-1234567"><button class="css-1x2y3z">无名</button></div>
+<button data-testid="save">保存</button>
+<form><input name="q"></form>
+<button aria-label="关闭">×</button>
+<a href="#">查看详情</a>
+<ul class="list"><li class="item"><span>甲</span></li><li class="item"><span>乙</span></li></ul>
+<label><input type="radio" name="gender" value="m">男</label><label><input type="radio" name="gender" value="f">女</label>
+<input placeholder="搜索商品">
+<div class="card"><button class="buy">购买</button></div><div class="card"><button class="buy">购买</button></div>
+<span data-role="tip">提示</span>
+<svg id="ic" width="10" height="10"><circle r="4"></circle></svg>
+</body></html>`
+
+// TestRecordSelectorsLive checks the capture script's selector generator
+// against the replay driver's resolver on a fixture page.
+func TestRecordSelectorsLive(t *testing.T) {
+	bin := os.Getenv("GHOST_CHROME")
+	if bin == "" {
+		t.Skip("set GHOST_CHROME to a Chromium binary")
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, recSelectorPage)
+	}))
+	defer srv.Close()
+	a := newRpaE2EApp(t, bin)
+	fp := GenerateTyped("desktop", "windows", "")
+	fp.StartupParameters = "--headless=new --no-sandbox"
+	pid := a.store.PutProfile(Profile{Name: "sel", Kernel: "chromium", Fingerprint: fp}).ID
+	rs, err := a.StartProfile(pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runReg.stop(pid)
+	u := newCDPUser(t, rs.WSURL)
+	u.use("")
+	_, _ = u.c.call(u.sid, "Page.navigate", map[string]any{"url": srv.URL})
+	u.waitFor("#ic")
+	// install the capture script in an isolated world of our own session
+	ctx, err := recWorldCtx(u.c, u.sid, u.tid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct{ find, want string }{
+		{"#email", "#email"},
+		{"#react-1234567 button", "text:无名"},
+		{"[data-testid=save]", `[data-testid="save"]`},
+		{"input[name=q]", `input[name="q"]`},
+		{"button[aria-label]", `button[aria-label="关闭"]`},
+		{"a", "text:查看详情"},
+		{"li:nth-child(2) span", "li.item:nth-of-type(2) > span"},
+		{"input[value=f]", `input[name="gender"][value="f"]`},
+		{"input[placeholder]", `input[placeholder="搜索商品"]`},
+		{".card:nth-of-type(3) .buy", "div.card:nth-of-type(3) > button.buy"},
+		{".card:nth-of-type(2) .buy", "text:购买"},
+		{"span[data-role]", `span[data-role="tip"]`},
+	}
+	for _, c := range cases {
+		raw, err := u.c.call(u.sid, "Runtime.evaluate", map[string]any{"contextId": ctx, "returnByValue": true,
+			"expression": recCaptureScript(false, false) + "; window.__gbRec.sel(document.querySelector(" + jsq(c.find) + "))"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var r struct {
+			Result struct{ Value string } `json:"result"`
+		}
+		_ = json.Unmarshal(raw, &r)
+		sel := r.Result.Value
+		primary := sel
+		if i := strings.Index(sel, " || "); i >= 0 {
+			primary = sel[:i]
+			if !strings.HasPrefix(sel[i+4:], "xpath:") {
+				t.Fatalf("%s: fallback is not xpath: %q", c.find, sel)
+			}
+		}
+		if primary != c.want {
+			t.Fatalf("%s: got %q want %q", c.find, sel, c.want)
+		}
+		// the replay resolver finds the same element with the full selector,
+		// and with the fallback alone when the primary breaks
+		var same []bool
+		u.eval(`(() => {`+rpaFind+` const want = document.querySelector(`+jsq(c.find)+`); const s = `+jsq(sel)+`;
+			const fb = s.includes(' || ') ? __gbq(s.split(' || ')[1]) : want;
+			const hit = __gbq(s); return [hit === want || (!!hit && want.contains(hit)), fb === want]; })()`, &same)
+		if !same[0] || !same[1] {
+			t.Fatalf("%s: selector %q resolves elsewhere (%v)", c.find, sel, same)
+		}
+	}
+	// a broken primary falls back to the xpath
+	var ok bool
+	u.eval(`(() => {`+rpaFind+` return __gbq('#gone || xpath://*[@id="email"]') === document.querySelector('#email'); })()`, &ok)
+	if !ok {
+		t.Fatal("fallback selector not used")
+	}
 }
