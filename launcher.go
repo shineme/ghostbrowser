@@ -61,10 +61,27 @@ func (s *Store) Launch(id string) (*RunState, error) {
 		return nil, fmt.Errorf("profile not found")
 	}
 	s.rotateBeforeLaunch(p)
-	if p.useChromium() {
-		return s.launchChromium(p, s.GetSettings())
+	orig, site := p.StartURLs, launchCfg.takeURL(id)
+	if site != "" { // 网站快捷入口: open this site instead of the start pages (this launch only)
+		p.StartURLs = []string{site}
 	}
-	return s.launchUndetectable(p, s.GetSettings())
+	var rs *RunState
+	var err error
+	if p.useChromium() {
+		rs, err = s.launchChromium(p, s.GetSettings())
+	} else {
+		rs, err = s.launchUndetectable(p, s.GetSettings())
+	}
+	if site != "" { // the launchers save the profile (LastRun); keep its own start pages
+		if cur, ok := s.GetProfile(id); ok {
+			cur.StartURLs = orig
+			s.PutProfile(*cur)
+		}
+	}
+	if err == nil {
+		launchCfg.launched(s, id) // 待重启: remember the launch config
+	}
+	return rs, err
 }
 
 func firstLang(l []string) string {
