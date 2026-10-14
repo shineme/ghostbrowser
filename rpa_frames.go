@@ -127,6 +127,15 @@ func (d *cdpDriver) UseFrame(path []string, timeout time.Duration) error {
 // element into view in its parent first.
 func (d *cdpDriver) resolveFrame(path []string, reveal bool) (*frameCtx, error) {
 	cur := &frameCtx{sid: d.sid, scale: 1}
+	if d.isoTop && len(path) > 0 {
+		// Helpers outside the RPA runner (the syncer) never touch the top
+		// page's own world: look up the first hop in an isolated world too.
+		w, err := d.isolatedWorld(d.sid, d.target)
+		if err != nil {
+			return nil, err
+		}
+		cur.world, cur.frameID = w, d.target
+	}
 	for i, sel := range path {
 		next, err := d.frameHop(cur, sel, reveal)
 		if err != nil {

@@ -77,6 +77,13 @@ type syncEvent struct {
 	S     string  `json:"s,omitempty"`
 	Value string  `json:"value,omitempty"`
 	URL   string  `json:"url,omitempty"`
+	// iframe events (syncer_frames.go): frame path, the point as a fraction
+	// of the master's top-level viewport, and the frame's own viewport size.
+	Frame string  `json:"frame,omitempty"`
+	TVX   float64 `json:"tvx,omitempty"`
+	TVY   float64 `json:"tvy,omitempty"`
+	FW    float64 `json:"fw,omitempty"`
+	FH    float64 `json:"fh,omitempty"`
 
 	tab    string    // master targetId the event came from (tab events: the tab concerned)
 	at     time.Time // when Go received it; replay delay is measured from here
@@ -89,7 +96,7 @@ const syncWorld = "__gb_sync"
 // with the page, so capture-phase listeners see every user action.
 func syncCaptureScript() string {
 	return `(() => {
-  if (window.top !== window || window.__gbSyncOn) return;
+  if (window.__gbSyncOn) return; // runs in iframes too; Go tags their events
   window.__gbSyncOn = true;
   window.__gbq = [];
   // The poller stamps __gbLast on every drain; once it stops (syncer
@@ -126,7 +133,7 @@ func syncCaptureScript() string {
   addEventListener('wheel', (e) => {
     if (!e.isTrusted) return;
     const k = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? innerHeight : 1;
-    send({t: 'scroll', dx: e.deltaX * k, dy: e.deltaY * k, vx: e.clientX / innerWidth, vy: e.clientY / innerHeight});
+    send({t: 'scroll', dx: e.deltaX * k, dy: e.deltaY * k, vx: e.clientX / innerWidth, vy: e.clientY / innerHeight, fw: innerWidth, fh: innerHeight});
   }, {capture: true, passive: true});
   let composing = false;
   addEventListener('compositionstart', () => { composing = true; }, true);
@@ -226,11 +233,13 @@ func sampleDelay(o SyncOptions, r *rand.Rand) time.Duration {
 // fTab is a follower tab with its attached session.
 type fTab struct {
 	tid, sid string
-	ctx      int // isolated world execution context, 0 = none yet
+	ctx      int        // isolated world execution context, 0 = none yet
+	drv      *cdpDriver // iframe resolver (syncer_frames.go)
 }
 
 type syncFollower struct {
 	id, name string
+	ws       string
 	conn     *cdpConn
 	q        chan syncEvent
 	events   int64
@@ -277,6 +286,9 @@ type syncer struct {
 	lastEmit   time.Time
 	emitTimer  *time.Timer
 	ctl        chan cdpMsg // master Target.* events, handled in order by one goroutine
+	mws        string      // master CDP endpoint
+	fmu        sync.Mutex  // guards fr
+	fr         *frameReg   // master iframes (syncer_frames.go)
 }
 
 var groupSync = &syncerHolder{opts: defaultSyncOptions()}
@@ -528,7 +540,7 @@ func attachFollower(id, name, ws string) (*syncFollower, error) {
 	if err != nil {
 		return nil, err
 	}
-	f.conn = c
+	f.conn, f.ws = c, ws
 	tabs, err := pageTabs(c)
 	if err == nil && len(tabs) == 0 {
 		err = fmt.Errorf("浏览器没有打开的标签页")
@@ -582,6 +594,7 @@ func (f *syncFollower) session(tid string) (*fTab, error) {
 	if err != nil {
 		return nil, err
 	}
+	guardUA(f.conn, f.ws, sid)
 	t = &fTab{tid: tid, sid: sid}
 	f.mu.Lock()
 	f.sess[tid] = t
@@ -677,7 +690,10 @@ func (s *syncer) attachMaster(ws string) error {
 	if err != nil {
 		return err
 	}
-	s.mconn = c
+	s.mconn, s.mws = c, ws
+	s.fmu.Lock()
+	s.initFrames()
+	s.fmu.Unlock()
 	tabs, err := pageTabs(c)
 	if err == nil && len(tabs) == 0 {
 		err = fmt.Errorf("浏览器没有打开的标签页")
@@ -742,6 +758,7 @@ func (s *syncer) attachMasterTab(tid string) (*masterTab, error) {
 			return nil, err
 		}
 	}
+	s.prepareMasterSession(sid)
 	mt := &masterTab{tid: tid, sid: sid}
 	// Prime the capture world: whatever a previous syncer left queued there
 	// is discarded, not replayed.
@@ -819,6 +836,7 @@ func (s *syncer) poll() {
 		}
 		for _, mt := range s.masterTabs() {
 			s.drain(mt)
+			s.drainFrames(mt)
 		}
 	}
 }
@@ -890,6 +908,9 @@ func (s *syncer) tabOfSession(sid string) *masterTab {
 }
 
 func (s *syncer) onMasterEvent(m cdpMsg) {
+	if s.onMasterFrameEvent(m) {
+		return
+	}
 	switch m.Method {
 	case "Page.frameNavigated":
 		mt := s.tabOfSession(m.Session)
@@ -1255,6 +1276,11 @@ func (f *syncFollower) apply(ev syncEvent) error {
 		return soft(err)
 	}
 	f.cur = t
+	if ev.Frame != "" {
+		if handled, err := f.applyFrame(ev); handled {
+			return err
+		}
+	}
 	switch ev.T {
 	case "click":
 		x, y := ev.X, ev.Y

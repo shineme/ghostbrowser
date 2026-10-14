@@ -539,3 +539,71 @@ func TestIframeRecordReplayLive(t *testing.T) {
 		t.Errorf("extracted text in replay = %q", v)
 	}
 }
+
+// TestIframeSyncerLive: clicks and typing inside the master's iframes
+// (cross-origin OOPIFs included) are mirrored into the same iframes of two
+// followers.
+func TestIframeSyncerLive(t *testing.T) {
+	site := newIfSite()
+	defer site.close()
+	m := liveBrowser(t, "ifM", site.top.URL+"/")
+	f1 := liveBrowser(t, "ifF1", site.top.URL+"/")
+	f2 := liveBrowser(t, "ifF2", site.top.URL+"/")
+	time.Sleep(1800 * time.Millisecond) // pages + the late iframe
+	if oop := iframeTargets(t, m); len(oop) < 3 {
+		t.Fatalf("no OOPIFs in the master: %v", oop)
+	}
+	groupSync.SetOptions(defaultSyncOptions())
+	if _, err := groupSync.Start("ifM", []string{"ifF1", "ifF2"}, liveWS, idName); err != nil {
+		t.Fatal(err)
+	}
+	defer groupSync.Stop("test end")
+	time.Sleep(600 * time.Millisecond)
+	u := newIfUser(t, m)
+	followers := []*cdpDriver{}
+	for _, ws := range []string{f1, f2} {
+		dr, err := newCDPDriver(ws)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dr.Close()
+		followers = append(followers, dr.(*cdpDriver))
+	}
+	read := func(d *cdpDriver, frame string) string {
+		if err := d.UseFrame(parseFramePath(frame), 3*time.Second); err != nil {
+			return "ERR " + err.Error()
+		}
+		v, _ := d.Text("#out", "")
+		return v
+	}
+	for _, fr := range []struct{ name, path string }{
+		{"cross", "iframe#cross"},
+		{"same", "iframe#same"},
+		{"nest", "iframe#nest >> iframe[name=inner]"},
+		{"late", "iframe#late"},
+		{"deep", "iframe#deep"},
+	} {
+		v := "sync" + fr.name
+		u.click(fr.path, "#name")
+		u.typeText(v)
+		u.click(fr.path, "#go")
+		if got := read(u.d, fr.path); got != "done:"+v+":true" {
+			t.Fatalf("master %s: %q", fr.name, got)
+		}
+		for i, d := range followers {
+			want := "done:" + v + ":true"
+			var got string
+			for k := 0; k < 40; k++ {
+				if got = read(d, fr.path); got == want {
+					break
+				}
+				time.Sleep(150 * time.Millisecond)
+			}
+			if got != want {
+				t.Errorf("follower %d, %s: #out = %q, want %q", i+1, fr.name, got, want)
+			}
+		}
+	}
+	st := groupSync.State()
+	t.Logf("syncer: %d events, followers %+v", st.Events, st.Followers)
+}

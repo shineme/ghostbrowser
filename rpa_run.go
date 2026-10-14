@@ -347,6 +347,7 @@ type cdpDriver struct {
 	fsess    map[string]string // OOPIF frame id → our session on its target
 	worlds   map[string]int    // session/frameId → isolated world context
 	ws       string            // CDP endpoint (UA guard)
+	isoTop   bool              // frame lookups use an isolated world in the top document too
 }
 
 // errBrowserGone is returned once the browser (or our CDP connection) is gone.
