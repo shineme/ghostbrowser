@@ -16,6 +16,7 @@ import { TransferDock, InlineTransfer } from './Transfers';
 import { RpaView } from './RpaView';
 import { ExtensionsView } from './ExtensionsView';
 import { AuditView } from './AuditView';
+import { WindowTools } from './WindowTools';
 
 type Tab = 'profiles' | 'proxies' | 'rpa' | 'extensions' | 'cloud' | 'audit' | 'settings';
 
@@ -255,6 +256,7 @@ const ProfilesView: React.FC<{
           <button className="ib" title="切到前台" onClick={() => focus(p.id)}><Icon.laptop /></button>
           <button className="ib stop" title="停止" onClick={() => stop(p)}><Icon.stop /></button>
         </div>; })}
+        <WindowTools running={runningList} selected={[...sel].filter(id => running.has(id))} bulk={sel.size > 0} />
       </div>}
 
       <div className="panel list">

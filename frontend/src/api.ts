@@ -63,6 +63,32 @@ const mock = {
 ['Shopify-Store-A', 'FB-Ads-01', 'FB-Ads-02', 'Amazon-Seller-EU', 'TikTok-Shop', 'Gmail-Warmup'].forEach((n, i) => {
   mock.profiles.push({ id: rid(), name: n, group: i < 3 ? '广告投放' : '电商', tags: i % 2 ? ['养号'] : ['主力'], notes: '', storage: i % 3 === 0 ? 'cloud' : 'local', proxyId: i % 2 ? 'px2' : 'px1', startUrls: [], cookies: '', fingerprint: mockFP(i === 3 ? 'macos' : 'windows'), createdAt: Date.now() / 1000 - i * 3600, lastRun: i < 4 ? Date.now() / 1000 - i * 5000 : 0, cloudVersion: i % 3 === 0 ? 3 : 0, syncedAt: 0 });
 });
+// ---- arrange + syncer ---- (mock helpers; preview starts with 4 running browsers so the run strip shows)
+mock.profiles.slice(0, 4).forEach((p, i) => mock.running.push({ profileId: p.id, pid: 4100 + i, debugPort: 9300 + i, wsUrl: '', startedAt: Date.now() / 1000 - 600 - i * 1300 }));
+const mockSync: { st: any; timer: any } = { st: { running: false, master: '', masterName: '', followers: [], events: 0, lastEvent: '', startedAt: 0, reason: '' }, timer: 0 };
+function mockArrange(n: number, mode: string) {
+  const screen = { x: 0, y: 0, w: 1920, h: 1040 }; const cells: any[] = [];
+  mode = mode === 'cascade' || mode === 'stack' ? mode : 'grid';
+  if (n <= 0) return { mode, screen, cols: 0, rows: 0, cells };
+  if (mode === 'cascade') {
+    const w = Math.round(screen.w * .62), h = Math.round(screen.h * .78);
+    for (let i = 0; i < n; i++) cells.push({ x: (i * 32) % (screen.w - w + 1), y: (i * 32) % (screen.h - h + 1), w, h });
+    return { mode, screen, cols: 1, rows: n, cells };
+  }
+  if (mode === 'stack') {
+    const w = Math.round(screen.w * .72), h = Math.round(screen.h * .86);
+    for (let i = 0; i < n; i++) cells.push({ x: (screen.w - w) >> 1, y: (screen.h - h) >> 1, w, h });
+    return { mode, screen, cols: 1, rows: 1, cells };
+  }
+  const cols = Math.ceil(Math.sqrt(n * screen.w / screen.h / 1.6)) || 1, rows = Math.ceil(n / cols);
+  for (let i = 0; i < n; i++) {
+    const row = Math.floor(i / cols), inRow = row === rows - 1 ? n - row * cols : cols, col = i % cols;
+    const y = Math.round(screen.h * row / rows), h = Math.round(screen.h * (row + 1) / rows) - y;
+    const x = Math.round(screen.w * col / inRow), w = Math.round(screen.w * (col + 1) / inRow) - x;
+    cells.push({ x, y, w, h });
+  }
+  return { mode, screen, cols, rows, cells };
+}
 const wait = (ms = 250) => new Promise(r => setTimeout(r, ms));
 
 const M = {
@@ -178,6 +204,41 @@ const M = {
   StopProfiles: async (_ids: string[]) => {},
   PushProfiles: async (ids: string[]): Promise<any> => { await wait(900); return { ok: ids.length, failed: 0, errors: [] }; },
   FocusProfile: async (_id: string) => {},
+  // ---- arrange + syncer ----
+  ArrangePreview: async (n: number, mode: string): Promise<any> => mockArrange(n, mode),
+  ArrangeWindows: async (ids: string[], mode: string): Promise<any> => {
+    await wait(700);
+    const runs = (ids && ids.length ? mock.running.filter(r => ids.includes(r.profileId)) : mock.running);
+    if (!runs.length) throw new Error('没有正在运行的环境');
+    const lay = mockArrange(runs.length, mode);
+    const failed = runs.map(r => mock.profiles.find(p => p.id === r.profileId)).filter(p => p && /Gmail/.test(p.name)).map(p => `${p.name}：窗口已最小化，无法调整位置`);
+    return { ...lay, arranged: runs.length - failed.length, total: runs.length, failed };
+  },
+  StartSync: async (master: string, followers: string[]): Promise<any> => {
+    await wait(500);
+    if (!mock.running.some(r => r.profileId === master)) throw new Error('主控环境没有在运行');
+    const fs = followers.filter(id => id !== master && mock.running.some(r => r.profileId === id));
+    if (!fs.length) throw new Error('请至少选择一个正在运行的跟随环境');
+    clearInterval(mockSync.timer);
+    const nm = (id: string) => mock.profiles.find(p => p.id === id)?.name || id;
+    mockSync.st = { running: true, master, masterName: nm(master), followers: fs.map(id => ({ id, name: nm(id), ok: true, events: 0, error: '' })), events: 0, lastEvent: '', startedAt: Date.now(), reason: '' };
+    const kinds = ['click', 'click', 'scroll', 'scroll', 'scroll', 'key', 'text', 'select', 'nav'];
+    mockSync.timer = setInterval(() => {
+      const st = mockSync.st;
+      if (!mock.running.some(r => r.profileId === st.master)) { clearInterval(mockSync.timer); mockSync.st = { ...st, running: false, reason: '主控浏览器已关闭，同步已停止' }; mockEmit('syncer:event', mockSync.st); return; }
+      const ev = kinds[Math.floor(Math.random() * kinds.length)];
+      const followers = st.followers.map((f: any, i: number) => {
+        if (!f.ok) return f;
+        if (i === 2 && st.events >= 14) return { ...f, ok: false, error: '标签页已关闭，已移出同步' };
+        return { ...f, events: f.events + 1 };
+      });
+      mockSync.st = { ...st, followers, events: st.events + 1, lastEvent: ev };
+      mockEmit('syncer:event', mockSync.st);
+    }, 650);
+    return mockSync.st;
+  },
+  StopSync: async (): Promise<any> => { clearInterval(mockSync.timer); mockSync.st = { ...mockSync.st, running: false, reason: '' }; mockEmit('syncer:event', mockSync.st); return mockSync.st; },
+  SyncerState: async (): Promise<any> => ({ ...mockSync.st }),
 };
 
 export const api: typeof M = inWails ? (Go as any) : M;
