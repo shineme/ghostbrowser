@@ -224,6 +224,7 @@ func (d *cdpDriver) frameSession(frameID string) (string, error) {
 	}
 	d.fsess[frameID] = at.SessionID
 	d.mu.Unlock()
+	guardUA(d.conn, d.ws, at.SessionID)
 	return at.SessionID, nil
 }
 

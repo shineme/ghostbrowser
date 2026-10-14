@@ -373,9 +373,13 @@ type emulator struct {
 	net         *fpNet   // port-scan protection / video blocking (nil = off)
 	workerPause sync.Map // worker session → chan signalled on Debugger.paused
 	major       int      // kernel's Chrome major from Browser.getVersion (0 = unknown)
+	ws          string   // CDP endpoint (UA guard registration, cdp_uaguard.go)
 }
 
 func (e *emulator) Close() {
+	if e != nil && e.ws != "" {
+		registerEmuUA(e.ws, nil)
+	}
 	if e != nil && e.conn != nil {
 		e.conn.c.Close()
 	}
@@ -400,6 +404,8 @@ func startEmulation(ws string, fp Fingerprint, px *Proxy, startURLs []string) (*
 	fp = e.fp
 	e.ua = uaOverride(fp, brands, full)
 	e.script = pageScript(fp, px)
+	e.ws = ws
+	registerEmuUA(ws, e.ua)
 
 	raw, err := conn.call("", "Target.getTargets", nil)
 	if err != nil {
@@ -555,17 +561,15 @@ func dotted(v string) string {
 	return strings.Join(parts[:3], ".")
 }
 
+// acceptLanguage is the plain language list for the UA override. No q-values:
+// Chromium splits this string for navigator.languages verbatim (a ";q=0.9"
+// would leak into it) and adds the q-values to the Accept-Language header
+// itself, exactly like a real browser's language settings.
 func acceptLanguage(langs []string) string {
 	out := []string{}
-	for i, l := range langs {
-		if i == 0 {
+	for _, l := range langs {
+		if l = strings.TrimSpace(l); l != "" {
 			out = append(out, l)
-		} else {
-			q := 1 - float64(i)*0.1
-			if q < 0.1 {
-				q = 0.1
-			}
-			out = append(out, fmt.Sprintf("%s;q=%.1f", l, q))
 		}
 	}
 	return strings.Join(out, ",")

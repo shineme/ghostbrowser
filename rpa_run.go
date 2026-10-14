@@ -346,6 +346,7 @@ type cdpDriver struct {
 	fpath    []string          // current frame path (UseFrame); nil = top document
 	fsess    map[string]string // OOPIF frame id → our session on its target
 	worlds   map[string]int    // session/frameId → isolated world context
+	ws       string            // CDP endpoint (UA guard)
 }
 
 // errBrowserGone is returned once the browser (or our CDP connection) is gone.
@@ -413,7 +414,7 @@ func (d *cdpDriver) rootCall(method string, params any) (json.RawMessage, error)
 }
 
 func newCDPDriver(ws string) (rpaDriverCloser, error) {
-	d := &cdpDriver{implicit: 8 * time.Second}
+	d := &cdpDriver{implicit: 8 * time.Second, ws: ws}
 	conn, err := dialCDP(ws, d.onEvent)
 	if err != nil {
 		return nil, err
@@ -601,6 +602,7 @@ func (d *cdpDriver) attach(target string) error {
 		_, _ = d.conn.call("", "Target.detachFromTarget", map[string]any{"sessionId": d.sid})
 	}
 	d.sid, d.target = at.SessionID, target
+	guardUA(d.conn, d.ws, d.sid)
 	_, _ = d.conn.call("", "Target.activateTarget", map[string]any{"targetId": target})
 	return nil
 }

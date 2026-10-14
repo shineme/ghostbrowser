@@ -52,6 +52,14 @@ func newIfSite() *ifSite {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		q := r.URL.Query()
 		switch r.URL.Path {
+		case "/hit", "/child":
+			if r.Header.Get("Accept-Language") != "" {
+				s.mu.Lock()
+				s.hits["#lang"] = r.Header.Get("Accept-Language")
+				s.mu.Unlock()
+			}
+		}
+		switch r.URL.Path {
 		case "/hit":
 			s.mu.Lock()
 			s.hits[q.Get("n")] = q.Get("v") + "|" + q.Get("t")
@@ -104,6 +112,8 @@ func (s *ifSite) waitHit(t *testing.T, n, want string) {
 	}
 	t.Errorf("server hit %s = %q, want %q", n, s.hit(n), want)
 }
+
+func (s *ifSite) lang() string { return s.hit("#lang") }
 
 func (s *ifSite) close() { s.top.Close(); s.cross.Close() }
 
@@ -312,4 +322,69 @@ func TestIframeRunnerLive(t *testing.T) {
 			t.Errorf("condition on missing frame: %v", vars)
 		}
 	})
+}
+
+// TestIframeFingerprintLive: the fingerprint overrides reach out-of-process
+// iframes (the emulator auto-attaches recursively), so navigator/UA/timezone
+// read inside a cross-origin iframe match the top frame.
+func TestIframeFingerprintLive(t *testing.T) {
+	fp := GenerateTyped("desktop", "windows", "141")
+	fp.Timezone, fp.Languages = "America/Sao_Paulo", []string{"pt-BR", "pt"}
+	ws, kill := startIsolatedChrome(t, "--user-agent="+fp.UserAgent)
+	defer kill()
+	site := newIfSite()
+	defer site.close()
+	var starts []string
+	if os.Getenv("IFX_START") != "" {
+		starts = []string{site.top.URL + "/"}
+	}
+	em, err := startEmulation(ws, fp, nil, starts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer em.Close()
+	d, err := newCDPDriver(ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	if starts == nil {
+		runIfSteps(t, d, ifStep("goto", "url", site.top.URL+"/"))
+	} else {
+		time.Sleep(3 * time.Second)
+	}
+	runIfSteps(t, d, ifStep("wait_for", "frame", "#later > iframe", "selector", "#go"))
+	probe := `return JSON.stringify({ua: navigator.userAgent, plat: navigator.platform, hc: navigator.hardwareConcurrency, mem: navigator.deviceMemory,
+	  lang: navigator.language, langs: navigator.languages, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, off: new Date(2026, 0, 1).getTimezoneOffset(),
+	  sw: screen.width, sh: screen.height, cd: screen.colorDepth, dpr: devicePixelRatio, wd: navigator.webdriver,
+	  ch: navigator.userAgentData ? navigator.userAgentData.platform + '/' + navigator.userAgentData.brands.map(b => b.brand + b.version).join(',') : '',
+	  canvas: (() => { const c = document.createElement('canvas'); c.width = 60; c.height = 20; const x = c.getContext('2d'); x.fillStyle = '#f60'; x.fillRect(1, 1, 40, 12); x.fillText('gb', 4, 12); return c.toDataURL().length; })()})`
+	frames := []string{"", "iframe#same", "iframe#cross", "iframe#nest >> iframe[name=inner]", "#later > iframe"}
+	var top map[string]any
+	for _, f := range frames {
+		vars, _, _ := runIfSteps(t, d, ifStep("execute_js", "frame", f, "code", probe, "saveAs", "fp"))
+		var got map[string]any
+		if err := json.Unmarshal([]byte(vars["fp"]), &got); err != nil {
+			t.Fatalf("%s: %v %q", f, err, vars["fp"])
+		}
+		if f == "" {
+			top = got
+			t.Logf("top: %v", got)
+			if got["tz"] != "America/Sao_Paulo" || got["plat"] != fp.Platform || got["ua"] != em.fp.UserAgent || fmt.Sprint(got["langs"]) != "[pt-BR pt]" {
+				t.Errorf("top frame not emulated: %v", got)
+			}
+			continue
+		}
+		for k, v := range top {
+			if fmt.Sprint(got[k]) != fmt.Sprint(v) {
+				t.Errorf("frame %s: %s = %v, top has %v", f, k, got[k], v)
+			}
+		}
+	}
+	if h := site.lang(); !strings.HasPrefix(h, "pt-BR,pt;q=") {
+		t.Errorf("Accept-Language header %q", h)
+	}
+	if oop := iframeTargets(t, ws); len(oop) < 3 {
+		t.Errorf("expected OOPIFs, got %v", oop)
+	}
 }
