@@ -109,7 +109,7 @@ func mArgStrs(a map[string]any, k string) ([]string, error) {
 	return nil, fmt.Errorf("%s must be an array of strings", k)
 }
 
-func jsStr(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
+func schemaStr(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
 func jsStrArr(desc string) map[string]any {
 	return map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": desc}
 }
@@ -214,9 +214,9 @@ var mcpTools = []mcpTool{
 		Name: "list_environments", Title: "List environments", ReadOnly: true, Idempotent: true,
 		Description: "List browser environments (profiles) with their group, tags, OS, device type, kernel, proxy and running status. Optional filters.",
 		Props: map[string]any{
-			"group":  jsStr("Only this group (exact name); omit to list all."),
-			"tag":    jsStr("Only environments carrying this tag."),
-			"query":  jsStr("Case-insensitive substring of the name or notes."),
+			"group":  schemaStr("Only this group (exact name); omit to list all."),
+			"tag":    schemaStr("Only environments carrying this tag."),
+			"query":  schemaStr("Case-insensitive substring of the name or notes."),
 			"status": jsEnum("Only running or stopped environments.", "running", "stopped"),
 			"limit":  jsInt("Maximum rows to return (default 200).", 1, 1000),
 		},
@@ -260,14 +260,14 @@ var mcpTools = []mcpTool{
 		Name: "create_environment", Title: "Create environments",
 		Description: "Create one or more new environments with freshly generated fingerprints. With count > 1 they are named name-1, name-2, ...",
 		Props: map[string]any{
-			"name":       jsStr("Environment name (or prefix when count > 1)."),
+			"name":       schemaStr("Environment name (or prefix when count > 1)."),
 			"count":      jsInt("How many to create (default 1, max 50).", 1, 50),
 			"deviceType": jsEnum("Device type (default desktop).", "desktop", "laptop", "phone", "tablet", "foldable", "chromebook", "tv"),
 			"os":         jsEnum("Operating system (default windows for desktop/laptop, android for phones/tablets).", "windows", "macos", "linux", "android", "chromeos"),
-			"group":      jsStr("Group to put them in (created implicitly)."),
-			"proxyId":    jsStr("Saved proxy ID to assign (see list_proxies)."),
+			"group":      schemaStr("Group to put them in (created implicitly)."),
+			"proxyId":    schemaStr("Saved proxy ID to assign (see list_proxies)."),
 			"tags":       jsStrArr("Tags to add."),
-			"notes":      jsStr("Notes."),
+			"notes":      schemaStr("Notes."),
 		},
 		Required: []string{"name"},
 		Run: func(c *mcpCore, a map[string]any) (any, error) {
@@ -318,7 +318,7 @@ var mcpTools = []mcpTool{
 	{
 		Name: "start_environment", Title: "Start environment", Idempotent: true,
 		Description: "Launch an environment's browser. Returns the CDP debug port and websocket URL for Puppeteer / Playwright connectOverCDP. Starting a running environment returns its existing session.",
-		Props:       map[string]any{"id": jsStr("Environment ID (or exact unique name).")},
+		Props:       map[string]any{"id": schemaStr("Environment ID (or exact unique name).")},
 		Required:    []string{"id"},
 		Run: func(c *mcpCore, a map[string]any) (any, error) {
 			p, err := c.requireProfile(mArgStr(a, "id"))
@@ -342,7 +342,7 @@ var mcpTools = []mcpTool{
 	{
 		Name: "stop_environment", Title: "Stop environment", Idempotent: true,
 		Description: "Close a running environment's browser gracefully (cookies and storage are flushed; auto sync uploads afterwards when enabled).",
-		Props:       map[string]any{"id": jsStr("Environment ID (or exact unique name).")},
+		Props:       map[string]any{"id": schemaStr("Environment ID (or exact unique name).")},
 		Required:    []string{"id"},
 		Run: func(c *mcpCore, a map[string]any) (any, error) {
 			p, err := c.requireProfile(mArgStr(a, "id"))
@@ -361,7 +361,7 @@ var mcpTools = []mcpTool{
 		Name: "list_proxies", Title: "List proxies", ReadOnly: true, Idempotent: true,
 		Description: "List saved proxies with their last check result (exit IP, country, latency) and how many environments use each. Passwords are never returned.",
 		Props: map[string]any{
-			"tag":    jsStr("Only proxies imported with this tag."),
+			"tag":    schemaStr("Only proxies imported with this tag."),
 			"status": jsEnum("Only proxies whose last check was ok / failed / never run.", "ok", "fail", "unknown"),
 		},
 		Run: func(c *mcpCore, a map[string]any) (any, error) {
@@ -396,7 +396,7 @@ var mcpTools = []mcpTool{
 		Description: "Assign one saved proxy to one or more environments. Pass proxyId \"\" to switch them to a direct connection.",
 		Props: map[string]any{
 			"environmentIds": jsStrArr("Environment IDs."),
-			"proxyId":        jsStr("Saved proxy ID from list_proxies, or \"\" for direct connection."),
+			"proxyId":        schemaStr("Saved proxy ID from list_proxies, or \"\" for direct connection."),
 		},
 		Required: []string{"environmentIds", "proxyId"},
 		Run: func(c *mcpCore, a map[string]any) (any, error) {
@@ -452,7 +452,7 @@ var mcpTools = []mcpTool{
 	{
 		Name: "create_group", Title: "Create group",
 		Description: "Create an empty group. Move environments into it with set_environment_group or create_environment.group.",
-		Props:       map[string]any{"name": jsStr("Group name (max 64 characters).")},
+		Props:       map[string]any{"name": schemaStr("Group name (max 64 characters).")},
 		Required:    []string{"name"},
 		Run: func(c *mcpCore, a map[string]any) (any, error) {
 			g, err := c.store.CreateGroup(mArgStr(a, "name"))
@@ -468,8 +468,8 @@ var mcpTools = []mcpTool{
 		Description: "Move environments into a group (\"\" = ungrouped) and optionally add a tag to them.",
 		Props: map[string]any{
 			"environmentIds": jsStrArr("Environment IDs."),
-			"group":          jsStr("Target group name, \"\" to remove from any group."),
-			"addTag":         jsStr("Optional tag to add."),
+			"group":          schemaStr("Target group name, \"\" to remove from any group."),
+			"addTag":         schemaStr("Optional tag to add."),
 		},
 		Required: []string{"environmentIds", "group"},
 		Run: func(c *mcpCore, a map[string]any) (any, error) {
