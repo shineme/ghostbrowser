@@ -571,3 +571,96 @@ func (a *App) RetrySync(id, action string) error {
 }
 
 func (a *App) SyncBusy() []string { return a.auto.Busy() }
+
+// ---- extensions/cookies/mihomo ----
+
+// ListExtensions returns every installed extension, newest first, with
+// Profiles = number of profiles that load it.
+func (a *App) ListExtensions() []Extension {
+	used := map[string]int{}
+	for _, p := range a.store.ListProfiles() {
+		for _, id := range p.ExtensionIDs {
+			used[id]++
+		}
+	}
+	list := extReg.list()
+	for i := range list {
+		list[i].Profiles = used[list[i].ID]
+	}
+	return list
+}
+
+// AddExtensionByID downloads from the Chrome Web Store (bare ID or store URL).
+func (a *App) AddExtensionByID(id string) (Extension, error) { return a.store.AddExtensionByID(id, "") }
+
+// AddExtensionFromURL installs a .crx/.zip from an http(s) URL or a local file path.
+func (a *App) AddExtensionFromURL(src string) (Extension, error) {
+	return a.store.AddExtensionFromURL(src)
+}
+
+// RemoveExtension deletes the extension and unassigns it from every profile.
+func (a *App) RemoveExtension(id string) error {
+	for _, p := range a.store.ListProfiles() {
+		keep := p.ExtensionIDs[:0:0]
+		for _, x := range p.ExtensionIDs {
+			if x != id {
+				keep = append(keep, x)
+			}
+		}
+		if len(keep) != len(p.ExtensionIDs) {
+			p.ExtensionIDs = keep
+			a.store.PutProfile(p)
+		}
+	}
+	return extReg.remove(id)
+}
+
+// SetProfileExtensions replaces a profile's extension list (unknown IDs are
+// rejected). Takes effect on the next launch.
+func (a *App) SetProfileExtensions(profileID string, ids []string) error {
+	p, ok := a.store.GetProfile(profileID)
+	if !ok {
+		return fmt.Errorf("环境不存在")
+	}
+	seen := map[string]bool{}
+	out := []string{}
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		if _, ok := extReg.get(id); !ok {
+			return fmt.Errorf("扩展 %s 不存在", id)
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	p.ExtensionIDs = out
+	a.store.PutProfile(*p)
+	return nil
+}
+
+// ExportCookies: format "json" | "netscape". Running profile = live over CDP,
+// stopped = last session snapshot merged with staged cookies.
+func (a *App) ExportCookies(id, format string) (string, error) { return a.store.ExportCookies(id, format) }
+
+// ImportCookies: format "json" | "netscape" | "auto".
+func (a *App) ImportCookies(id, format, data string) (CookieImportResult, error) {
+	return a.store.ImportCookies(id, format, data)
+}
+
+func (a *App) CookieInfo(id string) CookieInfo { return a.store.CookieInfo(id) }
+
+func (a *App) MihomoConnect(controller, secret string) (MihomoStatus, error) {
+	return MihomoConnect(controller, secret)
+}
+
+func (a *App) MihomoStatus() MihomoStatus { return GetMihomoStatus() }
+
+func (a *App) MihomoProxies() (MihomoProxies, error) { return GetMihomoProxies() }
+
+func (a *App) MihomoSelect(group, node string) error { return MihomoSelect(group, node) }
+
+// MihomoTestDelay measures one node with the default URL (gstatic generate_204) and 5 s timeout.
+func (a *App) MihomoTestDelay(node string) (int, error) { return MihomoTestDelay(node, "", 0) }
+
+func (a *App) MihomoAddProxy() (Proxy, error) { return a.store.MihomoAddProxy() }
