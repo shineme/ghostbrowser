@@ -282,14 +282,6 @@ func (a *App) StopProfile(id string) {
 
 func (a *App) Running() []RunState { return runReg.list() }
 
-func (a *App) ExportCookies(id string) (string, error) {
-	rs, ok := runReg.get(id)
-	if !ok || !strings.HasPrefix(rs.WSURL, "ws") {
-		return "", errf("start the profile first to export its cookies")
-	}
-	return exportCookies(rs.WSURL)
-}
-
 // ---------- proxies ----------
 
 func (a *App) ListProxies() []Proxy                  { return a.store.ListProxies() }

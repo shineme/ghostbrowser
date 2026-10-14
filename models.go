@@ -92,6 +92,8 @@ type Profile struct {
 	// "chromium" = open-source Chromium / Chrome. Phones, tablets, Macs, Linux,
 	// Chromebooks and TVs always run on the open-source kernel.
 	Kernel string `json:"kernel,omitempty"`
+	// Extension Center: IDs of extensions loaded with --load-extension at launch.
+	ExtensionIDs []string `json:"extensionIds,omitempty"`
 }
 
 // needsOpenKernel: the custom kernel only carries Windows desktop templates.
