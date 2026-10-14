@@ -334,14 +334,15 @@ func (c *cdpConn) call(session, method string, params any) (json.RawMessage, err
 // ---------- device emulation ----------
 
 type emulator struct {
-	conn     *cdpConn
-	fp       Fingerprint
-	ua       map[string]any // Emulation.setUserAgentOverride params
-	script   string
-	existing map[string]bool
-	starts   []string
-	first    sync.Once
-	net      *fpNet // port-scan protection / video blocking (nil = off)
+	conn        *cdpConn
+	fp          Fingerprint
+	ua          map[string]any // Emulation.setUserAgentOverride params
+	script      string
+	existing    map[string]bool
+	starts      []string
+	startMu     sync.Mutex
+	startTarget string
+	net         *fpNet // port-scan protection / video blocking (nil = off)
 }
 
 func (e *emulator) Close() {
@@ -566,15 +567,24 @@ func (e *emulator) onEvent(m cdpMsg) {
 		e.net.attach(c, sid, ev.TargetInfo.TargetID, ev.TargetInfo.Type == "page")
 		_, _ = c.call(sid, "Target.setAutoAttach", map[string]any{"autoAttach": true, "waitForDebuggerOnStart": true, "flatten": true})
 		resume()
-		if ev.TargetInfo.Type == "page" && e.existing[ev.TargetInfo.TargetID] {
+		// The kernel's initial about:blank tab can register after our getTargets
+		// snapshot, so a blank page attaching first counts as the start tab too.
+		blank := ev.TargetInfo.URL == "" || ev.TargetInfo.URL == "about:blank"
+		if ev.TargetInfo.Type == "page" && (e.existing[ev.TargetInfo.TargetID] || blank) {
 			// Pages that were already open loaded before the overrides: load them again.
+			// The start tab can attach twice (auto-attach racing the initial
+			// target list); the navigation follows that one target until it
+			// has left about:blank.
 			navigated := false
-			e.first.Do(func() {
-				if len(e.starts) > 0 {
-					_, _ = c.call(sid, "Page.navigate", map[string]any{"url": e.starts[0]})
-					navigated = true
-				}
-			})
+			e.startMu.Lock()
+			if len(e.starts) > 0 && (e.startTarget == "" || (e.startTarget == ev.TargetInfo.TargetID && blank)) {
+				e.startTarget = ev.TargetInfo.TargetID
+				navigated = true
+			}
+			e.startMu.Unlock()
+			if navigated {
+				_, _ = c.call(sid, "Page.navigate", map[string]any{"url": e.starts[0]})
+			}
 			if !navigated && strings.HasPrefix(ev.TargetInfo.URL, "http") {
 				_, _ = c.call(sid, "Page.reload", map[string]any{"ignoreCache": false})
 			}

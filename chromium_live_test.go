@@ -46,17 +46,28 @@ func TestChromiumEmulationLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer em.Close()
-	time.Sleep(3 * time.Second)
-
 	c, err := dialCDP(ws, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, _ := c.call("", "Target.getTargets", nil)
 	var tl struct {
 		TargetInfos []struct{ TargetID, Type, URL string } `json:"targetInfos"`
 	}
-	_ = json.Unmarshal(raw, &tl)
+	// The start page can take a few seconds to commit on a cold profile; poll.
+	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); time.Sleep(300 * time.Millisecond) {
+		raw, _ := c.call("", "Target.getTargets", nil)
+		_ = json.Unmarshal(raw, &tl)
+		found := false
+		for _, ti := range tl.TargetInfos {
+			if ti.Type == "page" && strings.HasPrefix(ti.URL, srv.URL) {
+				found = true
+			}
+		}
+		if found {
+			time.Sleep(500 * time.Millisecond)
+			break
+		}
+	}
 	sid := ""
 	for _, ti := range tl.TargetInfos {
 		if ti.Type == "page" && strings.HasPrefix(ti.URL, srv.URL) {
