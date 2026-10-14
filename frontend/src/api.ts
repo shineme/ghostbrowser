@@ -63,6 +63,14 @@ const mock = {
 ['Shopify-Store-A', 'FB-Ads-01', 'FB-Ads-02', 'Amazon-Seller-EU', 'TikTok-Shop', 'Gmail-Warmup'].forEach((n, i) => {
   mock.profiles.push({ id: rid(), name: n, group: i < 3 ? '广告投放' : '电商', tags: i % 2 ? ['养号'] : ['主力'], notes: '', storage: i % 3 === 0 ? 'cloud' : 'local', proxyId: i % 2 ? 'px2' : 'px1', startUrls: [], cookies: '', fingerprint: mockFP(i === 3 ? 'macos' : 'windows'), createdAt: Date.now() / 1000 - i * 3600, lastRun: i < 4 ? Date.now() / 1000 - i * 5000 : 0, cloudVersion: i % 3 === 0 ? 3 : 0, syncedAt: 0 });
 });
+// ---- fingerprint protection + launch controls ----
+Object.assign(mock.profiles[1], { kernel: 'chromium' });
+Object.assign(mock.profiles[1].fingerprint, { canvasMode: 'noise', webglImageMode: 'noise', audioMode: 'real', audioNoise: false, clientRectsMode: 'off', clientRectNoise: false,
+  mediaDevicesMode: 'custom', mediaMics: 1, mediaSpeakers: 2, mediaCameras: 1, speechVoices: 'custom', webgpu: 'off', doNotTrack: true,
+  portScanProtection: true, scanWhitelist: '3000, 8080, localhost:5173', windowMode: 'custom', windowWidth: 1440, windowHeight: 900, windowX: 120, windowY: 60,
+  hardwareAcceleration: true, blockVideo: true, startupParameters: '--lang=en-US\n--disable-features=Translate' });
+Object.assign(mock.profiles[4], { kernel: 'chromium' });
+Object.assign(mock.profiles[4].fingerprint, { webrtc: 'disabled', randomFingerprintOnLaunch: true, windowMode: 'maximized', blockImages: true, blockSound: true, hardwareAcceleration: false });
 const wait = (ms = 250) => new Promise(r => setTimeout(r, ms));
 
 const M = {

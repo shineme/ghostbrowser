@@ -93,6 +93,7 @@ go test -run TestEnsureAgainstRealShop -v .
 - Canvas、WebGL、Audio、ClientRects 噪声按种子固定
 - 时区、语言、地理位置可以跟随代理出口 IP；启动前会重新检测出口
 - 内置设备库 + 自定义指纹库（`library.json`），下拉框联动并支持保存自定义值
+- **防护与启动选项**（环境编辑「防护」「启动」页，开源内核生效）：Canvas / WebGL 图像 / AudioContext / ClientRects 各自可选 噪声、真实、关闭；WebRTC、媒体设备（可自定义麦克风/扬声器/摄像头数量）、语音列表、WebGPU、Do Not Track；端口扫描保护（白名单端口）、每次启动随机指纹；窗口大小（自动/自定义宽高位置/最大化）、硬件加速、禁止图片/视频、静音、自定义启动参数（user-data-dir、remote-debugging、proxy-server、user-agent 等由程序接管）。定制内核下会提示哪些项不生效
 
 ### 设备类型与双内核
 - 设备类型：台式机、笔记本、安卓手机、安卓平板、折叠屏、Chromebook、电视。设备库里有对应的真实机型（Galaxy S24/S23/A 系列、Pixel 6a~9 Pro、小米/Redmi/POCO、OnePlus、OPPO、vivo、Motorola、Sony；Galaxy Tab、Pixel Tablet、小米平板、联想、OnePlus Pad；Z Fold6 折叠/展开、Z Flip6、Pixel 9 Pro Fold；Acer/HP/ASUS/三星/联想 Chromebook；Chromecast、BRAVIA、Tizen、webOS 电视）
