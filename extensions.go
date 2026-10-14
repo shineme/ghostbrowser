@@ -404,6 +404,21 @@ func unpackExtension(info *crxInfo, dir string) (extManifest, error) {
 	return man, nil
 }
 
+// extPath resolves a manifest-relative path inside an unpacked extension and
+// refuses anything that would leave its folder (manifest values are untrusted:
+// an icon of "../../data.json" must not read the app's own files).
+func extPath(dir, rel string) (string, bool) {
+	rel = strings.ReplaceAll(rel, "\\", "/")
+	if rel == "" || strings.Contains(rel, ":") || filepath.IsAbs(rel) {
+		return "", false
+	}
+	p := filepath.Join(dir, filepath.FromSlash(rel))
+	if !strings.HasPrefix(p, filepath.Clean(dir)+string(os.PathSeparator)) {
+		return "", false
+	}
+	return p, true
+}
+
 // localizedName resolves "__MSG_x__" through _locales (Chinese first, then the default locale).
 func localizedName(dir string, man extManifest, s string) string {
 	if !strings.HasPrefix(s, "__MSG_") || !strings.HasSuffix(s, "__") {
@@ -414,7 +429,11 @@ func localizedName(dir string, man extManifest, s string) string {
 		if loc == "" {
 			continue
 		}
-		b, err := os.ReadFile(filepath.Join(dir, "_locales", loc, "messages.json"))
+		mp, ok := extPath(dir, "_locales/"+loc+"/messages.json")
+		if !ok {
+			continue
+		}
+		b, err := os.ReadFile(mp)
 		if err != nil {
 			continue
 		}
@@ -445,7 +464,10 @@ func iconDataURL(dir string, icons map[string]string) string {
 	if best == "" {
 		return ""
 	}
-	p := filepath.Join(dir, filepath.FromSlash(strings.TrimPrefix(best, "/")))
+	p, ok := extPath(dir, strings.TrimPrefix(best, "/"))
+	if !ok {
+		return ""
+	}
 	b, err := os.ReadFile(p)
 	if err != nil || len(b) > 256<<10 {
 		return ""
