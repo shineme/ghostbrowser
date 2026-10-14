@@ -950,3 +950,53 @@ func (a *App) StopSync() SyncerState {
 
 // SyncerState returns the current group-control status.
 func (a *App) SyncerState() SyncerState { return groupSync.State() }
+
+// ---- kernel install ----
+
+// KernelInstallStatus returns the current one-click kernel install state.
+func (a *App) KernelInstallStatus() KernelProgress { return kernelInst.snapshot() }
+
+// KernelInstallStart downloads and installs Chromium for Windows x64 from
+// source (mirror|official|custom) and makes it the open-source kernel.
+// Progress arrives as "kernel:install" events.
+func (a *App) KernelInstallStart(source, customURL string) (KernelProgress, error) {
+	if kernelInst.emit == nil {
+		kernelInst.emit = func(p KernelProgress) {
+			if a.ctx != nil {
+				wruntime.EventsEmit(a.ctx, "kernel:install", p)
+			}
+		}
+	}
+	st := a.store.GetSettings()
+	st.KernelSource, st.KernelURL = source, strings.TrimSpace(customURL)
+	a.store.PutSettings(st)
+	return kernelInst.Start(kernelsDir(), source, customURL, func(path string) {
+		s := a.store.GetSettings()
+		s.ChromiumPath = path
+		a.store.PutSettings(s)
+		if a.ctx != nil {
+			wruntime.EventsEmit(a.ctx, "settings:changed", s)
+		}
+	})
+}
+
+// KernelInstallCancel stops the running install; the partial download is kept for resume.
+func (a *App) KernelInstallCancel() { kernelInst.Cancel() }
+
+// KernelList returns kernels installed by one-click install.
+func (a *App) KernelList() []InstalledKernel {
+	return listKernels(kernelsDir(), chromiumKernel(a.store.GetSettings()))
+}
+
+// KernelDelete removes an installed kernel; clears chromiumPath when it pointed there.
+func (a *App) KernelDelete(dir string) error {
+	if err := deleteKernel(kernelsDir(), dir); err != nil {
+		return err
+	}
+	st := a.store.GetSettings()
+	if p := st.ChromiumPath; p != "" && strings.HasPrefix(strings.ToLower(filepath.Clean(p)), strings.ToLower(filepath.Clean(dir))+string(filepath.Separator)) {
+		st.ChromiumPath = ""
+		a.store.PutSettings(st)
+	}
+	return nil
+}
