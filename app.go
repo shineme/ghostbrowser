@@ -454,6 +454,9 @@ func (a *App) MatchGeo(proxyID string, inline *Proxy) GeoMatch {
 func (a *App) GetSettings() Settings { return a.store.GetSettings() }
 
 func (a *App) SaveSettings(s Settings) Settings {
+	if s.Syncer == nil { // settings page loaded before the syncer dialog saved: keep its prefs
+		s.Syncer = a.store.GetSettings().Syncer
+	}
 	out := a.store.PutSettings(s)
 	api.restart(a.store)
 	return out
