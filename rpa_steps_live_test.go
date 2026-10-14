@@ -61,13 +61,20 @@ func startLiveChrome(t *testing.T) (ws string, kill func()) {
 	if bin == "" {
 		t.Skip("set GHOST_CHROME to a Chromium binary")
 	}
+	// Not t.TempDir: Chromium helpers may still write to the profile after
+	// the kill, which makes its strict cleanup fail the test.
+	ud, err := os.MkdirTemp("", "rpa-live-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { time.Sleep(300 * time.Millisecond); _ = os.RemoveAll(ud) })
 	port := freePort()
-	cmd := exec.Command(bin, "--headless=new", "--no-sandbox", "--window-size=1000,700", "--user-data-dir="+filepath.Join(t.TempDir(), "ud"), fmt.Sprintf("--remote-debugging-port=%d", port), "about:blank")
+	cmd := exec.Command(bin, "--headless=new", "--no-sandbox", "--window-size=1000,700", "--user-data-dir="+ud, fmt.Sprintf("--remote-debugging-port=%d", port), "about:blank")
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
 	kill = func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }
-	ws, err := waitDebugger(port, 20*time.Second)
+	ws, err = waitDebugger(port, 20*time.Second)
 	if err != nil {
 		kill()
 		t.Fatal(err)
