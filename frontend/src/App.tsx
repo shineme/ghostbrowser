@@ -3,6 +3,7 @@ import { BorderBeam } from 'border-beam';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api, Profile, Proxy, Settings, onEvent } from './api';
 import { MetalFx } from 'metal-fx';
+import { DeleteModal, DelTarget } from './DeleteModal';
 import { Icon, Field, flag, ago, useToast, useConfirm, useExit, ToastHost, WindowControls, useMaximised, StatCard, Avatar, CC, CountUp, OsIcon, Ambient, Splash, useSpotlight, Pick, Segmented, DevIcon } from './ui';
 import { DEVICE_TYPES, devType, devName, osName as osNameOf, needsOpen } from './devices';
 import { ProfileDrawer } from './ProfileDrawer';
@@ -45,6 +46,7 @@ function Shell() {
     if (e.phase === 'item') { reload(); if (e.message) toast(`${e.name || e.id}：${e.message}`, 'bad'); else if (e.error) toast(`${e.name || e.id} ${e.action === 'pull' ? '下载' : '上传'}失败：${e.error}`, 'bad'); else if (e.action === 'push') toast(`已同步 ${e.name} 到服务器`); else if (e.action === 'pull') toast(`已从云端拉取 ${e.name}`); }
     if (e.phase === 'done' && (e.pulled || e.pushed || e.failed)) { reload(); toast(e.message, e.failed ? 'bad' : undefined); }
     if (e.phase === 'error') toast(e.message, 'bad');
+    if (e.phase === 'deleted' || e.phase === 'deleted-pending' || e.phase === 'deleted-cloud') { reload(); if (e.message) toast(e.message, e.phase === 'deleted-pending' ? 'bad' : undefined); }
   }), [reload]);
   useEffect(() => onEvent('profile:exit', (id: string) => { setRunning(s => { const n = new Set(s); n.delete(id); return n; }); }), []);
 
@@ -212,7 +214,8 @@ const ProfilesView: React.FC<{
   };
   const stop = async (p: Profile) => { setBusyFor(p.id, true); await api.StopProfile(p.id); setRunning(s => { const n = new Set(s); n.delete(p.id); return n; }); setBusyFor(p.id, false); };
   const clone = async (p: Profile) => { await api.CloneProfile(p.id); toast('已复制环境'); reload(); };
-  const del = async (ids: string[]) => { if (!await ask({ title: `删除 ${ids.length} 个环境？`, body: '环境的数据目录（Cookie、缓存、扩展状态）会一并删除，无法恢复。云端副本不受影响。', ok: '删除', danger: true })) return; await api.DeleteProfiles(ids); setSel(new Set()); toast('已删除'); reload(); };
+  const [delT, setDelT] = useState<DelTarget[] | null>(null);
+  const del = (ids: string[]) => setDelT(ids.map(id => profiles.find(p => p.id === id)).filter(Boolean).map(p => ({ id: p!.id, name: p!.name, inCloud: p!.storage === 'cloud' || p!.cloudVersion > 0, running: running.has(p!.id) })));
 
   const startBatch = async () => { for (const id of sel) { const p = profiles.find(x => x.id === id); if (p && !running.has(id)) await start(p); } };
   const stopBatch = async () => { const ids = [...sel].filter(id => running.has(id)); if (!ids.length) return; await api.StopProfiles(ids); setRunning(s => { const n = new Set(s); ids.forEach(id => n.delete(id)); return n; }); toast(`已停止 ${ids.length} 个环境`); };
@@ -337,6 +340,7 @@ const ProfilesView: React.FC<{
       {drawer && <ProfileDrawer profile={editing} proxies={Object.values(proxyName)} onClose={() => setDrawer(false)} onSaved={reload} />}
       {bulk && <BulkModal proxies={Object.values(proxyName)} onClose={() => setBulk(false)} onDone={reload} />}
       {nativeTools && <NativeTools profiles={profiles} onClose={() => setNativeTools(false)} onChanged={reload} />}
+      {delT && delT.length > 0 && <DeleteModal targets={delT} onClose={() => setDelT(null)} onDone={() => { setSel(new Set()); reload(); }} />}
       {modal === 'group' && <GroupModal ids={[...sel]} groups={groups} onClose={() => setModal('')} onDone={reload} />}
       {needKernel && <KernelMissingModal name={needKernel.name} onClose={() => setNeedKernel(null)} onLaunch={() => start(needKernel)} />}
       {modal === 'assign' && <AssignModal ids={[...sel]} proxies={Object.values(proxyName)} profiles={profiles} onClose={() => setModal('')} onDone={reload} />}

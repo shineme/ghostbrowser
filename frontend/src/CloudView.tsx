@@ -3,6 +3,9 @@ import { ThinkingOrb } from 'thinking-orbs';
 import { api, onEvent, Profile, Settings } from './api';
 import { InlineTransfer } from './Transfers';
 import { Icon, useToast, useConfirm, useExit, Avatar, ago, Segmented } from './ui';
+import { DeleteModal, DelTarget } from './DeleteModal';
+
+type CloudOnlyItem = { id: string; name: string; version: number; updatedAt: number; deviceName: string; size: number; lockedBy: string; localDeleted: boolean; deletedVersion: number; deletedAt: number; cloudNewer: boolean; pendingDelete: boolean; pendingError?: string };
 
 const size = (b?: number) => b == null || b < 0 ? '—' : b >= 1 << 30 ? `${(b / (1 << 30)).toFixed(1)} GB` : b >= 1 << 20 ? `${(b / (1 << 20)).toFixed(1)} MB` : b >= 1024 ? `${Math.round(b / 1024)} KB` : `${b} B`;
 const ACTION: Record<string, string> = { push: '上传', pull: '拉取', restore: '恢复版本', 'push-global': '上传全局数据', 'pull-global': '拉取全局数据' };
@@ -23,18 +26,31 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
   const [infoErr, setInfoErr] = useState('');
   const [log, setLog] = useState<LogRow[]>([]);
   const [hist, setHist] = useState<Profile | null>(null);
-  const [tab, setTab] = useState<'list' | 'log'>('list');
+  const [tab, setTab] = useState<'list' | 'only' | 'log'>('list');
+  const [only, setOnly] = useState<CloudOnlyItem[] | null>(null);
+  const [onlyErr, setOnlyErr] = useState('');
+  const [delT, setDelT] = useState<DelTarget[] | null>(null);
   const configured = !!settings?.syncServer && !!settings?.syncPassword;
 
   const loadLog = useCallback(() => { api.SyncLog().then((l: any) => setLog(l || [])).catch(() => {}); }, []);
   const loadInfo = useCallback(() => { api.SyncServerInfo().then((i: any) => { setInfo(i); setInfoErr(''); }).catch((e: any) => setInfoErr(String(e?.message || e))); }, []);
-  useEffect(() => { if (configured) { loadInfo(); loadLog(); } }, [configured, loadInfo, loadLog]);
+  const loadOnly = useCallback(() => { api.CloudOnly().then((r: any) => { setOnly(r?.items || []); setOnlyErr(r?.error || ''); }).catch((e: any) => { setOnly([]); setOnlyErr(String(e?.message || e)); }); }, []);
+  useEffect(() => { if (configured) { loadInfo(); loadLog(); loadOnly(); } }, [configured, loadInfo, loadLog, loadOnly]);
   useEffect(() => { api.SyncBusy().then((b: any) => setBusy(new Set(b || []))).catch(() => {}); }, []);
   useEffect(() => onEvent('sync:event', (e: any) => {
     if (e.phase === 'busy') setBusy(s => new Set(s).add(e.id));
     if (e.phase === 'idle') setBusy(s => { const n = new Set(s); n.delete(e.id); return n; });
     if (e.phase === 'item' || e.phase === 'done') loadLog();
-  }), [loadLog]);
+    if (e.phase === 'done' || e.phase === 'deleted' || e.phase === 'deleted-cloud') loadOnly();
+  }), [loadLog, loadOnly]);
+  const [onlyBusy, setOnlyBusy] = useState('');
+  const restoreLocal = async (it: CloudOnlyItem) => {
+    setOnlyBusy(it.id);
+    try { await api.RestoreLocalDeleted(it.id); toast(`已恢复「${it.name}」到本机`); reload(); loadOnly(); }
+    catch (e: any) { toast(String(e?.message || e), 'bad'); }
+    finally { setOnlyBusy(''); loadLog(); }
+  };
+  const retryDeletes = async () => { const left: any = await api.RetryCloudDeletes(); toast(left ? `仍有 ${left} 个云端删除未完成，稍后会自动重试` : '排队的云端删除已全部完成', left ? 'bad' : undefined); loadOnly(); };
 
   const mark = (id: string, on: boolean) => setBusy(s => { const n = new Set(s); on ? n.add(id) : n.delete(id); return n; });
   const run = async (p: Profile, f: () => Promise<any>, ok: string) => { mark(p.id, true); try { await f(); toast(ok); reload(); } catch (e: any) { toast(String(e?.message || e), 'bad'); } finally { mark(p.id, false); loadLog(); } };
@@ -74,14 +90,42 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
 
       <div className="toolbar">
         <Segmented className="compact" value={tab} onChange={t => { setTab(t); if (t === 'log') loadLog(); }}
-          items={[['list', '全部环境'], ['log', fails ? `同步日志 · ${fails} 失败` : '同步日志']]} />
+          items={[['list', '全部环境'], ['only', only?.length ? `仅云端 · ${only.length}` : '仅云端'], ['log', fails ? `同步日志 · ${fails} 失败` : '同步日志']]} />
         <div className="sub" style={{ color: 'var(--txt-3)' }}>{cloud.length} 个云端 · {profiles.length - cloud.length} 个本地 · 自动同步{settings!.autoSyncOff ? '已关闭' : '已开启'}</div>
         <div style={{ flex: 1 }} />
+        {tab === 'only' && only?.some(i => i.pendingDelete) && <button className="btn sm ghost" onClick={retryDeletes}><Icon.refresh s={13} /> 重试云端删除</button>}
         {tab === 'log' && log.length > 0 && <button className="btn sm ghost" onClick={async () => { await api.ClearSyncLog(); loadLog(); }}><Icon.trash s={13} /> 清空日志</button>}
         <button className="btn sm" onClick={syncAll} disabled={syncing}><Icon.refresh s={14} /> {syncing ? '同步中…' : '立即同步（服务器优先）'}</button>
       </div>
 
-      {tab === 'list' ? <div className="panel list">
+      {tab === 'only' ? <div className="panel list cdel-only">
+        {onlyErr && <div className="notice bad" style={{ margin: 12 }}><Icon.alert s={14} /> 无法连接同步服务器，下面只显示本机记录：{onlyErr}</div>}
+        {only === null ? <div className="empty" style={{ padding: 40 }}><ThinkingOrb state="connecting" size={32} theme="dark" /></div>
+          : only.length === 0 ? <div className="empty" style={{ padding: 44 }}><div className="halo"><ThinkingOrb state="breathing" size={32} theme="dark" /></div><h3>云端没有本机缺少的环境</h3><div>用「只删本地」删除的环境会出现在这里，可以随时恢复到本机或从云端删除。</div></div>
+            : <table>
+              <thead><tr><th>环境</th><th>状态</th><th>云端版本</th><th>云端更新</th><th style={{ textAlign: 'right' }}>操作</th></tr></thead>
+              <tbody>{only.map((it, i) => <tr key={it.id} className="rise" style={{ ['--i' as any]: i }}>
+                <td><div className="cell-id"><Avatar seed={it.id} os="windows" /><div style={{ minWidth: 0 }}><div className="nm cdel-ell" title={it.name}>{it.name || it.id}</div><div className="sub num">{it.id}</div></div></div></td>
+                <td><div className="cdel-badges">
+                  {it.pendingDelete ? <span className="badge warn" title={it.pendingError || ''}><i className="d" />云端删除排队中</span>
+                    : it.localDeleted ? <span className="badge local"><Icon.cloud s={12} /> 仅云端（已在本机删除）</span>
+                      : <span className="badge unknown"><Icon.cloud s={12} /> 仅云端（尚未下载）</span>}
+                  {it.cloudNewer && !it.pendingDelete && <span className="badge ok cdel-new" title={`本机删除时为 v${it.deletedVersion}`}><i className="d" />云端有更新</span>}
+                </div>
+                  {it.pendingDelete && it.pendingError && <div className="sub cdel-err" title={it.pendingError}>{it.pendingError}</div>}
+                  {it.localDeleted && !it.pendingDelete && it.deletedAt > 0 && <div className="sub">{ago(it.deletedAt)}在本机删除</div>}
+                </td>
+                <td className="sub num">{it.version ? `v${it.version}` : '—'}</td>
+                <td className="sub">{it.updatedAt ? <>{new Date(it.updatedAt * 1000).toLocaleString()}{it.deviceName && <div className="cdel-ell" title={it.deviceName}>来自 {it.deviceName}</div>}</> : '—'}</td>
+                <td><div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                  {onlyBusy === it.id ? <span style={{ width: 26, display: 'grid', placeItems: 'center' }}><ThinkingOrb state="weaving" size={20} theme="dark" /></span> : !it.pendingDelete && <>
+                    <button className="btn sm" disabled={!!onlyBusy || !it.version} onClick={() => restoreLocal(it)}><Icon.download s={13} /> 恢复到本机</button>
+                    <button className="btn sm ghost danger" disabled={!!onlyBusy} onClick={() => setDelT([{ id: it.id, name: it.name || it.id, inCloud: true }])}><Icon.trash s={13} /> 删除云端</button>
+                  </>}
+                </div></td>
+              </tr>)}</tbody>
+            </table>}
+      </div> : tab === 'list' ? <div className="panel list">
         <table>
           <thead><tr><th>环境</th><th>状态</th><th>云端版本</th><th>最近同步</th><th style={{ textAlign: 'right' }}>操作</th></tr></thead>
           <tbody>
@@ -120,6 +164,7 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
         {log.length === 0 && <div className="empty" style={{ padding: 40 }}><div>还没有同步记录</div></div>}
       </div>}
 
+      {delT && <DeleteModal targets={delT} cloudOnly onClose={() => setDelT(null)} onDone={() => { loadOnly(); loadLog(); }} />}
       {hist && <HistoryModal p={hist} onClose={() => setHist(null)} onDone={() => { reload(); loadLog(); }} />}
     </>
   );

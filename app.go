@@ -1191,12 +1191,19 @@ func (a *App) DeleteProfilesMode(ids []string, mode string, force bool) []Delete
 	if mode != "cloud" {
 		mode = "local"
 	}
+	return a.syncer().DeleteProfiles("ui", ids, mode, force)
+}
+
+// SetDeleteMode remembers the last choice in the delete dialog.
+func (a *App) SetDeleteMode(mode string) {
+	if mode != "cloud" && mode != "local" {
+		return
+	}
 	st := a.store.GetSettings()
 	if st.DeleteMode != mode {
 		st.DeleteMode = mode
 		a.store.PutSettings(st)
 	}
-	return a.syncer().DeleteProfiles("ui", ids, mode, force)
 }
 
 // CloudOnly lists cloud profiles without a local copy (including ones deleted

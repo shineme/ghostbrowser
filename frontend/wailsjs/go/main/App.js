@@ -74,6 +74,10 @@ export function CloudHistory(arg1) {
   return window['go']['main']['App']['CloudHistory'](arg1);
 }
 
+export function CloudOnly() {
+  return window['go']['main']['App']['CloudOnly']();
+}
+
 export function CookieInfo(arg1) {
   return window['go']['main']['App']['CookieInfo'](arg1);
 }
@@ -108,6 +112,10 @@ export function DeleteDevicePreset(arg1) {
 
 export function DeleteProfiles(arg1) {
   return window['go']['main']['App']['DeleteProfiles'](arg1);
+}
+
+export function DeleteProfilesMode(arg1, arg2, arg3) {
+  return window['go']['main']['App']['DeleteProfilesMode'](arg1, arg2, arg3);
 }
 
 export function DeleteProxies(arg1) {
@@ -342,6 +350,10 @@ export function PauseRecording() {
   return window['go']['main']['App']['PauseRecording']();
 }
 
+export function PendingCloudDeletes() {
+  return window['go']['main']['App']['PendingCloudDeletes']();
+}
+
 export function PendingSyncPrompt() {
   return window['go']['main']['App']['PendingSyncPrompt']();
 }
@@ -398,12 +410,20 @@ export function ResetAPIKey() {
   return window['go']['main']['App']['ResetAPIKey']();
 }
 
+export function RestoreLocalDeleted(arg1) {
+  return window['go']['main']['App']['RestoreLocalDeleted'](arg1);
+}
+
 export function RestoreVersion(arg1, arg2) {
   return window['go']['main']['App']['RestoreVersion'](arg1, arg2);
 }
 
 export function ResumeRecording() {
   return window['go']['main']['App']['ResumeRecording']();
+}
+
+export function RetryCloudDeletes() {
+  return window['go']['main']['App']['RetryCloudDeletes']();
 }
 
 export function RetrySync(arg1, arg2) {
@@ -460,6 +480,10 @@ export function SaveWorkflowFile(arg1) {
 
 export function ScreenOptions(arg1) {
   return window['go']['main']['App']['ScreenOptions'](arg1);
+}
+
+export function SetDeleteMode(arg1) {
+  return window['go']['main']['App']['SetDeleteMode'](arg1);
 }
 
 export function SetProfileExtensions(arg1, arg2) {

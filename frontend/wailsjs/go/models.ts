@@ -229,6 +229,74 @@ export namespace main {
 	        this.errors = source["errors"];
 	    }
 	}
+	export class CloudOnlyItem {
+	    id: string;
+	    name: string;
+	    version: number;
+	    updatedAt: number;
+	    deviceName: string;
+	    size: number;
+	    lockedBy: string;
+	    localDeleted: boolean;
+	    deletedVersion: number;
+	    deletedAt: number;
+	    cloudNewer: boolean;
+	    pendingDelete: boolean;
+	    pendingError?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CloudOnlyItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.version = source["version"];
+	        this.updatedAt = source["updatedAt"];
+	        this.deviceName = source["deviceName"];
+	        this.size = source["size"];
+	        this.lockedBy = source["lockedBy"];
+	        this.localDeleted = source["localDeleted"];
+	        this.deletedVersion = source["deletedVersion"];
+	        this.deletedAt = source["deletedAt"];
+	        this.cloudNewer = source["cloudNewer"];
+	        this.pendingDelete = source["pendingDelete"];
+	        this.pendingError = source["pendingError"];
+	    }
+	}
+	export class CloudOnlyList {
+	    items: CloudOnlyItem[];
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CloudOnlyList(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], CloudOnlyItem);
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class CloudVersion {
 	    version: number;
 	    size: number;
@@ -283,6 +351,28 @@ export namespace main {
 	        this.snapshotAt = source["snapshotAt"];
 	        this.snapshot = source["snapshot"];
 	        this.staged = source["staged"];
+	    }
+	}
+	export class DeleteResult {
+	    id: string;
+	    name: string;
+	    local: boolean;
+	    cloud?: string;
+	    error?: string;
+	    message?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DeleteResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.local = source["local"];
+	        this.cloud = source["cloud"];
+	        this.error = source["error"];
+	        this.message = source["message"];
 	    }
 	}
 	export class DevicePreset {
@@ -1478,6 +1568,7 @@ export namespace main {
 	    kernelSource?: string;
 	    kernelUrl?: string;
 	    syncer?: SyncerPrefs;
+	    deleteMode?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -1508,6 +1599,7 @@ export namespace main {
 	        this.kernelSource = source["kernelSource"];
 	        this.kernelUrl = source["kernelUrl"];
 	        this.syncer = this.convertValues(source["syncer"], SyncerPrefs);
+	        this.deleteMode = source["deleteMode"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1901,6 +1993,10 @@ export namespace main {
 	    updatedAt: number;
 	    size: number;
 	    deviceName: string;
+	    deleted?: boolean;
+	    deletedAt?: number;
+	    deletedByName?: string;
+	    deletedBy?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new cloudMeta(source);
@@ -1917,6 +2013,10 @@ export namespace main {
 	        this.updatedAt = source["updatedAt"];
 	        this.size = source["size"];
 	        this.deviceName = source["deviceName"];
+	        this.deleted = source["deleted"];
+	        this.deletedAt = source["deletedAt"];
+	        this.deletedByName = source["deletedByName"];
+	        this.deletedBy = source["deletedBy"];
 	    }
 	}
 	export class serverInfo {

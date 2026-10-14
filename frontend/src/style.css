@@ -1749,3 +1749,57 @@ input.mono, textarea.mono { font-family: "JBMono", Consolas, monospace; }
   background: color-mix(in srgb, var(--a2) 14%, transparent); color: var(--txt-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rs-frame svg { flex: none; opacity: .8; }
 .rs-frame > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- cloud delete ---- */
+.modal.cdel { width: 540px; }
+.cdel-h { min-width: 0; flex: 1 1 auto; }
+.cdel-h h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cdel .dbody { display: flex; flex-direction: column; gap: 12px; }
+.cdel-load { display: grid; place-items: center; padding: 26px; }
+.cdel-names { display: flex; flex-wrap: wrap; gap: 6px; max-height: 64px; overflow: auto; }
+.cdel-name { max-width: 150px; height: 24px; line-height: 22px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--hair); background: rgba(255,255,255,.03); color: var(--txt-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cdel-name.more { color: var(--txt-3); border-style: dashed; }
+.cdel-opts { display: grid; gap: 10px; }
+.cdel-opt { position: relative; display: flex; align-items: flex-start; gap: 13px; width: 100%; text-align: left; padding: 14px 16px; border-radius: var(--r-md, 14px); border: 1px solid var(--hair); background: rgba(255,255,255,.025); color: var(--txt); font: inherit; cursor: pointer;
+  transition: border-color var(--t-med) var(--ease-out), background var(--t-med) var(--ease-out), transform var(--t-med) var(--ease-out), box-shadow var(--t-med) var(--ease-out);
+  animation: rise var(--t-slow) var(--ease-out) backwards; animation-delay: calc(var(--i, 0) * 50ms + 60ms); }
+.cdel-opt:hover:not(:disabled) { border-color: var(--hair-2); background: rgba(255,255,255,.045); transform: translateY(-1px); }
+.cdel-opt:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(124,140,255,.55); }
+.cdel-opt:disabled { cursor: default; opacity: .7; }
+.cdel-opt.on { border-color: rgba(124,140,255,.5); background: linear-gradient(180deg, rgba(124,140,255,.12), rgba(124,140,255,.04)); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 12px 30px -18px rgba(124,140,255,.9); }
+.cdel-opt.cloud.on { border-color: rgba(255,91,110,.5); background: linear-gradient(180deg, rgba(255,91,110,.12), rgba(255,91,110,.035)); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 12px 30px -18px rgba(255,91,110,.9); }
+.cdel-ic { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: var(--txt-2); background: rgba(255,255,255,.05); border: 1px solid var(--hair); transition: all var(--t-med) var(--ease-out); }
+.cdel-opt.on .cdel-ic { color: #fff; background: var(--spectral); border-color: transparent; }
+.cdel-opt.cloud.on .cdel-ic { background: linear-gradient(135deg, #ff5b6e, #ff8a7a); }
+.cdel-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.cdel-t { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 14px; }
+.cdel-tag { height: 19px; padding: 0 7px; font-size: 10.5px; }
+.cdel-d { color: var(--txt-3); font-size: 12px; line-height: 1.65; }
+.cdel-d b { color: var(--txt-2); font-weight: 600; }
+.cdel-opt.on .cdel-d { color: var(--txt-2); }
+.cdel-opt.on .cdel-d b { color: var(--txt); }
+.cdel-radio { flex: none; width: 18px; height: 18px; margin-top: 2px; border-radius: 50%; border: 1.5px solid var(--hair-3, rgba(255,255,255,.25)); position: relative; transition: border-color var(--t-med) var(--ease-out); }
+.cdel-radio::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--spectral); transform: scale(0); transition: transform var(--t-med) var(--ease-spring, var(--ease-out)); }
+.cdel-opt.on .cdel-radio { border-color: rgba(124,140,255,.8); }
+.cdel-opt.cloud.on .cdel-radio { border-color: rgba(255,91,110,.85); }
+.cdel-opt.cloud .cdel-radio::after { background: linear-gradient(135deg, #ff5b6e, #ff8a7a); }
+.cdel-opt.on .cdel-radio::after { transform: scale(1); }
+.cdel-note { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: var(--r-sm, 10px); border: 1px solid var(--hair); background: rgba(255,255,255,.03); color: var(--txt-2); font-size: 12.5px; line-height: 1.7; }
+.cdel-note svg { flex: none; margin-top: 3px; color: var(--warn); }
+.cdel-note.bad { border-color: rgba(255,91,110,.3); background: rgba(255,91,110,.07); }
+.cdel-note.bad svg { color: var(--bad); }
+.cdel-note b { color: var(--txt); }
+.cdel-hint { display: flex; align-items: center; gap: 8px; color: var(--txt-3); font-size: 12px; animation: rise var(--t-med) var(--ease-out) backwards; }
+.cdel-hint.warn { color: var(--warn); }
+.cdel-hint .d { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
+.cdel-go { min-width: 112px; justify-content: center; }
+.cdel-only .cdel-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.cdel-only .badge.cdel-new { animation: cdelPulse 2.4s var(--ease-out) infinite; }
+@keyframes cdelPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(61,220,151,0); } 50% { box-shadow: 0 0 0 4px rgba(61,220,151,.12); } }
+.cdel-ell { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cdel-err { color: #ffb3bc; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4px; }
+@media (prefers-reduced-motion: reduce) {
+  .cdel-opt, .cdel-hint, .cdel-only .badge.cdel-new { animation: none; }
+  .cdel-opt, .cdel-radio::after, .cdel-ic { transition: none; }
+  .cdel-opt:hover:not(:disabled) { transform: none; }
+}

@@ -187,6 +187,15 @@ if (!location.hash.includes('auditempty')) {
 }
 
 
+// ---- cloud delete (mock data) ----
+const cdelNow = Date.now() / 1000;
+const cdelMock: any[] = [
+  { id: 'c0a1f3e9b2d4c5a6', name: 'TikTok-Shop-03', version: 5, updatedAt: cdelNow - 7200, deviceName: 'OFFICE-PC', size: 46e6, lockedBy: '', localDeleted: true, deletedVersion: 5, deletedAt: cdelNow - 86400, cloudNewer: false, pendingDelete: false },
+  { id: 'c7d2e8f1a3b9c4d0', name: 'Amazon-Seller-UK-主店铺-长名称测试环境-用于检查省略号效果', version: 9, updatedAt: cdelNow - 1500, deviceName: 'LAPTOP-HOME-WITH-A-VERY-LONG-HOSTNAME', size: 88e6, lockedBy: '', localDeleted: true, deletedVersion: 7, deletedAt: cdelNow - 3 * 86400, cloudNewer: true, pendingDelete: false },
+  { id: 'c3b4a5d6e7f8a9b0', name: 'Shopee-MY-01', version: 0, updatedAt: 0, deviceName: '', size: 0, lockedBy: '', localDeleted: false, deletedVersion: 0, deletedAt: 0, cloudNewer: false, pendingDelete: true, pendingError: 'Post "https://vps.example.com/ghostsync.php?r=/api/profiles/c3b4a5d6e7f8a9b0/delete": dial tcp: i/o timeout' },
+  { id: 'c9e8d7c6b5a4f3e2', name: 'Etsy-02', version: 2, updatedAt: cdelNow - 5 * 86400, deviceName: 'OFFICE-PC', size: 12e6, lockedBy: '', localDeleted: false, deletedVersion: 0, deletedAt: 0, cloudNewer: false, pendingDelete: false },
+];
+
 const M = {
  NativePresets: async (): Promise<NativePreset[]> => [{id:'demo', name:'Windows / Intel', configId:'3285798'}],
  UseUndetectableKit: async () => { mock.settings.kernelMode='undetectable'; mock.settings.undetectableKit='undetectable-kit'; return {...mock.settings}; },
@@ -484,6 +493,28 @@ const M = {
     setTimeout(() => { if (!recSim.st?.active) return; S.steps.push(mode === 'extract' ? rs('extract_text', { selector: '.order-total', var: `text${S.steps.filter((x: any) => x.type === 'extract_text').length + 1}` }) : rs('wait_for', { selector: '.toast-success', state: 'visible', timeout: '10000' })); recSim.emit(); }, 1400);
     return recSim.pub();
   },
+  // ---- cloud delete ----
+  _cdelInit: (() => { if (location.hash.includes('cloud')) Object.assign(mock.settings, { syncServer: 'https://vps.example.com/ghostsync.php', syncToken: 'x'.repeat(40), syncPassword: 'pw', deleteMode: '' }); return 0; })(),
+  SetDeleteMode: async (m: string) => { mock.settings.deleteMode = m; },
+  DeleteProfilesMode: async (ids: string[], mode: string, force: boolean): Promise<any[]> => {
+    await wait(700); const now = Date.now() / 1000;
+    return ids.map(id => {
+      const p = mock.profiles.find(x => x.id === id); const co = cdelMock.find(x => x.id === id); const name = p?.name || co?.name || id;
+      if (mode === 'cloud' && !force && /FB/i.test(name)) return { id, name, local: false, cloud: 'locked', error: '该环境正在被另一台设备（LAPTOP-HOME）同步，暂时不能删除；稍后重试或选择强制删除。' };
+      mock.profiles = mock.profiles.filter(x => x.id !== id); mock.running = mock.running.filter(r => r.profileId !== id);
+      if (mode === 'cloud') { cdelMock.splice(0, cdelMock.length, ...cdelMock.filter(x => x.id !== id)); return { id, name, local: !!p, cloud: p && p.storage !== 'cloud' ? 'skipped' : 'deleted' }; }
+      if (p && p.storage === 'cloud') cdelMock.unshift({ id, name, version: p.cloudVersion, updatedAt: now - 600, deviceName: 'DESKTOP-01', size: 31e6, lockedBy: '', localDeleted: true, deletedVersion: p.cloudVersion, deletedAt: now, cloudNewer: false, pendingDelete: false });
+      return { id, name, local: !!p };
+    });
+  },
+  CloudOnly: async (): Promise<any> => { await wait(250); return { items: cdelMock.map(x => ({ ...x })) }; },
+  RestoreLocalDeleted: async (id: string) => {
+    const it = cdelMock.find(x => x.id === id); if (!it) return; await simTransfer(id, it.name, 'down', 31 << 20, 180 << 20, 2500);
+    cdelMock.splice(0, cdelMock.length, ...cdelMock.filter(x => x.id !== id));
+    mock.profiles.unshift({ id, name: it.name, group: '', tags: [], notes: '', storage: 'cloud', proxyId: '', startUrls: [], cookies: '', fingerprint: mockFP(), createdAt: Date.now() / 1000, lastRun: 0, cloudVersion: it.version, syncedAt: Date.now() / 1000 });
+  },
+  PendingCloudDeletes: async (): Promise<number> => cdelMock.filter(x => x.pendingDelete).length,
+  RetryCloudDeletes: async (): Promise<number> => { await wait(600); return cdelMock.filter(x => x.pendingDelete).length; },
 };
 
 export const api: typeof M = inWails ? (Go as any) : M;

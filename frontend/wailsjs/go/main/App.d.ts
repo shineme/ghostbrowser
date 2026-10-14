@@ -38,6 +38,8 @@ export function CloneProfile(arg1:string):Promise<main.Profile>;
 
 export function CloudHistory(arg1:string):Promise<Array<main.CloudVersion>>;
 
+export function CloudOnly():Promise<main.CloudOnlyList>;
+
 export function CookieInfo(arg1:string):Promise<main.CookieInfo>;
 
 export function CreateGroup(arg1:string):Promise<main.GroupInfo>;
@@ -55,6 +57,8 @@ export function DefaultKernelPath():Promise<string>;
 export function DeleteDevicePreset(arg1:string):Promise<void>;
 
 export function DeleteProfiles(arg1:Array<string>):Promise<void>;
+
+export function DeleteProfilesMode(arg1:Array<string>,arg2:string,arg3:boolean):Promise<Array<main.DeleteResult>>;
 
 export function DeleteProxies(arg1:Array<string>):Promise<void>;
 
@@ -172,6 +176,8 @@ export function ParseProxy(arg1:string):Promise<main.Proxy>;
 
 export function PauseRecording():Promise<main.RecordState>;
 
+export function PendingCloudDeletes():Promise<number>;
+
 export function PendingSyncPrompt():Promise<main.SyncPrompt>;
 
 export function PickChromium():Promise<string>;
@@ -200,9 +206,13 @@ export function RemoveExtension(arg1:string):Promise<void>;
 
 export function ResetAPIKey():Promise<main.Settings>;
 
+export function RestoreLocalDeleted(arg1:string):Promise<void>;
+
 export function RestoreVersion(arg1:string,arg2:number):Promise<void>;
 
 export function ResumeRecording():Promise<main.RecordState>;
+
+export function RetryCloudDeletes():Promise<number>;
 
 export function RetrySync(arg1:string,arg2:string):Promise<void>;
 
@@ -231,6 +241,8 @@ export function SaveWorkflow(arg1:main.Workflow):Promise<main.Workflow>;
 export function SaveWorkflowFile(arg1:string):Promise<string>;
 
 export function ScreenOptions(arg1:string):Promise<Array<string>>;
+
+export function SetDeleteMode(arg1:string):Promise<void>;
 
 export function SetProfileExtensions(arg1:string,arg2:Array<string>):Promise<void>;
 
