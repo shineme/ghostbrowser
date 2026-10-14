@@ -152,6 +152,16 @@ func firefoxPrefs(fp Fingerprint, px *ffProxy, startURLs []string) ffPrefs {
 		{"browser.discovery.enabled", false},
 		{"extensions.getAddons.cache.enabled", false},
 		{"remote.prefs.recommended", false}, // keep our prefs; BiDi's recommended set changes behaviour
+		{"toolkit.telemetry.unified", false},
+		{"toolkit.telemetry.archive.enabled", false},
+		{"browser.ping-centre.telemetry", false},
+		{"network.captive-portal-service.enabled", false},
+		{"network.connectivity-service.enabled", false},
+		{"browser.newtabpage.activity-stream.feeds.section.topstories", false},
+		{"browser.newtabpage.activity-stream.showSponsored", false},
+		{"browser.newtabpage.activity-stream.showSponsoredTopSites", false},
+		{"browser.topsites.contile.enabled", false},
+		{"browser.urlbar.quicksuggest.enabled", false},
 	} {
 		p.set(kv.Key, kv.Val)
 	}
