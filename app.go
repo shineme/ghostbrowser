@@ -53,6 +53,7 @@ func (a *App) startup(ctx context.Context) {
 	// Server-first reconcile on start-up, off the UI thread.
 	go func() { time.Sleep(800 * time.Millisecond); a.auto.Reconcile(); go a.auto.WatchDeletes(); a.auto.WatchGlobal() }()
 	go a.proxyHealthLoop()
+	a.appShellStartup()
 }
 
 // ---------- profiles ----------
@@ -1218,3 +1219,88 @@ func (a *App) PendingCloudDeletes() int { return len(a.store.pendingDeletes()) }
 
 // RetryCloudDeletes sends queued cloud deletes now; returns how many are left.
 func (a *App) RetryCloudDeletes() int { return a.syncer().RetryPendingDeletes() }
+
+// ---- app shell (待重启 / tray / updater / site shortcuts / announcements) ----
+
+func (a *App) appShellStartup() {
+	go cleanupOldExe()
+	upd.emit = func(name string, v any) { wruntime.EventsEmit(a.ctx, name, v) }
+	upd.quit = a.quitApp
+	go upd.loop(a.store)
+	go func() {
+		st := catalogs.Refresh(a.store.dir, a.store.GetSettings())
+		wruntime.EventsEmit(a.ctx, "catalog:changed", st)
+	}()
+	startTray(appTray{a})
+}
+
+// PendingRestart lists running profiles whose launch settings (proxy,
+// fingerprint, kernel, arguments, language/time zone) changed since launch.
+func (a *App) PendingRestart() []string { return a.store.pendingRestart() }
+
+// RestartProfile stops a running profile, waits for it to exit (session
+// snapshot + sync run as on a normal stop) and starts it with the saved settings.
+func (a *App) RestartProfile(id string) (*RunState, error) {
+	if _, ok := runReg.get(id); ok {
+		a.StopProfile(id)
+		if !waitStopped(id, 20*time.Second) {
+			runReg.stop(id)
+			if !waitStopped(id, 10*time.Second) {
+				return nil, fmt.Errorf("环境没有在 30 秒内退出，请手动关闭后再启动")
+			}
+		}
+	}
+	return a.StartProfile(id)
+}
+
+// StartProfileAt launches a profile straight to a site (网站快捷入口); a
+// running profile opens the site in a new tab and comes to the front.
+func (a *App) StartProfileAt(id, site string) (*RunState, error) {
+	site = strings.TrimSpace(site)
+	if !safeSiteURL(site) {
+		return nil, fmt.Errorf("网址无效：只支持 http/https")
+	}
+	if rs, ok := runReg.get(id); ok {
+		if _, err := cdpCall(rs.WSURL, "Target.createTarget", map[string]any{"url": site}); err != nil {
+			return rs, fmt.Errorf("无法在运行中的环境打开网址：%v", err)
+		}
+		_ = a.FocusProfile(id)
+		return rs, nil
+	}
+	launchCfg.setURL(id, site)
+	rs, err := a.StartProfile(id)
+	launchCfg.takeURL(id) // never leak into a later launch
+	return rs, err
+}
+
+// AppVersion is the running version.
+func (a *App) AppVersion() string { return appVersion() }
+
+// TrayAvailable: the close-to-tray setting only applies where a tray exists.
+func (a *App) TrayAvailable() bool { return trayAvailable() }
+
+// UpdateInfo returns the last check result (no network).
+func (a *App) UpdateInfo() UpdateInfo { return upd.Info() }
+
+// CheckUpdate checks the update source now.
+func (a *App) CheckUpdate() UpdateInfo { return upd.Check(a.store.GetSettings()) }
+
+// UpdateProgress is the current download/install state.
+func (a *App) UpdateProgress() UpdateProgress { return upd.Progress() }
+
+// InstallUpdate downloads, verifies (sha256 + Ed25519) and installs the
+// update, then restarts; progress arrives as "update:progress".
+func (a *App) InstallUpdate() error { return upd.Install(a.store.GetSettings()) }
+
+// GetCatalog returns the cached site shortcuts + announcements.
+func (a *App) GetCatalog() CatalogState { return catalogs.Get(a.store.dir) }
+
+// RefreshCatalog fetches the catalog from the server (falls back to the cache).
+func (a *App) RefreshCatalog() CatalogState {
+	return catalogs.Refresh(a.store.dir, a.store.GetSettings())
+}
+
+// MarkAnnouncementsRead marks announcements as read.
+func (a *App) MarkAnnouncementsRead(ids []string) CatalogState {
+	return catalogs.MarkRead(a.store.dir, ids)
+}
