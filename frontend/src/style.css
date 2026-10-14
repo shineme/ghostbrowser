@@ -2351,3 +2351,9 @@ tbody tr .acts .btn.icon { width: 27px; } /* room for the share action */
 .more-menu button.danger:hover { background: rgba(255,107,122,.1); color: var(--bad); }
 .more-menu button:disabled { opacity: .45; cursor: default; }
 .more-sep { height: 1px; margin: 4px 6px; background: var(--hair); }
+/* ---- v0.8.0 fit fixes ---- */
+.os { flex-wrap: wrap; row-gap: 2px; }
+.os .sub, .devtag { white-space: nowrap; }
+.toolbar .search input { min-width: 0; text-overflow: ellipsis; }
+.toolbar .search kbd { flex: none; }
+.node { white-space: nowrap; }
