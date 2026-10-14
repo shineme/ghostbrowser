@@ -348,6 +348,9 @@ type cdpDriver struct {
 // errBrowserGone is returned once the browser (or our CDP connection) is gone.
 var errBrowserGone = errors.New("浏览器已关闭或连接已断开")
 
+// errTabGone is returned when the tab the driver is attached to was closed.
+var errTabGone = errors.New("当前标签页已关闭，请先用「切换标签页」选择一个标签页")
+
 // SetContext ties the driver to a run: cancelling ctx closes the CDP
 // connection so an in-flight wait or navigation returns at once instead of
 // running to its own timeout.
@@ -383,14 +386,21 @@ func (d *cdpDriver) wrapErr(method string, err error) error {
 	case strings.HasSuffix(msg, ": timeout"):
 		return fmt.Errorf("浏览器 15 秒内没有响应（%s）", method)
 	case strings.Contains(msg, "Session with given id not found") || strings.Contains(msg, "No target with given id"):
-		return fmt.Errorf("当前标签页已关闭，请先用「切换标签页」选择一个标签页")
+		// The page sessions go first when the whole browser shuts down, so
+		// give the connection a moment to drop before blaming the tab.
+		select {
+		case <-d.conn.done:
+			return errBrowserGone
+		case <-time.After(time.Second):
+			return errTabGone
+		}
 	}
 	return err
 }
 
 // fatal reports errors that make polling pointless.
 func fatal(err error) bool {
-	return errors.Is(err, errBrowserGone) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+	return errors.Is(err, errBrowserGone) || errors.Is(err, errTabGone) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 // rootCall sends a browser-level (session-less) command.

@@ -323,6 +323,13 @@ func (c *cdpConn) call(session, method string, params any) (json.RawMessage, err
 			return nil, fmt.Errorf("%s: %s", method, m.Error.Message)
 		}
 		return m.Result, nil
+	case <-c.done:
+		// The read loop ended (browser gone); a request registered after it
+		// cleared the pending map would otherwise wait the full timeout.
+		c.mu.Lock()
+		delete(c.pending, id)
+		c.mu.Unlock()
+		return nil, fmt.Errorf("browser closed")
 	case <-time.After(15 * time.Second):
 		c.mu.Lock()
 		delete(c.pending, id)

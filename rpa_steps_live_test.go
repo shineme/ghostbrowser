@@ -304,16 +304,40 @@ func TestRpaInterruptLive(t *testing.T) {
 	}
 	d.Close()
 
+	// The user closes the tab being driven while a step waits on it.
+	raw, err := dialCDP(ws, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = raw.call("", "Target.createTarget", map[string]any{"url": srv.URL + "/b"})
+	time.Sleep(300 * time.Millisecond)
+	d3, err := newCDPDriver(ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	victim := d3.(*cdpDriver).target
+	time.AfterFunc(500*time.Millisecond, func() { _, _ = raw.call("", "Target.closeTarget", map[string]any{"targetId": victim}) })
+	t0 = time.Now()
+	_, err = runRpa(context.Background(), Workflow{Name: "tab", Steps: []RpaStep{st(stWaitFor, "selector", "#never", "timeout", "30000")}}, d3, nil, nil)
+	if !errors.Is(err, errTabGone) || time.Since(t0) > 5*time.Second {
+		t.Fatalf("tab closed mid-wait: err=%v after %v", err, time.Since(t0))
+	}
+	t.Logf("tab closed mid-run: %v after %v", err, time.Since(t0).Round(time.Millisecond))
+	d3.Close()
+	raw.c.Close()
+
 	d2, err := newCDPDriver(ws)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer d2.Close()
-	time.AfterFunc(600*time.Millisecond, kill)
+	// like the user closing the window (Browser.close), not a SIGKILL whose
+	// orphaned helpers can keep the socket open for a while
+	time.AfterFunc(600*time.Millisecond, func() { _ = closeBrowser(ws) })
 	t0 = time.Now()
 	var last RpaStepEvent
 	_, err = runRpa(context.Background(), Workflow{Name: "k", Steps: []RpaStep{st(stGoto, "url", srv.URL), st(stWaitFor, "selector", "#never", "timeout", "30000")}}, d2,
-		func(e RpaStepEvent) { last = e }, nil)
+		func(e RpaStepEvent) { last = e; t.Logf("%v %s %s %s", time.Since(t0).Round(time.Millisecond), e.Type, e.Status, e.Log) }, nil)
 	if err == nil || time.Since(t0) > 4*time.Second {
 		t.Fatalf("browser closed: err=%v after %v", err, time.Since(t0))
 	}
