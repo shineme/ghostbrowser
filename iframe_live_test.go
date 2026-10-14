@@ -607,3 +607,60 @@ func TestIframeSyncerLive(t *testing.T) {
 	st := groupSync.State()
 	t.Logf("syncer: %d events, followers %+v", st.Events, st.Followers)
 }
+
+// TestIframeSelectorGenLive checks cdpFrameSelFn (the recorder's iframe
+// selector generator) on a fixture: preference order and uniqueness.
+func TestIframeSelectorGenLive(t *testing.T) {
+	ws, kill := startLiveChrome(t)
+	defer kill()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, `<!doctype html><body>
+<iframe id="pay"></iframe>
+<iframe id="frame-123456789" name="card"></iframe>
+<iframe title="验证码"></iframe>
+<iframe src="/widgets/chat/index.html?sess=8f7a6b5c4d3e2f1a"></iframe>
+<div class="ads"><iframe src="/ad.html"></iframe><iframe src="/ad.html"></iframe></div>
+<iframe srcdoc="<b>x</b>"></iframe>
+</body>`)
+	}))
+	defer srv.Close()
+	d, err := newCDPDriver(ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	cd := d.(*cdpDriver)
+	if err := cd.Goto(srv.URL+"/", 10*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := cd.call("Runtime.evaluate", map[string]any{"expression": "Array.from(document.querySelectorAll('iframe'))"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var arr struct {
+		Result struct{ ObjectID string } `json:"result"`
+	}
+	_ = json.Unmarshal(raw, &arr)
+	want := []string{"iframe#pay", `iframe[name="card"]`, `iframe[title="验证码"]`, `iframe[src*="/widgets/chat/index.html"]`, "div > iframe:nth-of-type(1)", "div > iframe:nth-of-type(2)", "iframe:nth-of-type(5)"}
+	for i := range want {
+		r, err := cd.call("Runtime.callFunctionOn", map[string]any{"objectId": arr.Result.ObjectID, "functionDeclaration": "function(i, f) { const el = this[i]; const sel = eval('(' + f + ')').call(el); const n = document.querySelectorAll(sel); return JSON.stringify([sel, n.length === 1 && n[0] === el]); }",
+			"arguments": []any{map[string]any{"value": i}, map[string]any{"value": cdpFrameSelFn}}, "returnByValue": true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var v string
+		if err := decodeEvalResult(r, &v); err != nil {
+			t.Fatal(err)
+		}
+		var got []any
+		_ = json.Unmarshal([]byte(v), &got)
+		t.Logf("iframe %d → %v", i, got)
+		if got[1] != true {
+			t.Errorf("iframe %d: selector %v not unique", i, got[0])
+		}
+		if got[0] != want[i] {
+			t.Errorf("iframe %d: %v, want %s", i, got[0], want[i])
+		}
+	}
+}
