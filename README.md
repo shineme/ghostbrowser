@@ -142,6 +142,11 @@ go test -run TestEnsureAgainstRealShop -v .
 - 全局数据同步：设置、代理列表（含凭据、标签、换 IP 链接）、自定义指纹库
 - **历史版本**：「云同步 → 历史版本」可以恢复服务器保留的任意版本，恢复后会作为最新版本上传，其他电脑也会同步到这个版本
 - **同步日志**：最近 300 次同步的时间、流量、耗时和错误，失败的可以一键重试
+- **删除环境可选「只删本地」或「同时删云端」**（单个和批量删除共用一个确认框，记住上次的选择；未配置同步时不显示选项）：
+  - 只删本地：删除本机的环境和数据目录，云端副本保留且**不会再被自动下载回来**；「云同步 → 仅云端」列出这些环境（标记「仅云端（已在本机删除）」，其他设备上传了新版本时显示「云端有更新」），可「恢复到本机」或「删除云端」
+  - 同时删云端：服务器删除该环境的数据、全部历史版本和增量块引用，只留一条不含数据的删除记录（墓碑，名称 / 时间 / 设备，默认保留 90 天）。其他设备在启动对比、立即同步、启动该环境前会看到墓碑并自动删除本机副本（提示「环境 X 已在 某设备 删除，已同步删除本机副本」）；正在运行的会在浏览器关闭后再删除；旧设备的上传会被服务器拒绝（HTTP 410），不会把环境“复活”
+  - 服务器连不上时先删除本机副本，云端删除排队保存，联网后（启动、立即同步或每分钟）自动重试；另一台设备正在上传该环境时服务器返回 423，可选择强制删除
+  - 两种删除都会写入操作日志（删除环境、同步 · 删除云端、同步 · 删除本机副本）。需要把新版 `ghostsync.php` 上传到服务器，旧版服务端删除后其他设备不会自动删除
 - 显示服务器信息：已用空间、磁盘剩余、单次上传上限、保留的版本数
 - 同步地址使用 http 时会提示：令牌会明文传输，建议改用 https
 - 旧版服务端（不支持增量）会自动改用整包同步
@@ -172,18 +177,22 @@ curl -H "X-API-Key: gb_xxx" "http://127.0.0.1:25325/profile/start?profile=<环�
 
 ## Sync server contract
     GET  /api/ping                          features, keepVersions, maxBody, usedBytes, freeBytes
-    GET  /api/profiles
-    POST /api/profiles/{id}/lock            {"device": "..."}  -> lockToken
+    GET  /api/profiles[?tombstones=1]       tombstones=1 also returns deleted profiles: {id,name,version,deleted:true,deletedAt,deletedBy,deletedByName}
+    POST /api/profiles/{id}/lock            {"device": "...", "restore": false}  -> lockToken; 410 for a tombstone unless restore:true
     PUT  /api/profiles/{id}/refs            newline-separated chunk IDs of this upload (under lease)
     PUT  /api/profiles/{id}/blob?version=N  encrypted manifest (GBE1); 412 if server version != N
     POST /api/profiles/{id}/commit          {id,name,version,sha256,meta}
     POST /api/profiles/{id}/unlock
     GET  /api/profiles/{id}/blob[?version=N]
     GET  /api/profiles/{id}/history
-    POST /api/profiles/{id}/delete
+    POST /api/profiles/{id}/delete          {"force": false} -> {ok, state: deleted|already|absent, version}; 423 if another device holds the lease
     POST /api/chunks/missing                {"ids": [...]} -> {"missing": [...]}
     PUT  /api/chunks                        framed: (64-hex id, uint32 BE length, GBC1 data)*
     POST /api/chunks/get                    {"ids": [...]} -> framed, same layout
 All requests carry Authorization: Bearer <token> (and X-Ghost-Token for hosts that strip it).
 Upload, refs, commit and unlock also send X-Device-ID and X-Lock-Token.
+Deletion leaves a tombstone: the index entry keeps id/name, its version is bumped, data/history/refs are released (blob and chunk GC), and
+deleted/deletedAt/deletedBy are set. The plain list (old clients) omits tombstones; ping lists the "tombstones" feature and tombstoneDays.
+Blob/history GET, lock and commit on a tombstone return 410, so a stale device cannot resurrect it; an explicit lock {"restore": true}
+re-creates it. Tombstones are purged after GHOST_TOMBSTONE_DAYS (default 90, env GHOST_SYNC_TOMBSTONE_DAYS).
 Chunk IDs are HMAC-SHA256(per-profile chunk key, plaintext); chunk bodies are "GBC1" + nonce + AES-256-GCM(deflate(data)). The chunk key lives only inside the encrypted manifest.

@@ -87,9 +87,10 @@
   - `lock` / `unlock`
   - `blob`（PUT 上传、GET 下载）
   - `commit`
-  - `delete`
+  - `delete`：留下“墓碑”（只有名称、删除时间和设备，不含数据），数据、历史版本和数据块引用随即释放；其他设备看到墓碑会删除自己的副本。墓碑默认保留 90 天（`GHOST_TOMBSTONE_DAYS` 或环境变量 `GHOST_SYNC_TOMBSTONE_DAYS`）。另一台设备正在上传时返回 423，可带 `{"force": true}` 强制删除
+  - `profiles?tombstones=1` 同时列出墓碑；不带参数（旧客户端）时不列出。对已删除的环境上传 / 下载返回 410，旧设备无法把它“复活”
   - `history`：列出保留的版本；`blob?version=N` 下载某个旧版本
   - `refs`：上传本版本引用的数据块列表（用于清理）
   - `chunks/missing`、`chunks`（批量上传）、`chunks/get`（批量下载）
-- `ping` 会返回 `features`、`keepVersions`、`maxBody`、`usedBytes`、`freeBytes`
+- `ping` 会返回 `features`（含 `tombstones`）、`tombstoneDays`、`keepVersions`、`maxBody`、`usedBytes`、`freeBytes`
 - 版本冲突返回 412

@@ -1803,3 +1803,9 @@ input.mono, textarea.mono { font-family: "JBMono", Consolas, monospace; }
   .cdel-opt, .cdel-radio::after, .cdel-ic { transition: none; }
   .cdel-opt:hover:not(:disabled) { transform: none; }
 }
+.cdel-only table { table-layout: fixed; width: 100%; }
+.cdel-only th { white-space: nowrap; }
+.cdel-only td { overflow: hidden; }
+.cdel-only .cell-id { min-width: 0; }
+.cdel-only .cell-id > div:last-child { min-width: 0; flex: 1; }
+.cdel-only .cdel-ell, .cdel-only .cdel-err { max-width: 100%; }

@@ -103,6 +103,7 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
         {only === null ? <div className="empty" style={{ padding: 40 }}><ThinkingOrb state="connecting" size={32} theme="dark" /></div>
           : only.length === 0 ? <div className="empty" style={{ padding: 44 }}><div className="halo"><ThinkingOrb state="breathing" size={32} theme="dark" /></div><h3>云端没有本机缺少的环境</h3><div>用「只删本地」删除的环境会出现在这里，可以随时恢复到本机或从云端删除。</div></div>
             : <table>
+              <colgroup><col /><col style={{ width: '27%' }} /><col style={{ width: 84 }} /><col style={{ width: '19%' }} /><col style={{ width: 228 }} /></colgroup>
               <thead><tr><th>环境</th><th>状态</th><th>云端版本</th><th>云端更新</th><th style={{ textAlign: 'right' }}>操作</th></tr></thead>
               <tbody>{only.map((it, i) => <tr key={it.id} className="rise" style={{ ['--i' as any]: i }}>
                 <td><div className="cell-id"><Avatar seed={it.id} os="windows" /><div style={{ minWidth: 0 }}><div className="nm cdel-ell" title={it.name}>{it.name || it.id}</div><div className="sub num">{it.id}</div></div></div></td>
@@ -113,12 +114,12 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
                   {it.cloudNewer && !it.pendingDelete && <span className="badge ok cdel-new" title={`本机删除时为 v${it.deletedVersion}`}><i className="d" />云端有更新</span>}
                 </div>
                   {it.pendingDelete && it.pendingError && <div className="sub cdel-err" title={it.pendingError}>{it.pendingError}</div>}
-                  {it.localDeleted && !it.pendingDelete && it.deletedAt > 0 && <div className="sub">{ago(it.deletedAt)}在本机删除</div>}
+                  {it.localDeleted && !it.pendingDelete && it.deletedAt > 0 && <div className="sub cdel-ell">{ago(it.deletedAt)}在本机删除</div>}
                 </td>
                 <td className="sub num">{it.version ? `v${it.version}` : '—'}</td>
-                <td className="sub">{it.updatedAt ? <>{new Date(it.updatedAt * 1000).toLocaleString()}{it.deviceName && <div className="cdel-ell" title={it.deviceName}>来自 {it.deviceName}</div>}</> : '—'}</td>
+                <td className="sub"><div className="cdel-ell">{it.updatedAt ? <>{new Date(it.updatedAt * 1000).toLocaleString()}</> : '—'}</div>{it.updatedAt ? <>{it.deviceName && <div className="cdel-ell" title={it.deviceName}>来自 {it.deviceName}</div>}</> : null}</td>
                 <td><div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                  {onlyBusy === it.id ? <span style={{ width: 26, display: 'grid', placeItems: 'center' }}><ThinkingOrb state="weaving" size={20} theme="dark" /></span> : !it.pendingDelete && <>
+                  {onlyBusy === it.id ? <span style={{ width: 26, display: 'grid', placeItems: 'center' }}><ThinkingOrb state="weaving" size={20} theme="dark" /></span> : it.pendingDelete ? <span className="sub">联网后自动重试</span> : <>
                     <button className="btn sm" disabled={!!onlyBusy || !it.version} onClick={() => restoreLocal(it)}><Icon.download s={13} /> 恢复到本机</button>
                     <button className="btn sm ghost danger" disabled={!!onlyBusy} onClick={() => setDelT([{ id: it.id, name: it.name || it.id, inCloud: true }])}><Icon.trash s={13} /> 删除云端</button>
                   </>}
