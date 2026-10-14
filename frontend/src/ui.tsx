@@ -26,6 +26,7 @@ export const Icon = {
   shield: (p: IP) => <svg {...S(p)}><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1Z" /></svg>,
   cpu: (p: IP) => <svg {...S(p)}><rect x="4" y="4" width="16" height="16" rx="2" /><rect x="9" y="9" width="6" height="6" /><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2" /></svg>,
   terminal: (p: IP) => <svg {...S(p)}><path d="m4 17 6-6-6-6" /><path d="M12 19h8" /></svg>,
+  console: (p: IP) => <svg {...S(p)}><rect x="3" y="4" width="18" height="16" rx="3" /><path d="m7.5 10 3 2.5-3 2.5" /><path d="M13 15.5h4" /></svg>,
   android: (p: IP) => <svg {...S(p)}><path d="M5 16V10a7 7 0 0 1 14 0v6Z" /><path d="M5 13h14M8 3.5l1.5 2.5M16 3.5 14.5 6" /><path d="M9.5 9h.01M14.5 9h.01" /></svg>,
   chromeos: (p: IP) => <svg {...S(p)}><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /><path d="M12 8h9M8.5 14 4 6.3M15.5 14 11 21.8" /></svg>,
   monitor: (p: IP) => <svg {...S(p)}><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /></svg>,

@@ -1274,3 +1274,57 @@ func (a *App) RestoreRepair(profileID, entryID string) (RepairResult, error) {
 // CheckSystemClock compares the system clock with an HTTPS server's Date
 // header (report only; never changes the system time).
 func (a *App) CheckSystemClock() ClockReport { return CheckClock(nil) }
+// ---- fingerprint extras ----
+
+// RegenerateSeed gives a profile a new noise seed (Canvas / WebGL / audio /
+// media device IDs change; cookies and data stay). Returns the new seed.
+func (a *App) RegenerateSeed(id string) (int64, error) { return a.store.regenerateSeed(id) }
+
+// NewNoiseSeed returns a random seed for a profile that is not saved yet.
+func (a *App) NewNoiseSeed() int64 { return newNoiseSeed() }
+
+// ---- terminal ----
+
+// TerminalTools detects Claude Code / Codex CLI / Gemini CLI / the plain shell on PATH.
+func (a *App) TerminalTools() []TerminalTool { return detectTools(os.Getenv("PATH")) }
+
+// TerminalInfo: last choices and whether Windows Terminal is available.
+func (a *App) TerminalInfo() map[string]any {
+	st := a.store.GetSettings()
+	prefs := TerminalPrefs{Tool: "claude", EnvMode: "none", Host: "console"}
+	if st.Terminal != nil {
+		prefs = *st.Terminal
+	}
+	home, _ := os.UserHomeDir()
+	return map[string]any{"prefs": prefs, "wt": hasWindowsTerminal(), "home": home, "os": hostOS()}
+}
+
+// PickTerminalDir opens a folder picker; "" when cancelled.
+func (a *App) PickTerminalDir(start string) string {
+	d, _ := wruntime.OpenDirectoryDialog(a.ctx, wruntime.OpenDialogOptions{Title: "选择工作目录", DefaultDirectory: start})
+	return d
+}
+
+// CheckTerminalDir validates a typed working directory ("" = home) and returns its absolute path.
+func (a *App) CheckTerminalDir(dir string) (string, error) { return resolveTerminalDir(dir) }
+
+// LaunchTerminal opens a new console window and remembers the choices.
+func (a *App) LaunchTerminal(req TerminalRequest) (TerminalSession, error) {
+	if terms.onEvent == nil {
+		terms.onEvent = func() { wruntime.EventsEmit(a.ctx, "terminal:changed", terms.list()) }
+	}
+	st := a.store.GetSettings()
+	st.Terminal = &TerminalPrefs{Tool: req.Tool, Dir: req.Dir, EnvMode: req.EnvMode, ProfileID: req.ProfileID, TZ: req.TZ, Lang: req.Lang, Host: req.Host}
+	a.store.PutSettings(st)
+	s, err := a.store.launchTerminal(req)
+	if err == nil {
+		terms.notify()
+	}
+	return s, err
+}
+
+// ListTerminals: terminal windows opened from GhostBrowser that are still open.
+func (a *App) ListTerminals() []TerminalSession { return terms.list() }
+
+// CloseTerminal closes a terminal window (and its proxy relay).
+func (a *App) CloseTerminal(id string) error { return terms.close(id) }

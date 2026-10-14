@@ -63,6 +63,11 @@ type Fingerprint struct {
 	BlockVideo                bool   `json:"blockVideo,omitempty"`
 	BlockSound                bool   `json:"blockSound,omitempty"`
 	StartupParameters         string `json:"startupParameters,omitempty"`
+
+	// ---- fingerprint extras (open-source kernel) ----
+	// MediaIDAlias: with real media devices, show per-profile, per-origin
+	// aliases instead of the real deviceId / groupId.
+	MediaIDAlias bool `json:"mediaIdAlias,omitempty"`
 }
 
 type Proxy struct {
@@ -172,6 +177,8 @@ type Settings struct {
 	// with the login snapshot (nil = on), and its size cap in MB (0 = 32).
 	SyncSessionStorage *bool `json:"syncSessionStorage,omitempty"`
 	SessionStoreCapMB  int   `json:"sessionStoreCapMB,omitempty"`
+	// terminal launcher: last choices on the 终端 page.
+	Terminal *TerminalPrefs `json:"terminal,omitempty"`
 }
 
 type RunState struct {
