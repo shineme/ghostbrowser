@@ -51,9 +51,9 @@ type AuditTargetCount struct {
 
 type AuditResult struct {
 	Items      []AuditEntry       `json:"items"`
-	Total      int                `json:"total"`   // entries matching the filter (before Limit)
-	All        int                `json:"all"`     // entries in the log
-	Failed     int                `json:"failed"`  // failed entries in the whole log
+	Total      int                `json:"total"`  // entries matching the filter (before Limit)
+	All        int                `json:"all"`    // entries in the log
+	Failed     int                `json:"failed"` // failed entries in the whole log
 	Categories map[string]int     `json:"categories"`
 	Sources    map[string]int     `json:"sources"`
 	Targets    []AuditTargetCount `json:"targets"` // profiles that appear in the log

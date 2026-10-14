@@ -639,7 +639,7 @@ func (a *App) StopMcp() McpStatus {
 }
 
 func (a *App) AuditLog(f AuditFilter) AuditResult { return a.store.AuditQuery(f) }
-func (a *App) ClearAuditLog()                    { a.store.ClearAudit() }
+func (a *App) ClearAuditLog()                     { a.store.ClearAudit() }
 
 // ExportAuditLog saves the filtered log (format "csv" or "json") via a save
 // dialog; returns the written path, or "" when the user cancelled.
