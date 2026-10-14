@@ -82,6 +82,7 @@ go test -run TestEnsureAgainstRealShop -v .
 ### 环境
 - 开源内核版本兼容：支持 Chrome/Chromium 110 及以上（推荐 120+，已在 110–155 与 ungoogled-chromium 上实测），自动识别内核版本（版本目录、chrome.exe 版本信息或 --version），UA / UA-CH 大版本始终跟随内核；设置页对过旧内核、品牌版 Chrome 137+（不支持命令行加载扩展）和 Edge 给出中文提示，低于 110 拒绝启动
 - 新建、批量创建、复制、删除；分组、标签、启动网址、导入 Cookie
+- Firefox 内核（可选，与定制内核、开源内核并存）：环境抽屉「指纹配置 → 内核」或批量创建时选择 Firefox。使用本机已安装的 Mozilla Firefox（自动检测 Program Files 与注册表 App Paths，也可在「设置 → Firefox 内核」手动选择 firefox.exe）；没有安装时可打开 Mozilla 官方下载页，或一键安装官方 ESR / 正式版（从 Mozilla 官方 HTTPS 地址下载，按官方 SHA512SUMS 校验后静默安装到程序数据目录，不随程序打包）。每个环境独立 Firefox 配置目录（-profile -no-remote），启动前写入 user.js：代理（http / socks5；带账号密码的代理经本地中转，密码不写入文件）、语言（intl.accept_languages / intl.locale.requested）、时区（TZ 环境变量）、WebRTC（代理 IP / 真实 / 禁用）、DNT 与 GPC、固定地理坐标、WebGL / WebGPU 关闭、字体可见范围、严格防指纹模式（resistFingerprinting，与「语言 / 时区跟随 IP」互斥）、隐藏语音列表、CPU 核心数上限、禁止图片、静音、启动页和窗口大小；可选覆盖 UA（会提示可能不一致）。通过 WebDriver BiDi 控制：切到前台、正常关闭、退出检测、Cookie 实时导入导出，以及与 Chromium 相同格式的会话快照（换电脑后自动恢复登录）。不伪装显卡、Canvas、系统平台；navigator.webdriver 为 true（Firefox 远程控制的固有行为）；RPA、录制、多窗口同步器、排列窗口和扩展中心暂不支持 Firefox 环境（界面中标注「Firefox 内核暂不支持」）
 - 扩展中心：按商店 ID / 应用商店链接、CRX 链接或本地 .crx/.zip 添加扩展（保留原扩展 ID），分配给环境后启动时自动加载（两种内核均支持）；Cookie 支持 JSON 与 Netscape cookies.txt 导入导出，运行中直接写入浏览器，未运行时暂存到下次启动；可连接本地 Clash / Mihomo 控制器，查看策略组与节点、切换节点、测延迟，并一键生成指向 Mihomo 端口的代理
   - 界面：「扩展」页以卡片展示图标、版本、MV2/MV3、来源和使用环境数，可搜索、按来源筛选、删除（自动从环境中移除），并通过「分配到环境」弹窗批量勾选环境；环境编辑抽屉里也可逐个开关扩展
   - 界面：环境抽屉 →「Cookies · 管理」打开导入/导出弹窗：自动识别 JSON / Netscape，支持选择文件、拖入、剪贴板，导出可复制或下载；顶部显示环境是否运行（立即写入 / 下次启动写入、快照时间、待写入条数）
