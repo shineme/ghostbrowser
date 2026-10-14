@@ -631,6 +631,30 @@ export namespace main {
 	        this.saved = source["saved"];
 	    }
 	}
+	export class InstalledKernel {
+	    name: string;
+	    version: string;
+	    path: string;
+	    dir: string;
+	    size: number;
+	    installed: number;
+	    active: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new InstalledKernel(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.version = source["version"];
+	        this.path = source["path"];
+	        this.dir = source["dir"];
+	        this.size = source["size"];
+	        this.installed = source["installed"];
+	        this.active = source["active"];
+	    }
+	}
 	export class KernelInfo {
 	    id: string;
 	    name: string;
@@ -653,6 +677,48 @@ export namespace main {
 	        this.version = source["version"];
 	        this.auto = source["auto"];
 	        this.note = source["note"];
+	    }
+	}
+	export class KernelProgress {
+	    phase: string;
+	    running: boolean;
+	    source: string;
+	    revision?: string;
+	    version?: string;
+	    path?: string;
+	    url?: string;
+	    done: number;
+	    total: number;
+	    pct: number;
+	    speed: number;
+	    eta: number;
+	    resumed?: boolean;
+	    message: string;
+	    hint?: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new KernelProgress(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.phase = source["phase"];
+	        this.running = source["running"];
+	        this.source = source["source"];
+	        this.revision = source["revision"];
+	        this.version = source["version"];
+	        this.path = source["path"];
+	        this.url = source["url"];
+	        this.done = source["done"];
+	        this.total = source["total"];
+	        this.pct = source["pct"];
+	        this.speed = source["speed"];
+	        this.eta = source["eta"];
+	        this.resumed = source["resumed"];
+	        this.message = source["message"];
+	        this.hint = source["hint"];
+	        this.error = source["error"];
 	    }
 	}
 	export class McpStatus {
@@ -1236,6 +1302,8 @@ export namespace main {
 	    deviceId: string;
 	    theme: string;
 	    proxyCheckMins: number;
+	    kernelSource?: string;
+	    kernelUrl?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -1263,6 +1331,8 @@ export namespace main {
 	        this.deviceId = source["deviceId"];
 	        this.theme = source["theme"];
 	        this.proxyCheckMins = source["proxyCheckMins"];
+	        this.kernelSource = source["kernelSource"];
+	        this.kernelUrl = source["kernelUrl"];
 	    }
 	}
 	export class SyncItem {

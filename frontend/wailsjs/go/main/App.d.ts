@@ -102,6 +102,16 @@ export function ImportProxyList(arg1:Array<main.Proxy>,arg2:string):Promise<Arra
 
 export function ImportWorkflow(arg1:string):Promise<main.Workflow>;
 
+export function KernelDelete(arg1:string):Promise<void>;
+
+export function KernelInstallCancel():Promise<void>;
+
+export function KernelInstallStart(arg1:string,arg2:string):Promise<main.KernelProgress>;
+
+export function KernelInstallStatus():Promise<main.KernelProgress>;
+
+export function KernelList():Promise<Array<main.InstalledKernel>>;
+
 export function KernelMajor():Promise<string>;
 
 export function LibraryAdd(arg1:string,arg2:string,arg3:string):Promise<void>;

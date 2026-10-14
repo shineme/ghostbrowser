@@ -167,7 +167,7 @@ func (k *kernelInstaller) run(ctx context.Context, root, source, custom string) 
 	// Room for the archive plus the unpacked tree (~1.8x the zip).
 	need := int64(1200 << 20)
 	if size > 0 {
-		need = size*3 + 100<<20
+		need = size*4 + 100<<20 // snapshot zip ~360 MB unpacks to ~860 MB
 	}
 	if free, ok := diskFree(root); ok && free < need {
 		return "", &diskErr{need: need, free: free}

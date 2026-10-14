@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
+	"time"
 )
 
 // GHOST_KERNEL_LIVE=1 go test -run TestKernelResolveLive .
@@ -28,4 +31,36 @@ func TestKernelResolveLive(t *testing.T) {
 	if resp.StatusCode != http.StatusPartialContent {
 		t.Fatalf("range request: HTTP %d", resp.StatusCode)
 	}
+}
+
+// GHOST_KERNEL_ZIP=/path/chrome-win.zip installs a real snapshot zip served locally.
+func TestKernelInstallRealZipLive(t *testing.T) {
+	zp := os.Getenv("GHOST_KERNEL_ZIP")
+	if zp == "" {
+		t.Skip("set GHOST_KERNEL_ZIP")
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.ServeFile(w, r, zp) }))
+	defer srv.Close()
+	root := t.TempDir()
+	k := &kernelInstaller{st: KernelProgress{Phase: "idle"}}
+	k.Start(root, "custom", srv.URL+"/1710741/chrome-win.zip", nil)
+	s := waitKernelLong(t, k)
+	if s.Phase != "done" {
+		t.Fatalf("%+v", s)
+	}
+	t.Logf("installed %s version %s", s.Path, s.Version)
+	if m := chromeMajorFrom(filepath.Dir(s.Path)); m == "" {
+		t.Fatal("major not detected")
+	}
+}
+
+func waitKernelLong(t *testing.T, k *kernelInstaller) KernelProgress {
+	for i := 0; i < 1100; i++ {
+		if s := k.snapshot(); !s.Running {
+			return s
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatal("timeout")
+	return KernelProgress{}
 }
