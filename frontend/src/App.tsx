@@ -19,8 +19,9 @@ import { ExtensionsView } from './ExtensionsView';
 import { AuditView } from './AuditView';
 import { WindowTools } from './WindowTools';
 import { KernelMissingModal } from './KernelInstall';
+import { TerminalView } from './TerminalView';
 
-type Tab = 'profiles' | 'proxies' | 'rpa' | 'extensions' | 'cloud' | 'audit' | 'settings';
+type Tab = 'profiles' | 'proxies' | 'rpa' | 'extensions' | 'terminal' | 'cloud' | 'audit' | 'settings';
 
 function Shell() {
   const toast = useToast();
@@ -57,6 +58,7 @@ function Shell() {
     proxies: ['代理管理', '导入、检测并为环境分配代理'],
     rpa: ['自动化', '可视化流程，批量在多个环境中运行'],
     extensions: ['扩展中心', '下载 Chrome 扩展并分配给环境'],
+    terminal: ['终端', '用环境的时区、语言和代理打开 Claude Code / Codex / Gemini CLI'],
     cloud: ['云端同步', '把环境加密同步到你自己的 VPS'],
     audit: ['接口与审计', 'MCP、本地 API 与操作日志'],
     settings: ['设置', '内核、本地 API、同步服务器'],
@@ -67,6 +69,7 @@ function Shell() {
     ['proxies', 'globe', '代理', proxies.length],
     ['rpa', 'bolt', '自动化', null],
     ['extensions', 'grid', '扩展', null],
+    ['terminal', 'console', '终端', null],
     ['cloud', 'cloud', '云同步', null],
     ['audit', 'terminal', '接口审计', null],
     ['settings', 'settings', '设置', null],
@@ -91,7 +94,7 @@ function Shell() {
   // Ctrl/Cmd+1..4 switches sections
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && /^[1-7]$/.test(e.key)) { e.preventDefault(); setTab(nav[+e.key - 1][0]); }
+      if ((e.ctrlKey || e.metaKey) && /^[1-8]$/.test(e.key)) { e.preventDefault(); setTab(nav[+e.key - 1][0]); }
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b' && !(e.target as HTMLElement)?.isContentEditable) { e.preventDefault(); toggleSide(); }
     };
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
@@ -143,6 +146,7 @@ function Shell() {
             {tab === 'proxies' && <ProxyView proxies={proxies} profiles={profiles} reload={reload} />}
             {tab === 'rpa' && <RpaView profiles={profiles} reload={reload} />}
             {tab === 'extensions' && <ExtensionsView profiles={profiles} reload={reload} />}
+            {tab === 'terminal' && <TerminalView profiles={profiles} proxyName={proxyName} />}
             {tab === 'audit' && <AuditView profiles={profiles} />}
             {tab === 'cloud' && <CloudView profiles={profiles} settings={settings} reload={reload} />}
             {tab === 'settings' && settings && <SettingsView key={settingsRev} settings={settings} onSaved={s => { setSettings(s); toast('设置已保存'); }} />}

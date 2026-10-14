@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Combo, SearchSelect, FontPicker, CountrySelect, LanguagePicker, TimezoneSelect, countryOfTz } from './locales';
 import { api, Profile, Proxy, Fingerprint } from './api';
-import { Field, Toggle, Icon, flag, useToast, useExit, Segmented, Avatar, DevIcon, SelectField } from './ui';
+import { Field, Toggle, Icon, flag, useToast, useConfirm, useExit, Segmented, Avatar, DevIcon, SelectField } from './ui';
 import { CookieModal } from './CookieModal';
 import { ExtIcon, Ext } from './ExtensionsView';
-import { GuardPane, LaunchPane } from './FpControls';
+import { GuardPane, LaunchPane, seedShort } from './FpControls';
 import { KernelMissingNotice } from './KernelInstall';
 import { DEVICE_TYPES, TRUST, devType, osName, osVerLabel, needsOpen, uaOSOf } from './devices';
 
@@ -18,6 +18,7 @@ export const ProfileDrawer: React.FC<{
   profile: Profile | null; proxies: Proxy[]; onClose: () => void; onSaved: () => void;
 }> = ({ profile, proxies, onClose, onSaved }) => {
   const toast = useToast();
+  const ask = useConfirm();
   const [pxText, setPxText] = useState('');
   const [pxBusy, setPxBusy] = useState(false);
   const [pxInfo, setPxInfo] = useState('');
@@ -50,6 +51,19 @@ export const ProfileDrawer: React.FC<{
   const [out, close] = useExit(onClose);
   const [flash, setFlash] = useState(0);
   const setFP = (patch: Partial<Fingerprint>) => setP(s => ({ ...s, fingerprint: { ...s.fingerprint, ...patch } as Fingerprint }));
+  // ---- fingerprint extras: new noise seed (saved at once for existing profiles; cookies untouched) ----
+  const regenSeed = async () => {
+    const ok = await ask({
+      title: '重新生成指纹种子？', ok: '重新生成', danger: true,
+      body: <>Canvas、WebGL、音频、ClientRects 噪声和媒体设备 ID 会全部换新，网站会把它当成另一台设备。<br />Cookie、登录状态、代理和其他指纹参数<b>保持不变</b>。{profile?.id ? '新种子立即保存，运行中的环境需重启后生效。' : ''}</>,
+    });
+    if (!ok) return;
+    try {
+      const seed = profile?.id ? await api.RegenerateSeed(profile.id) : await api.NewNoiseSeed();
+      setFP({ noiseSeed: seed } as any);
+      toast(`已生成新种子 ${seedShort(seed)}`);
+    } catch (e: any) { toast(String(e?.message || e), 'bad'); }
+  };
   // Exit-IP match: what timezone / languages / coordinates the selected proxy implies.
   const [geo, setGeo] = useState<any>(null);
   const [geoBusy, setGeoBusy] = useState(false);
@@ -300,7 +314,7 @@ export const ProfileDrawer: React.FC<{
             </Field>
           </div>}
 
-          {tab === 'guard' && <div className="tabpane"><GuardPane fp={fp as any} setFP={setFP as any} open={openKernel} /></div>}
+          {tab === 'guard' && <div className="tabpane"><GuardPane fp={fp as any} setFP={setFP as any} open={openKernel} onRegenSeed={regenSeed} /></div>}
           {tab === 'launch' && <div className="tabpane"><LaunchPane fp={fp as any} setFP={setFP as any} open={openKernel} /></div>}
         </div>
 

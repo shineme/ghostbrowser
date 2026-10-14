@@ -46,7 +46,13 @@ const KernelNotice: React.FC<{ open: boolean; what: string }> = ({ open, what })
   ? <div className="notice fpk-ok"><Icon.cpu /><div className="grow">当前为开源内核（Chromium），{what}全部生效。</div></div>
   : <div className="notice warn"><Icon.alert /><div className="grow">当前环境使用定制内核：标有「仅开源内核」的项目不会生效，其指纹由内核模板决定。可在「指纹配置」里切换到开源内核。</div></div>;
 
-export const GuardPane: React.FC<{ fp: FP; setFP: SetFP; open: boolean }> = ({ fp, setFP, open }) => {
+/** Short seed label (first 8 hex), same as seedShortID in chromium_fp_extras.go. */
+export const seedShort = (seed: number) => Math.max(0, Math.floor(Number(seed) || 0)).toString(16).padStart(8, '0').slice(0, 8);
+
+export const GuardPane: React.FC<{ fp: FP; setFP: SetFP; open: boolean; onRegenSeed?: () => Promise<void> }> = ({ fp, setFP, open, onRegenSeed }) => {
+  const [regen, setRegen] = React.useState(false);
+  const [flip, setFlip] = React.useState(0);
+  const doRegen = async () => { if (!onRegenSeed || regen) return; setRegen(true); try { await onRegenSeed(); setFlip(x => x + 1); } finally { setRegen(false); } };
   const t = !open; // mark open-source-only rows when on the custom kernel
   const noiseRow = (title: string, hint: string, key: string, old: string) => {
     const v = mode(fp[key], !!fp[old]);
@@ -67,8 +73,16 @@ export const GuardPane: React.FC<{ fp: FP; setFP: SetFP; open: boolean }> = ({ f
       {noiseRow('AudioContext', '音频处理结果的指纹，关闭会让音频 API 不可用', 'audioMode', 'audioNoise')}
       {noiseRow('ClientRects', '元素尺寸与文字宽度测量（getBoundingClientRect）', 'clientRectsMode', 'clientRectNoise')}
     </div>
-    <div className="grid2" style={{ marginTop: 12 }}>
-      <div className="field" style={{ marginBottom: 0 }}><label>噪声种子 (seed)</label><input type="number" value={fp.noiseSeed} onChange={e => setFP({ noiseSeed: +e.target.value })} /><span className="hint">同一种子 = 同一环境指纹永远一致</span></div>
+    <div className="seedcard">
+      <div className="seed-glyph"><Icon.fingerprint s={18} /></div>
+      <div className="seed-t">
+        <div className="seed-l">指纹种子 <b key={flip} className="mono seed-id">{seedShort(fp.noiseSeed)}</b></div>
+        <small>Canvas、WebGL、音频、ClientRects 噪声与媒体设备 ID 都由它派生；同一种子 = 指纹永远一致</small>
+      </div>
+      {onRegenSeed && <button type="button" className="btn ghost seed-btn" disabled={regen} onClick={doRegen}><Icon.dice s={14} /> {regen ? '生成中…' : '重新生成指纹种子'}</button>}
+    </div>
+    <div className="grid2" style={{ marginTop: 10 }}>
+      <div className="field" style={{ marginBottom: 0 }}><label>噪声种子 (seed)</label><input type="number" value={fp.noiseSeed} onChange={e => setFP({ noiseSeed: +e.target.value })} /><span className="hint">高级：手动指定种子数值，可在多个环境间复用</span></div>
     </div>
 
     <div className="section-title">媒体与 API</div>
@@ -81,6 +95,10 @@ export const GuardPane: React.FC<{ fp: FP; setFP: SetFP; open: boolean }> = ({ f
           <NumberStepper label="麦克风" value={fp.mediaMics || 0} max={8} onChange={v => setFP({ mediaMics: v })} />
           <NumberStepper label="扬声器" value={fp.mediaSpeakers || 0} max={8} onChange={v => setFP({ mediaSpeakers: v })} />
           <NumberStepper label="摄像头" value={fp.mediaCameras || 0} max={8} onChange={v => setFP({ mediaCameras: v })} />
+        </div>}
+        {media === 'real' && open && <div className="subsw" onClick={() => setFP({ mediaIdAlias: !fp.mediaIdAlias })}>
+          <span onClick={e => e.stopPropagation()}><Sw on={!!fp.mediaIdAlias} onChange={v => setFP({ mediaIdAlias: v })} /></span>
+          <div className="subsw-t"><b>设备 ID 别名</b><small>{fp.mediaIdAlias ? '网站看到的 deviceId / groupId 是按种子和网站生成的固定别名，摄像头、麦克风仍可正常使用' : '网站看到浏览器给出的真实设备 ID'}</small></div>
         </div>}
       </Row>
       <Row title="语音列表" hint={fp.speechVoices === 'custom' ? '按系统和语言生成一组常见语音（speechSynthesis）' : fp.speechVoices === 'off' ? 'speechSynthesis.getVoices() 返回空列表' : '使用本机真实语音列表'} tag={t} dim={t}

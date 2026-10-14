@@ -196,6 +196,23 @@ const cdelMock: any[] = [
   { id: 'c9e8d7c6b5a4f3e2', name: 'Etsy-02', version: 2, updatedAt: cdelNow - 5 * 86400, deviceName: 'OFFICE-PC', size: 12e6, lockedBy: '', localDeleted: false, deletedVersion: 0, deletedAt: 0, cloudNewer: false, pendingDelete: false },
 ];
 
+// ---- terminal ----
+export type TerminalTool = { id: string; name: string; bin: string; installed: boolean; version: string; path: string; installUrl: string; installCmd: string; desc: string };
+export type TerminalSession = { id: string; tool: string; name: string; dir: string; profileId: string; profileName: string; tz: string; lang: string; proxy: string; relay: string; host: string; pid: number; tracked: boolean; started: number };
+const termMock = {
+  prefs: { tool: 'claude', dir: '', envMode: 'profile', profileId: '', tz: 'Asia/Tokyo', lang: 'ja-JP', host: 'console' } as any,
+  sessions: [] as TerminalSession[],
+  tools: (): TerminalTool[] => {
+    const none = location.hash.includes('term-none');
+    return [
+      { id: 'claude', name: 'Claude Code', bin: 'claude', installed: !none, version: none ? '' : '2.0.14', path: none ? '' : 'C:\\Users\\Ghost\\AppData\\Roaming\\npm\\claude.cmd', installUrl: 'https://docs.anthropic.com/en/docs/claude-code/setup', installCmd: 'npm install -g @anthropic-ai/claude-code', desc: 'Anthropic 的编程智能体' },
+      { id: 'codex', name: 'Codex CLI', bin: 'codex', installed: !none, version: none ? '' : '0.46.0', path: none ? '' : 'C:\\Users\\Ghost\\AppData\\Roaming\\npm\\codex.cmd', installUrl: 'https://github.com/openai/codex', installCmd: 'npm install -g @openai/codex', desc: 'OpenAI 的终端编程助手' },
+      { id: 'gemini', name: 'Gemini CLI', bin: 'gemini', installed: false, version: '', path: '', installUrl: 'https://github.com/google-gemini/gemini-cli', installCmd: 'npm install -g @google/gemini-cli', desc: 'Google 的开源命令行智能体' },
+      { id: 'shell', name: 'PowerShell', bin: 'powershell.exe', installed: true, version: '', path: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', installUrl: 'https://learn.microsoft.com/powershell/', installCmd: '', desc: 'Windows PowerShell 纯终端' },
+    ];
+  },
+};
+
 const M = {
  NativePresets: async (): Promise<NativePreset[]> => [{id:'demo', name:'Windows / Intel', configId:'3285798'}],
  UseUndetectableKit: async () => { mock.settings.kernelMode='undetectable'; mock.settings.undetectableKit='undetectable-kit'; return {...mock.settings}; },
@@ -515,6 +532,26 @@ const M = {
   },
   PendingCloudDeletes: async (): Promise<number> => cdelMock.filter(x => x.pendingDelete).length,
   RetryCloudDeletes: async (): Promise<number> => { await wait(600); return cdelMock.filter(x => x.pendingDelete).length; },
+  // ---- fingerprint extras ----
+  RegenerateSeed: async (id: string): Promise<number> => { await wait(450); const seed = Math.floor(Math.random() * 2 ** 40) + 1; const p = mock.profiles.find(x => x.id === id); if (p) (p.fingerprint as any).noiseSeed = seed; return seed; },
+  NewNoiseSeed: async (): Promise<number> => Math.floor(Math.random() * 2 ** 40) + 1,
+  // ---- terminal ----
+  TerminalTools: async (): Promise<TerminalTool[]> => { await wait(location.hash.includes('term-slow') ? 60000 : 650); return termMock.tools(); },
+  TerminalInfo: async (): Promise<any> => ({ prefs: { ...termMock.prefs }, wt: true, home: 'C:\\Users\\Ghost', os: 'windows' }),
+  PickTerminalDir: async (_start: string): Promise<string> => { await wait(300); return 'D:\\Projects\\shop-automation'; },
+  CheckTerminalDir: async (dir: string): Promise<string> => { await wait(150); const d = dir.trim().replace(/^"|"$/g, ''); if (!d) return 'C:\\Users\\Ghost'; if (/missing|不存在/i.test(d) || !/^[a-zA-Z]:\\|^~|^\//.test(d)) throw new Error(`目录不存在：${d}`); return d; },
+  LaunchTerminal: async (req: any): Promise<TerminalSession> => {
+    await wait(700); Object.assign(termMock.prefs, req);
+    const t = termMock.tools().find(x => x.id === req.tool); if (!t || !t.installed) throw new Error(`没有找到 ${t?.name || req.tool}：请先安装（${t?.installCmd}）`);
+    const p = mock.profiles.find(x => x.id === req.profileId); const px = p && mock.proxies.find(x => x.id === p.proxyId);
+    const s: TerminalSession = { id: rid().slice(0, 12), tool: t.id, name: t.name, dir: req.dir || 'C:\\Users\\Ghost', profileId: req.envMode === 'profile' ? req.profileId : '', profileName: req.envMode === 'profile' ? p?.name || '' : '',
+      tz: req.envMode === 'profile' ? p?.fingerprint.timezone || '' : req.envMode === 'custom' ? req.tz : '', lang: req.envMode === 'profile' ? (p?.fingerprint.languages || [])[0] || '' : req.envMode === 'custom' ? req.lang : '',
+      proxy: req.envMode === 'profile' && px ? `${px.type.toUpperCase()} ${px.host}:${px.port}` : '', relay: req.envMode === 'profile' && px && (px.user || px.type.startsWith('socks')) ? '127.0.0.1:' + (40000 + Math.floor(Math.random() * 9999)) : '',
+      host: req.host || 'console', pid: 1000 + Math.floor(Math.random() * 30000), tracked: req.host !== 'wt', started: Date.now() / 1000 };
+    termMock.sessions.unshift(s); mockEmit('terminal:changed', [...termMock.sessions]); return s;
+  },
+  ListTerminals: async (): Promise<TerminalSession[]> => [...termMock.sessions],
+  CloseTerminal: async (id: string) => { await wait(300); termMock.sessions = termMock.sessions.filter(x => x.id !== id); mockEmit('terminal:changed', [...termMock.sessions]); },
 };
 
 export const api: typeof M = inWails ? (Go as any) : M;
