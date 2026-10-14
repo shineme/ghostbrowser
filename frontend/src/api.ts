@@ -515,6 +515,12 @@ const M = {
   },
   PendingCloudDeletes: async (): Promise<number> => cdelMock.filter(x => x.pendingDelete).length,
   RetryCloudDeletes: async (): Promise<number> => { await wait(600); return cdelMock.filter(x => x.pendingDelete).length; },
+  // ---- session store ----
+  SessionStoreInfo: async (id: string): Promise<any> => {
+    const p = mock.profiles.find(x => x.id === id); const on = (mock.settings as any).syncSessionStorage !== false;
+    if (!p?.lastRun) return { enabled: on, schema: 0, savedAt: 0, cookies: 0, partitioned: 0, origins: 0, lsKeys: 0, idbDbs: 0, idbRecords: 0, idbPartial: false, dropped: 0, bytes: 0, capBytes: ((mock.settings as any).sessionStoreCapMB || 32) * 1048576 };
+    return { enabled: on, schema: on ? 2 : 1, savedAt: p.lastRun + 1800, cookies: 47, partitioned: on ? 3 : 0, origins: on ? 12 : 0, lsKeys: on ? 86 : 0, idbDbs: on ? 5 : 0, idbRecords: on ? 1204 : 0, idbPartial: on && /FB|Face/i.test(p.name), dropped: 0, bytes: on ? 1932000 : 41000, capBytes: ((mock.settings as any).sessionStoreCapMB || 32) * 1048576 };
+  },
 };
 
 export const api: typeof M = inWails ? (Go as any) : M;
