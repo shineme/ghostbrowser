@@ -383,7 +383,7 @@ function rpaSimRun(wfId: string, ids: string[], opt: any): string {
       if (index[s.id] === failAt && !failed) {
         const msg = `找不到元素 ${s.params.selector}（等待 8 秒）`;
         const ev = { ...base, status: 'failed', log: msg + (s.continueOnError ? '（已设置出错继续）' : ''), ms: Date.now() - t0, vars: { ...vars } }; t.steps.push(ev); E(ev);
-        if (!s.continueOnError) { failed = `${s.name || s.type}：${msg}`; throw new Error(failed); }
+        if (!s.continueOnError) { failed = `${s.name || ({ click: '点击', upload: '上传文件' } as any)[s.type] || s.type}：${msg}`; throw new Error(failed); }
         return;
       }
       if (s.type === 'break_loop') { const ev = { ...base, status: 'ok', log: '跳出循环', ms: 1 }; t.steps.push(ev); E(ev); throw BRK; }

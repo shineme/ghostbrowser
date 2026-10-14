@@ -935,3 +935,7 @@ input.is-bad, textarea.is-bad { border-color: rgba(255,107,122,.55); }
 .rr-light img { max-width: 88%; max-height: 86%; border-radius: 12px; box-shadow: var(--sh-3); animation: pop var(--t-med) var(--ease-spring); }
 .rc-meta b { font-weight: 600; color: var(--txt); }
 .pickfield .pick-btn .pick-o { flex: 1; text-align: left; }
+.rpa-allbtn { display: inline-flex; align-items: center; gap: 9px; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 0; }
+.rpa-allbtn:disabled { opacity: .4; cursor: default; }
+.rr-meta-i { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; }
+.rr-l { grid-template-columns: 20px 34px 18px 168px minmax(0, 1fr) 64px; }

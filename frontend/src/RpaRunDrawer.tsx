@@ -144,8 +144,8 @@ const TargetCard: React.FC<{ t: RTarget; total: number; names: Record<string, st
             {t.status === 'pending' && <span>· 等待空闲并发位</span>}
             {t.error && !live(t.status) && t.status !== 'ok' && <span className="ell err" title={t.error}>· {t.error}</span>}
             <div className="spacer" />
-            {shots.length > 0 && <span className="num"><RI.image s={12} /> {shots.length}</span>}
-            {t.endedAt > 0 && t.startedAt > 0 && <span className="num">{dur((t.endedAt - t.startedAt) * 1000)}</span>}
+            {shots.length > 0 && <span className="num rr-meta-i" title="截图数"><RI.image s={12} /> {shots.length}</span>}
+            {t.endedAt > 0 && t.startedAt > 0 && <span className="num rr-meta-i" title="用时"><RI.clock s={12} /> {dur((t.endedAt - t.startedAt) * 1000)}</span>}
           </div>
         </div>
         <span className={`rr-chev ${open ? 'on' : ''}`}><RI.chev s={16} /></span>

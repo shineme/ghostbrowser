@@ -179,6 +179,7 @@ const ImportModal: React.FC<{ initial: string; onClose: () => void; onDone: (w: 
   const [e, setE] = useState('');
   const [busy, setBusy] = useState(false);
   const [out, close] = useExit(onClose);
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && !document.querySelector('.modal.sm')) close(); }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [close]);
   const pickFile = async () => { try { const t = await api.OpenWorkflowFile(); if (t) { setText(t); setE(''); } } catch (x) { setE(err(x)); } };
   const go = async () => {
     setBusy(true); setE('');
@@ -217,6 +218,7 @@ const RunDialog: React.FC<{ wf: RWorkflow; profiles: Profile[]; onClose: () => v
   const [busy, setBusy] = useState(false);
   const [e, setE] = useState('');
   const [out, close] = useExit(onClose);
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && !document.querySelector('.modal.sm')) close(); }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [close]);
   useEffect(() => { api.Running().then(r => setOpen(new Set((r || []).map((x: any) => x.profileId)))).catch(() => {}); }, []);
   const groups = useMemo(() => [...new Set(profiles.map(p => p.group || ''))].sort(), [profiles]);
   const shown = profiles.filter(p => (group === '__all' || (p.group || '') === group) &&
@@ -241,8 +243,10 @@ const RunDialog: React.FC<{ wf: RWorkflow; profiles: Profile[]; onClose: () => v
               options={[['__all', '全部分组', profiles.length] as [string, string, number], ...groups.map(g => [g, g || '未分组', profiles.filter(p => (p.group || '') === g).length] as [string, string, number])]} /></div>
           </div>
           <div className="rpa-pickhead">
-            <span className={`chk ${allOn ? 'on' : ''}`} onClick={() => setPick(s => { const n = new Set(s); shown.forEach(p => allOn ? n.delete(p.id) : n.add(p.id)); return n; })}><Icon.check s={11} /></span>
-            <span>{allOn ? '取消全选' : '全选'}{group !== '__all' || q ? '（当前筛选）' : ''}</span>
+            <button className="rpa-allbtn" disabled={!shown.length} onClick={() => setPick(s => { const n = new Set(s); shown.forEach(p => allOn ? n.delete(p.id) : n.add(p.id)); return n; })}>
+              <span className={`chk ${allOn ? 'on' : ''}`}><Icon.check s={11} /></span>
+              <span>{allOn ? '取消全选' : '全选'}{group !== '__all' || q ? `（当前筛选 ${shown.length} 个）` : ''}</span>
+            </button>
             <div className="spacer" />
             <span className="sub num">已选 {ids.length} / {profiles.length}</span>
             {ids.length > 0 && <button className="btn sm ghost" onClick={() => setPick(new Set())}>清空</button>}
