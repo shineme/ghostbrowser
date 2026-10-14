@@ -579,3 +579,70 @@ func (a *App) RetrySync(id, action string) error {
 }
 
 func (a *App) SyncBusy() []string { return a.auto.Busy() }
+
+// ---- arrange/syncer ----
+
+// arrangeHooks wires the Wails screen API (fallback when the OS work area is
+// unknown) and the syncer's event emitter; done lazily so startup stays untouched.
+func (a *App) arrangeHooks() {
+	if screenHook == nil && a.ctx != nil {
+		ctx := a.ctx
+		screenHook = func() (Rect, bool) {
+			scr, err := wruntime.ScreenGetAll(ctx)
+			if err != nil {
+				return Rect{}, false
+			}
+			for _, s := range scr {
+				if s.IsPrimary && s.Size.Width > 0 {
+					// Wails reports the full screen; leave room for a taskbar.
+					return Rect{0, 0, s.Size.Width, s.Size.Height - 48}, true
+				}
+			}
+			return Rect{}, false
+		}
+	}
+	groupSync.mu.Lock()
+	if groupSync.emit == nil && a.ctx != nil {
+		groupSync.emit = func(s SyncerState) { wruntime.EventsEmit(a.ctx, "syncer:event", s) }
+	}
+	groupSync.mu.Unlock()
+}
+
+// ArrangeWindows lays out the browser windows of running profiles (all
+// running ones when ids is empty). mode: grid | cascade | stack.
+func (a *App) ArrangeWindows(ids []string, mode string) (ArrangeResult, error) {
+	a.arrangeHooks()
+	res := arrangeRunning(ids, mode, arrangeScreen(), a.profileName)
+	if res.Total == 0 {
+		return res, fmt.Errorf("没有正在运行的环境可以排列")
+	}
+	return res, nil
+}
+
+// ArrangePreview returns where n windows would go, for the UI preview.
+func (a *App) ArrangePreview(n int, mode string) ArrangeLayout {
+	a.arrangeHooks()
+	return arrangeLayout(n, mode, arrangeScreen())
+}
+
+// StartSync replays the master profile's actions in the followers' browsers.
+func (a *App) StartSync(master string, followers []string) (SyncerState, error) {
+	a.arrangeHooks()
+	wsOf := func(id string) (string, bool) {
+		if rs, ok := runReg.get(id); ok && strings.HasPrefix(rs.WSURL, "ws") {
+			return rs.WSURL, true
+		}
+		return "", false
+	}
+	return groupSync.Start(master, followers, wsOf, a.profileName)
+}
+
+// StopSync stops group control.
+func (a *App) StopSync() SyncerState {
+	a.arrangeHooks()
+	groupSync.Stop("已手动停止")
+	return groupSync.State()
+}
+
+// SyncerState returns the current group-control status.
+func (a *App) SyncerState() SyncerState { return groupSync.State() }
