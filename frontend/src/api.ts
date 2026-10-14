@@ -209,7 +209,7 @@ const envMock: { st: Record<string, { fixed: Set<string>; log: any[] }>; clockSk
     if (!this.st[id]) {
       const t = Date.now() / 1000;
       this.st[id] = { fixed: new Set(), log: [
-        { id: rid(), profileId: id, at: t - 86400 * 2 - 3600, kind: 'restore', items: ['geo'], changes: [{ item: 'geo', label: '定位跟随 IP', field: 'geoFromIP', old: '跟随 IP', new: '固定值' }], skipped: [], restored: false, restoreOf: 'old1' },
+        { id: rid(), profileId: id, at: t - 86400 * 2 - 3600, kind: 'restore', items: ['geo', 'fonts'], changes: [{ item: 'geo', label: '定位跟随 IP', field: 'geoFromIP', old: '跟随 IP', new: '固定值' }, { item: 'geo', label: '纬度', field: 'latitude', old: '34.0522', new: '31.2304' }, { item: 'geo', label: '经度', field: 'longitude', old: '-118.2437', new: '121.4737' }, { item: 'fonts', label: '字体列表', field: 'fonts', old: '49 个字体', new: '58 个字体' }], skipped: [], restored: false, restoreOf: 'old1' },
         { id: 'old1', profileId: id, at: t - 86400 * 3, kind: 'repair', items: ['geo', 'fonts'], changes: [{ item: 'geo', label: '定位跟随 IP', field: 'geoFromIP', old: '固定值', new: '跟随 IP' }, { item: 'geo', label: '纬度', field: 'latitude', old: '31.2304', new: '34.0522' }, { item: 'geo', label: '经度', field: 'longitude', old: '121.4737', new: '-118.2437' }, { item: 'fonts', label: '字体列表', field: 'fonts', old: '58 个字体', new: '49 个字体' }], skipped: ['系统时钟：系统级设置，无法自动修复，请开启系统自动对时'], restored: true, restoredAt: t - 86400 * 2 - 3600 },
       ] };
     }
