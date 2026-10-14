@@ -196,6 +196,27 @@ const cdelMock: any[] = [
   { id: 'c9e8d7c6b5a4f3e2', name: 'Etsy-02', version: 2, updatedAt: cdelNow - 5 * 86400, deviceName: 'OFFICE-PC', size: 12e6, lockedBy: '', localDeleted: false, deletedVersion: 0, deletedAt: 0, cloudNewer: false, pendingDelete: false },
 ];
 
+// ---- 环境自检 mock state ----
+const envMock: { st: Record<string, { fixed: Set<string>; log: any[] }>; clockSkew: number | null; changes: Record<string, any[]>; state: (id: string) => { fixed: Set<string>; log: any[] } } = {
+  st: {}, clockSkew: location.hash.includes('clock-ok') ? 4 : location.hash.includes('clock-none') ? null : 187,
+  changes: {
+    language: [{ item: 'language', label: '语言跟随 IP', field: 'languageFromIP', old: '固定值', new: '跟随 IP' }, { item: 'language', label: '语言', field: 'languages', old: 'zh-CN, zh, en', new: 'en-US, en' }],
+    timezone: [{ item: 'timezone', label: '时区跟随 IP', field: 'timezoneFromIP', old: '固定值', new: '跟随 IP' }, { item: 'timezone', label: '时区', field: 'timezone', old: 'America/Vancouver', new: 'America/Los_Angeles' }],
+    webrtc: [{ item: 'webrtc', label: 'WebRTC', field: 'webrtc', old: '真实', new: '替换为代理 IP' }],
+    seed: [{ item: 'seed', label: '噪声种子', field: 'noiseSeed', old: '0', new: '1840275531' }],
+  },
+  state(id) {
+    if (!this.st[id]) {
+      const t = Date.now() / 1000;
+      this.st[id] = { fixed: new Set(), log: [
+        { id: rid(), profileId: id, at: t - 86400 * 2 - 3600, kind: 'restore', items: ['geo'], changes: [{ item: 'geo', label: '定位跟随 IP', field: 'geoFromIP', old: '跟随 IP', new: '固定值' }], skipped: [], restored: false, restoreOf: 'old1' },
+        { id: 'old1', profileId: id, at: t - 86400 * 3, kind: 'repair', items: ['geo', 'fonts'], changes: [{ item: 'geo', label: '定位跟随 IP', field: 'geoFromIP', old: '固定值', new: '跟随 IP' }, { item: 'geo', label: '纬度', field: 'latitude', old: '31.2304', new: '34.0522' }, { item: 'geo', label: '经度', field: 'longitude', old: '121.4737', new: '-118.2437' }, { item: 'fonts', label: '字体列表', field: 'fonts', old: '58 个字体', new: '49 个字体' }], skipped: ['系统时钟：系统级设置，无法自动修复，请开启系统自动对时'], restored: true, restoredAt: t - 86400 * 2 - 3600 },
+      ] };
+    }
+    return this.st[id];
+  },
+};
+
 const M = {
  NativePresets: async (): Promise<NativePreset[]> => [{id:'demo', name:'Windows / Intel', configId:'3285798'}],
  UseUndetectableKit: async () => { mock.settings.kernelMode='undetectable'; mock.settings.undetectableKit='undetectable-kit'; return {...mock.settings}; },
@@ -515,6 +536,55 @@ const M = {
   },
   PendingCloudDeletes: async (): Promise<number> => cdelMock.filter(x => x.pendingDelete).length,
   RetryCloudDeletes: async (): Promise<number> => { await wait(600); return cdelMock.filter(x => x.pendingDelete).length; },
+  // ---- 环境自检 / 一键修复 ----
+  CheckEnvironment: async (id: string): Promise<any> => {
+    await wait(900); const p = mock.profiles.find(x => x.id === id); if (!p) throw new Error('环境不存在');
+    const st = envMock.state(id); const fixed = (k: string) => st.fixed.has(k);
+    const items: any[] = [
+      { key: 'exit', label: '出口 IP / 国家', status: 'pass', actual: '203.0.113.48  US · California · Los Angeles', expected: '代理出口 · US', detail: 'Cox Communications 住宅 IP', fixable: false, fixHint: '' },
+      fixed('language') ? { key: 'language', label: '语言', status: 'pass', actual: '跟随 IP → en-US, en', expected: 'en-US, en', detail: '启动时按出口 IP 自动设置', fixable: false, fixHint: '' }
+        : { key: 'language', label: '语言', status: 'fail', actual: 'zh-CN, zh, en', expected: 'en-US, en', detail: '首选语言与出口国家不符，容易被识别', fixable: true, fixHint: '改为跟随 IP，并写入出口国家的语言' },
+      fixed('timezone') ? { key: 'timezone', label: '时区', status: 'pass', actual: '跟随 IP → America/Los_Angeles', expected: 'America/Los_Angeles（UTC-07:00）', detail: '启动时按出口 IP 自动设置', fixable: false, fixHint: '' }
+        : { key: 'timezone', label: '时区', status: 'warn', actual: 'America/Vancouver', expected: 'America/Los_Angeles（UTC-07:00）', detail: 'UTC 偏移相同（UTC-07:00），但时区名不同，夏令时切换日可能露馅', fixable: true, fixHint: '改为跟随 IP，并写入出口 IP 的时区' },
+      { key: 'geo', label: '地理位置', status: 'pass', actual: '跟随 IP → 34.0522, -118.2437（Los Angeles）', expected: '34.0522, -118.2437（Los Angeles）', detail: '启动时按出口 IP 自动设置', fixable: false, fixHint: '' },
+      fixed('webrtc') ? { key: 'webrtc', label: 'WebRTC 防泄漏', status: 'pass', actual: '替换为代理 IP', expected: '替换为代理 IP / 禁用 UDP', detail: 'WebRTC 不会暴露本机真实 IP', fixable: false, fixHint: '' }
+        : { key: 'webrtc', label: 'WebRTC 防泄漏', status: 'fail', actual: '真实', expected: '替换为代理 IP / 禁用 UDP', detail: '使用代理时 WebRTC 为真实模式，会泄漏本机真实 IP', fixable: true, fixHint: '改为「替换为代理 IP」' },
+      { key: 'webdriver', label: 'navigator.webdriver', status: 'pass', actual: 'false（内核原生）', expected: 'false', detail: '定制内核原生隐藏自动化标记（按配置判断，未实时读取）', fixable: false, fixHint: '' },
+      { key: 'fonts', label: '字体数量', status: 'pass', actual: '49 个', expected: '25–120 个，且属于 Windows 系统', detail: '数量合理', fixable: false, fixHint: '' },
+      fixed('seed') ? { key: 'seed', label: 'Canvas / WebGL 噪声种子', status: 'pass', actual: 'Canvas 噪声 · WebGL 噪声 · 种子 1840275531', expected: '已开启噪声且种子非 0', detail: '已配置独立噪声种子', fixable: false, fixHint: '' }
+        : { key: 'seed', label: 'Canvas / WebGL 噪声种子', status: 'warn', actual: 'Canvas 噪声 · WebGL 噪声 · 种子 0', expected: '已开启噪声且种子非 0', detail: '种子为 0（仍会按环境 ID 派生），建议生成独立种子', fixable: true, fixHint: '生成新的随机噪声种子' },
+      { key: 'ua', label: 'UA / 平台一致性', status: 'pass', actual: p.fingerprint.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36', expected: 'Windows · navigator.platform Win32', detail: 'UA、平台、WebGL 渲染器相互一致', fixable: false, fixHint: '' },
+    ];
+    const clock = await M.CheckSystemClock();
+    items.push({ key: 'clock', label: '系统时钟', status: clock.status, actual: clock.status === 'unknown' ? '尚未确认' : `${clock.skewSecs > 0 ? '+' : ''}${clock.skewSecs} 秒`, expected: '偏差 ≤ 2 分钟', detail: clock.detail, fixable: false, fixHint: clock.status === 'fail' ? '系统级设置，只能手动修复' : '' });
+    const n = (s: string) => items.filter(i => i.status === s).length;
+    return { profileId: id, profileName: p.name, kernel: 'custom', checkedAt: Date.now() / 1000, exit: { ok: true, ip: '203.0.113.48', country: 'US', city: 'Los Angeles' }, items, pass: n('pass'), warn: n('warn'), fail: n('fail'), fixable: items.filter(i => i.fixable && i.status !== 'pass').map(i => i.key), clock };
+  },
+  RepairEnvironment: async (id: string, items: string[]): Promise<any> => {
+    await wait(800); const st = envMock.state(id); const p = mock.profiles.find(x => x.id === id);
+    const all = ['language', 'timezone', 'webrtc', 'seed']; const want = (items && items.length ? items : all).filter(k => all.includes(k) && !st.fixed.has(k));
+    const skipped = (items || []).filter(k => k === 'clock').map(() => '系统时钟：系统级设置，无法自动修复，请开启系统自动对时');
+    if (!want.length) return { entry: null, changed: 0, skipped, profile: p };
+    const changes = want.flatMap(k => envMock.changes[k]); want.forEach(k => st.fixed.add(k));
+    const entry = { id: rid(), profileId: id, at: Date.now() / 1000, kind: 'repair', items: want, changes, skipped, restored: false };
+    st.log.unshift(entry); return { entry, changed: changes.length, skipped, profile: p };
+  },
+  RepairHistory: async (id: string): Promise<any[]> => { await wait(250); return envMock.state(id).log.map((e: any) => ({ ...e })); },
+  RestoreRepair: async (id: string, entryId: string): Promise<any> => {
+    await wait(600); const st = envMock.state(id); const e = st.log.find((x: any) => x.id === entryId);
+    if (!e) throw new Error('修复记录不存在'); if (e.restored) throw new Error('该记录已恢复过');
+    e.restored = true; e.restoredAt = Date.now() / 1000; e.items.forEach((k: string) => st.fixed.delete(k));
+    const back = e.changes.map((c: any) => ({ ...c, old: c.new, new: c.old }));
+    const r = { id: rid(), profileId: id, at: Date.now() / 1000, kind: 'restore', items: e.items, changes: back, skipped: [], restored: false, restoreOf: e.id };
+    st.log.unshift(r); return { entry: r, changed: back.length, skipped: [], profile: mock.profiles.find(x => x.id === id) };
+  },
+  CheckSystemClock: async (): Promise<any> => {
+    await wait(500); const now = Math.floor(Date.now() / 1000); const skew = envMock.clockSkew;
+    if (skew === null) return { status: 'unknown', skewSecs: 0, source: '', localTime: now, serverTime: 0, error: 'dial tcp: i/o timeout', detail: '尚未确认：无法连接参考服务器，稍后重试' };
+    const a = Math.abs(skew); const txt = a < 60 ? `${a} 秒` : `${Math.floor(a / 60)} 分 ${a % 60} 秒`;
+    return a > 120 ? { status: 'fail', skewSecs: skew, source: 'https://www.cloudflare.com/', localTime: now, serverTime: now - skew, error: '', detail: `系统时钟比标准时间${skew > 0 ? '快' : '慢'} ${txt}，超过 2 分钟。请在系统设置里开启「自动设置时间」并立即同步（本程序不会修改系统时间）。` }
+      : { status: 'pass', skewSecs: skew, source: 'https://www.cloudflare.com/', localTime: now, serverTime: now - skew, error: '', detail: `偏差 ${txt}，在 2 分钟以内` };
+  },
 };
 
 export const api: typeof M = inWails ? (Go as any) : M;

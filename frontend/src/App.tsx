@@ -19,6 +19,7 @@ import { ExtensionsView } from './ExtensionsView';
 import { AuditView } from './AuditView';
 import { WindowTools } from './WindowTools';
 import { KernelMissingModal } from './KernelInstall';
+import { EnvCheckModal } from './EnvCheckModal';
 
 type Tab = 'profiles' | 'proxies' | 'rpa' | 'extensions' | 'cloud' | 'audit' | 'settings';
 
@@ -174,6 +175,7 @@ const ProfilesView: React.FC<{
   const [sort, setSort] = useState<'recent' | 'name' | 'created'>('recent');
   const [modal, setModal] = useState<'' | 'group' | 'assign'>('');
   const [needKernel, setNeedKernel] = useState<Profile | null>(null);
+  const [envChk, setEnvChk] = useState<Profile | null>(null); // 环境检测
   const [syncBusy, setSyncBusy] = useState<Set<string>>(new Set());
   const [runs, setRuns] = useState<Record<string, number>>({});
   const [, tick] = useState(0);
@@ -313,6 +315,7 @@ const ProfilesView: React.FC<{
                         : <button className="btn sm go" style={{ width: 74 }} onClick={() => start(p)}><Icon.play s={12} /> 启动</button>}
                     <span className="acts" style={{ display: 'flex', gap: 2 }}>
                       <button className="btn ghost icon" title="编辑" onClick={() => { setEditing(p); setDrawer(true); }}><Icon.edit s={15} /></button>
+                      <button className="btn ghost icon" title="环境检测 / 一键修复" onClick={() => setEnvChk(p)}><Icon.shield s={15} /></button>
                       <button className="btn ghost icon" title="复制" onClick={() => clone(p)}><Icon.copy s={15} /></button>
                       <button className="btn ghost icon danger" title="删除" onClick={() => del([p.id])}><Icon.trash s={15} /></button>
                     </span>
@@ -342,6 +345,7 @@ const ProfilesView: React.FC<{
       {nativeTools && <NativeTools profiles={profiles} onClose={() => setNativeTools(false)} onChanged={reload} />}
       {delT && delT.length > 0 && <DeleteModal targets={delT} onClose={() => setDelT(null)} onDone={() => { setSel(new Set()); reload(); }} />}
       {modal === 'group' && <GroupModal ids={[...sel]} groups={groups} onClose={() => setModal('')} onDone={reload} />}
+      {envChk && <EnvCheckModal profileId={envChk.id} name={envChk.name} onClose={() => setEnvChk(null)} onChanged={reload} />}
       {needKernel && <KernelMissingModal name={needKernel.name} onClose={() => setNeedKernel(null)} onLaunch={() => start(needKernel)} />}
       {modal === 'assign' && <AssignModal ids={[...sel]} proxies={Object.values(proxyName)} profiles={profiles} onClose={() => setModal('')} onDone={reload} />}
     </div>
