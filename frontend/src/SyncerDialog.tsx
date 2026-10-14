@@ -328,7 +328,7 @@ export const SyncerDialog: React.FC<{ running: Profile[]; st: SyncerState; onClo
           </div>
 
           <div className="sd-card sd-batch">
-            <div className="sd-batch-l"><b>批量访问网址</b><span>在全部选中窗口（{windows.length} 个）打开同一网页</span></div>
+            <div className="sd-batch-l"><b>批量访问网址</b><span>在选中的 {windows.length} 个窗口中打开同一网页</span></div>
             <div className="sd-batch-r">
               <div className={`sd-url ${urlErr ? 'err' : ''}`}>
                 <input type="text" value={url} placeholder="https://example.com" spellCheck={false}

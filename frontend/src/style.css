@@ -1552,7 +1552,7 @@ input.mono, textarea.mono { font-family: "JBMono", Consolas, monospace; }
 .sd-stats > div { padding: 9px 11px; border-radius: 10px; background: rgba(0,0,0,.22); border: 1px solid var(--hair); min-width: 0; }
 .sd-stats span { display: block; font-size: 11px; color: var(--txt-3); }
 .sd-stats b { display: block; font-size: 18px; font-weight: 680; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sd-stats b .num { font-size: inherit; font-weight: inherit; }
+.sd-stats b .num { font-size: inherit; font-weight: inherit; color: var(--txt); }
 .sd-stats b small { font-size: 12px; color: var(--txt-3); font-weight: 500; }
 .sd-lastev b { animation: sdBlink 600ms var(--ease-out); }
 @keyframes sdBlink { from { color: var(--a3); transform: translateY(3px); opacity: .4; } }
