@@ -126,6 +126,9 @@ func runRpa(ctx context.Context, wf Workflow, d RpaDriver, emit func(RpaStepEven
 	if e.emit == nil {
 		e.emit = func(RpaStepEvent) {}
 	}
+	if c, ok := d.(interface{ SetContext(context.Context) }); ok {
+		c.SetContext(ctx)
+	}
 	n := 0
 	walkSteps(wf.Steps, func(s *RpaStep) { e.index[s.ID] = n; n++ })
 	err := e.runList(ctx, wf.Steps)
@@ -314,11 +317,17 @@ func (e *rpaEngine) exec(ctx context.Context, s *RpaStep) (log, shot string, err
 		}
 		return fmt.Sprintf("%d ms", ms), "", e.sleep(ctx, time.Duration(ms)*time.Millisecond)
 	case stScroll:
-		if sel := e.p(s, "selector"); strings.TrimSpace(sel) != "" {
+		// mode: by | to | el. The editor keeps a hidden selector when the user
+		// switches away from "el", so the selector only counts in el mode (or
+		// with no mode at all, for hand-written JSON).
+		mode := s.Params["mode"]
+		if sel := e.p(s, "selector"); (mode == "el" || mode == "") && strings.TrimSpace(sel) != "" {
 			return "滚动到 " + sel, "", d.ScrollTo(sel)
+		} else if mode == "el" {
+			return "", "", need(sel, "元素选择器")
 		}
 		x, y := e.pInt(s, "x", 0), e.pInt(s, "y", 600)
-		abs := s.Params["mode"] == "to"
+		abs := mode == "to"
 		return fmt.Sprintf("%s (%d, %d)", map[bool]string{true: "滚动到", false: "滚动"}[abs], x, y), "", d.ScrollBy(x, y, abs)
 	case stExtractText:
 		sel, name := e.p(s, "selector"), strings.TrimSpace(s.Params["var"])
@@ -562,6 +571,10 @@ func validateWorkflow(wf Workflow) []RpaIssue {
 				req("url", "网址")
 			case stClick, stFill:
 				req("selector", "选择器")
+			case stScroll:
+				if s.Params["mode"] == "el" {
+					req("selector", "元素选择器")
+				}
 			case stExtractText:
 				req("selector", "选择器")
 				req("var", "变量名")

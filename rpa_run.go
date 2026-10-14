@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -313,6 +314,62 @@ type cdpDriver struct {
 	mu       sync.Mutex
 	order    []string // page targets, oldest first
 	implicit time.Duration
+	ctx      context.Context // the run's context (SetContext); nil = never cancelled
+	unwatch  func() bool
+}
+
+// errBrowserGone is returned once the browser (or our CDP connection) is gone.
+var errBrowserGone = errors.New("浏览器已关闭或连接已断开")
+
+// SetContext ties the driver to a run: cancelling ctx closes the CDP
+// connection so an in-flight wait or navigation returns at once instead of
+// running to its own timeout.
+func (d *cdpDriver) SetContext(ctx context.Context) {
+	if d.unwatch != nil {
+		d.unwatch()
+	}
+	d.ctx = ctx
+	d.unwatch = context.AfterFunc(ctx, func() { _ = d.conn.c.Close() })
+}
+
+func (d *cdpDriver) gone() bool {
+	select {
+	case <-d.conn.done:
+		return true
+	default:
+		return false
+	}
+}
+
+// wrapErr turns transport errors into the run's cancellation or a Chinese message.
+func (d *cdpDriver) wrapErr(method string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if d.ctx != nil && d.ctx.Err() != nil {
+		return d.ctx.Err()
+	}
+	msg := err.Error()
+	switch {
+	case d.gone() || strings.Contains(msg, "browser closed") || strings.Contains(msg, "use of closed network connection"):
+		return errBrowserGone
+	case strings.HasSuffix(msg, ": timeout"):
+		return fmt.Errorf("浏览器 15 秒内没有响应（%s）", method)
+	case strings.Contains(msg, "Session with given id not found") || strings.Contains(msg, "No target with given id"):
+		return fmt.Errorf("当前标签页已关闭，请先用「切换标签页」选择一个标签页")
+	}
+	return err
+}
+
+// fatal reports errors that make polling pointless.
+func fatal(err error) bool {
+	return errors.Is(err, errBrowserGone) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+// rootCall sends a browser-level (session-less) command.
+func (d *cdpDriver) rootCall(method string, params any) (json.RawMessage, error) {
+	r, err := d.conn.call("", method, params)
+	return r, d.wrapErr(method, err)
 }
 
 func newCDPDriver(ws string) (rpaDriverCloser, error) {
@@ -426,7 +483,10 @@ func (d *cdpDriver) orderExisting(pages []string) string {
 }
 
 func (d *cdpDriver) Close() {
-	if d.sid != "" {
+	if d.unwatch != nil {
+		d.unwatch()
+	}
+	if d.sid != "" && !d.gone() {
 		_, _ = d.conn.call("", "Target.detachFromTarget", map[string]any{"sessionId": d.sid})
 	}
 	d.conn.c.Close()
@@ -463,7 +523,7 @@ func (d *cdpDriver) onEvent(m cdpMsg) {
 }
 
 func (d *cdpDriver) pages() ([]string, error) {
-	raw, err := d.conn.call("", "Target.getTargets", nil)
+	raw, err := d.rootCall("Target.getTargets", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -481,7 +541,7 @@ func (d *cdpDriver) pages() ([]string, error) {
 }
 
 func (d *cdpDriver) attach(target string) error {
-	r, err := d.conn.call("", "Target.attachToTarget", map[string]any{"targetId": target, "flatten": true})
+	r, err := d.rootCall("Target.attachToTarget", map[string]any{"targetId": target, "flatten": true})
 	if err != nil {
 		return err
 	}
@@ -496,7 +556,8 @@ func (d *cdpDriver) attach(target string) error {
 }
 
 func (d *cdpDriver) call(method string, params any) (json.RawMessage, error) {
-	return d.conn.call(d.sid, method, params)
+	r, err := d.conn.call(d.sid, method, params)
+	return r, d.wrapErr(method, err)
 }
 
 // eval evaluates an expression in the page and decodes its value into out.
@@ -552,7 +613,7 @@ const rpaFind = `const __gbq = (sel) => {
   }
   return document.querySelector(sel);
 };
-const __gbvis = (el) => { if (!el) return false; const st = getComputedStyle(el); if (st.visibility === 'hidden' || st.display === 'none') return false; const r = el.getBoundingClientRect(); return r.width > 0 || r.height > 0; };
+`+rpaSettle+`const __gbvis = (el) => { if (!el) return false; const st = getComputedStyle(el); if (st.visibility === 'hidden' || st.display === 'none') return false; const r = el.getBoundingClientRect(); return r.width > 0 || r.height > 0; };
 `
 
 // onEl runs body with `el` bound to the selector's element (error if missing).
@@ -580,8 +641,12 @@ func (d *cdpDriver) Goto(url string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		var st string
-		if d.eval(`document.readyState`, &st) == nil && st == "complete" {
+		err := d.eval(`document.readyState`, &st)
+		if err == nil && st == "complete" {
 			return nil
+		}
+		if fatal(err) {
+			return err
 		}
 		time.Sleep(150 * time.Millisecond)
 	}
@@ -675,6 +740,8 @@ func (d *cdpDriver) WaitFor(sel, state string, timeout time.Duration) error {
 					return nil
 				}
 			}
+		} else if fatal(err) {
+			return err
 		} else if strings.Contains(err.Error(), "SyntaxError") || strings.Contains(err.Error(), "is not a valid") {
 			return fmt.Errorf("选择器写法有误：%s", sel)
 		}
@@ -699,15 +766,29 @@ func (d *cdpDriver) ScrollTo(sel string) error {
 	if err := d.waitPresent(sel); err != nil {
 		return err
 	}
-	return d.eval(onEl(sel, `el.scrollIntoView({behavior: 'smooth', block: 'center'}); await new Promise(r => setTimeout(r, 450));`), nil)
+	return d.eval(onEl(sel, `el.scrollIntoView({behavior: 'smooth', block: 'center'}); await __gbsettle();`), nil)
 }
+
+// rpaSettle waits (up to 3 s) until no scroll event has fired for 160 ms, so the next step sees the final position of
+// a smooth scroll. Scroll events from any scroller restart the quiet period.
+const rpaSettle = `const __gbsettle = () => new Promise(res => {
+  let last = performance.now(); const t0 = last;
+  const on = () => { last = performance.now(); };
+  addEventListener('scroll', on, {capture: true, passive: true});
+  const tick = () => {
+    const now = performance.now();
+    if (now - last > 160 || now - t0 > 3000) { removeEventListener('scroll', on, {capture: true}); res(); } else setTimeout(tick, 40);
+  };
+  setTimeout(tick, 40);
+});
+`
 
 func (d *cdpDriver) ScrollBy(x, y int, absolute bool) error {
 	fn := "scrollBy"
 	if absolute {
 		fn = "scrollTo"
 	}
-	return d.eval(fmt.Sprintf(`(async () => { window.%s({left: %d, top: %d, behavior: 'smooth'}); await new Promise(r => setTimeout(r, 450)); })()`, fn, x, y), nil)
+	return d.eval(fmt.Sprintf(`(async () => { %s window.%s({left: %d, top: %d, behavior: 'smooth'}); await __gbsettle(); })()`, rpaSettle, fn, x, y), nil)
 }
 
 func (d *cdpDriver) Text(sel, attr string) (string, error) {
@@ -725,13 +806,18 @@ func (d *cdpDriver) Text(sel, attr string) (string, error) {
 
 var jsReturn = regexp.MustCompile(`\breturn\b`)
 
-// jsBody turns user code into an async function body: code with a return
-// statement is used as is, anything else is evaluated and its last value returned.
+// jsBody turns user code into an async function body. Code without a
+// return keyword is evaluated and its last value returned. Code that does
+// contain "return" may still be a plain expression whose return sits in a
+// nested function (arr.map(x => { return x.id })), so it is tried as an
+// expression first; only when that cannot parse because of a top-level return
+// or await is it used as the function body. A parse error happens before
+// anything runs, so the code never executes twice.
 func jsBody(code string) string {
-	if jsReturn.MatchString(code) {
-		return code
+	if !jsReturn.MatchString(code) {
+		return "return eval(" + jsq(code) + ");"
 	}
-	return "return eval(" + jsq(code) + ");"
+	return "try { return eval(" + jsq(code) + "); } catch (__e) { if (!(__e instanceof SyntaxError && /Illegal return|await is only valid|Unexpected reserved word/.test(__e.message))) throw __e; }\n" + code
 }
 
 func (d *cdpDriver) Eval(code string, vars map[string]string) (string, error) {
@@ -841,7 +927,7 @@ func (d *cdpDriver) CloseTab(index int) error {
 	if len(tabs) <= 1 {
 		return fmt.Errorf("这是最后一个标签页，关闭会退出浏览器")
 	}
-	if _, err := d.conn.call("", "Target.closeTarget", map[string]any{"targetId": target}); err != nil {
+	if _, err := d.rootCall("Target.closeTarget", map[string]any{"targetId": target}); err != nil {
 		return err
 	}
 	if target == d.target {
