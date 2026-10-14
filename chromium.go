@@ -87,6 +87,7 @@ func (s *Store) launchChromium(p *Profile, st Settings) (*RunState, error) {
 		return nil, err
 	}
 	fp.DeviceType = normDevType(fp.DeviceType)
+	fp.NoiseSeed = effectiveSeed(p.ID, fp.NoiseSeed, fp.RandomFingerprintOnLaunch)
 	// The UA's Chrome major always follows the kernel, so UA, UA-CH and the
 	// engine's real features agree. TVs keep their own fixed browser build.
 	if m := chromeMajorFrom(filepath.Dir(kernel)); m != "" && fp.DeviceType != "tv" {
@@ -97,7 +98,6 @@ func (s *Store) launchChromium(p *Profile, st Settings) (*RunState, error) {
 	userDir := s.ProfileDir(p.ID)
 	_ = os.MkdirAll(userDir, 0o755)
 	port := freePort()
-	win := windowFor(fp)
 	args := []string{
 		"--user-data-dir=" + userDir,
 		fmt.Sprintf("--remote-debugging-port=%d", port),
@@ -106,8 +106,8 @@ func (s *Store) launchChromium(p *Profile, st Settings) (*RunState, error) {
 		"--disable-features=Translate,MediaRouter",
 		"--lang=" + firstLang(fp.Languages),
 		"--user-agent=" + fp.UserAgent, // workers and the very first request
-		fmt.Sprintf("--window-size=%d,%d", win.w, win.h),
 	}
+	args = append(args, launchFlags(fp)...)
 	if isMobileType(fp.DeviceType) || fp.DeviceType == "tablet" {
 		args = append(args, "--touch-events=enabled")
 	}
@@ -132,6 +132,8 @@ func (s *Store) launchChromium(p *Profile, st Settings) (*RunState, error) {
 			args = append(args, fmt.Sprintf("--proxy-server=%s://%s:%d", scheme, px.Host, px.Port))
 		}
 	}
+	userArgs, rejectedArgs := parseStartupParams(fp.StartupParameters)
+	args = mergeFlags(append(args, userArgs...))
 	args = append(args, "about:blank")
 
 	cmd := exec.Command(kernel, args...)
@@ -139,6 +141,9 @@ func (s *Store) launchChromium(p *Profile, st Settings) (*RunState, error) {
 	logf, _ := os.Create(logPath)
 	if logf != nil {
 		fmt.Fprintf(logf, "kernel: %s\nargs: %q\n\n", kernel, args)
+		if len(rejectedArgs) > 0 {
+			fmt.Fprintf(logf, "ignored start-up parameters: %q\n\n", rejectedArgs)
+		}
 		cmd.Stdout, cmd.Stderr = logf, logf
 	}
 	if err := cmd.Start(); err != nil {
@@ -336,6 +341,7 @@ type emulator struct {
 	existing map[string]bool
 	starts   []string
 	first    sync.Once
+	net      *fpNet // port-scan protection / video blocking (nil = off)
 }
 
 func (e *emulator) Close() {
@@ -345,7 +351,7 @@ func (e *emulator) Close() {
 }
 
 func startEmulation(ws string, fp Fingerprint, px *Proxy, startURLs []string) (*emulator, error) {
-	e := &emulator{fp: fp, existing: map[string]bool{}}
+	e := &emulator{fp: fp, existing: map[string]bool{}, net: newFpNet(fp)}
 	for _, u := range startURLs {
 		if u = strings.TrimSpace(u); u != "" {
 			e.starts = append(e.starts, u)
@@ -530,6 +536,9 @@ func acceptLanguage(langs []string) string {
 }
 
 func (e *emulator) onEvent(m cdpMsg) {
+	if e.net.onEvent(e.conn, m) {
+		return
+	}
 	if m.Method != "Target.attachedToTarget" {
 		return
 	}
@@ -554,6 +563,7 @@ func (e *emulator) onEvent(m cdpMsg) {
 	switch ev.TargetInfo.Type {
 	case "page", "iframe":
 		e.emulate(sid, ev.TargetInfo.Type == "page")
+		e.net.attach(c, sid, ev.TargetInfo.TargetID, ev.TargetInfo.Type == "page")
 		_, _ = c.call(sid, "Target.setAutoAttach", map[string]any{"autoAttach": true, "waitForDebuggerOnStart": true, "flatten": true})
 		resume()
 		if ev.TargetInfo.Type == "page" && e.existing[ev.TargetInfo.TargetID] {
@@ -629,6 +639,19 @@ func pageScript(fp Fingerprint, px *Proxy) string {
 		"hc": fp.HardwareConc, "mem": fp.DeviceMemory, "gv": fp.WebGLVendor, "gr": fp.WebGLRenderer,
 		"cn": fp.CanvasNoise, "an": fp.AudioNoise, "wn": fp.WebGLNoise, "rn": fp.ClientRectNoise,
 		"seed": fp.NoiseSeed, "rtc": fp.WebRTC, "fonts": fp.Fonts, "dnt": fp.DoNotTrack, "media": fp.HideMedia,
+		"cm": fpMode(fp.CanvasMode, fp.CanvasNoise), "wm": fpMode(fp.WebGLImageMode, fp.WebGLNoise),
+		"am": fpMode(fp.AudioMode, fp.AudioNoise), "rm": fpMode(fp.ClientRectsMode, fp.ClientRectNoise),
+		"md": mediaMode(fp), "mic": clampInt(fp.MediaMics, 0, 8), "spk": clampInt(fp.MediaSpeakers, 0, 8), "cam": clampInt(fp.MediaCameras, 0, 8),
+		"sv": fp.SpeechVoices, "gpu": fp.WebGPU, "ps": fp.PortScanProtection, "wl": whitelistJS(fp.ScanWhitelist), "bv": fp.BlockVideo,
+	}
+	if cfg["sv"] == "" {
+		cfg["sv"] = "real"
+	}
+	if fp.SpeechVoices == "custom" {
+		cfg["voices"] = speechVoicesFor(fp.OS, fp.Languages)
+	}
+	if px != nil && fp.WebRTC == "proxy" {
+		cfg["pip"] = px.IP // the proxy's last checked exit IP
 	}
 	b, _ := json.Marshal(cfg)
 	return strings.Replace(pageJS, "__CFG__", string(b), 1)
@@ -672,7 +695,35 @@ if (!C.vp) {
   def(window, "devicePixelRatio", () => C.dpr);
 }
 
+// Deterministic hash of the seed and a few integers (stable per profile).
+const H = (...v) => { let h = C.seed | 0; for (const x of v) { h = Math.imul(h ^ (x | 0), 0x9E3779B1); h ^= h >>> 15; h = Math.imul(h, 0x85EBCA77); h ^= h >>> 13; } return h >>> 0; };
+// Accessor override that keeps "this": fn(origGetter) runs with the instance.
+const getter = (obj, prop, fn) => {
+  const d = obj && Object.getOwnPropertyDescriptor(obj, prop); if (!d || !d.get) return;
+  const og = d.get;
+  const g = { get [prop]() { return fn.call(this, og); } };
+  const f = Object.getOwnPropertyDescriptor(g, prop).get;
+  hide.set(f, "function get " + prop + "() { [native code] }");
+  Object.defineProperty(obj, prop, { get: f, configurable: true, enumerable: d.enumerable });
+};
+// Fake host objects (media devices, voices): real prototype, values from a WeakMap.
+const fakes = new WeakMap();
+const fakeProto = (P, props) => { for (const k of props) getter(P, k, function (og) { return fakes.has(this) ? fakes.get(this)[k] : og.call(this); }); };
+const mkFake = (P, vals) => { const o = Object.create(P); fakes.set(o, vals); return o; };
+
 // WebGL
+const glc = new WeakSet();
+if (self.HTMLCanvasElement) wrap(HTMLCanvasElement.prototype, "getContext", function (orig, a) {
+  const t = String(a[0]);
+  const gl = t === "webgl" || t === "webgl2" || t === "experimental-webgl";
+  if (gl && C.wm === "off") return null;
+  const r = orig.apply(this, a);
+  if (gl && r) glc.add(this);
+  return r;
+});
+if (C.wm === "off" && self.OffscreenCanvas) wrap(OffscreenCanvas.prototype, "getContext", function (orig, a) {
+  const t = String(a[0]); if (t === "webgl" || t === "webgl2") return null; return orig.apply(this, a);
+});
 for (const P of [self.WebGLRenderingContext, self.WebGL2RenderingContext]) {
   if (!P) continue;
   wrap(P.prototype, "getParameter", function (orig, a) {
@@ -680,44 +731,168 @@ for (const P of [self.WebGLRenderingContext, self.WebGL2RenderingContext]) {
     if (a[0] === 37446 && C.gr) return C.gr;
     return orig.apply(this, a);
   });
-  if (C.wn) wrap(P.prototype, "readPixels", function (orig, a) {
+  if (C.wm === "noise") wrap(P.prototype, "readPixels", function (orig, a) {
     const r = orig.apply(this, a); const px = a[6];
-    if (px && px.length) for (let i = 0; i < px.length; i += 97) px[i] = px[i] ^ 1;
+    if (px && px.length) for (let i = H(1, 9) % 31; i < px.length; i += 31) if ((i & 3) !== 3) px[i] = px[i] ^ (H(i, 9) & 1);
     return r;
   });
 }
-if (C.cn) {
-  const noisify = (cv) => {
-    try {
-      const ctx = cv.getContext("2d"); if (!ctx || !cv.width || !cv.height) return;
-      const img = ctx.getImageData(0, 0, cv.width, cv.height);
-      for (let i = (C.seed % 53) * 4; i < img.data.length; i += 4 * 53) img.data[i] = img.data[i] ^ 1;
-      ctx.putImageData(img, 0, 0);
-    } catch (e) {}
-  };
-  wrap(HTMLCanvasElement.prototype, "toDataURL", function (orig, a) { noisify(this); return orig.apply(this, a); });
-  wrap(HTMLCanvasElement.prototype, "toBlob", function (orig, a) { noisify(this); return orig.apply(this, a); });
+// Canvas 2D: noise goes into a copy, keyed by pixel position, so the page's own
+// canvas is untouched and every read of the same drawing returns the same image.
+const C2 = self.CanvasRenderingContext2D && CanvasRenderingContext2D.prototype;
+const gid = C2 && C2.getImageData, pid = C2 && C2.putImageData;
+const noiseImg = (img, ox, oy) => {
+  const d = img.data, w = img.width;
+  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+    if (d[i + 3] !== 255) continue;
+    const h = H(ox + p % w, oy + (p / w | 0), 7);
+    if (h % 19) continue;
+    d[i + (h >>> 8) % 3] ^= 1;
+  }
+  return img;
+};
+const copyOf = (cv, noisy) => {
+  const w = cv.width, h = cv.height;
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  if (!noisy || !w || !h) return c;
+  try {
+    const x = c.getContext("2d"); x.drawImage(cv, 0, 0);
+    pid.call(x, noiseImg(gid.call(x, 0, 0, w, h), 0, 0), 0, 0);
+  } catch (e) { return null; }
+  return c;
+};
+const modeOf = (cv) => glc.has(cv) ? (C.wm === "noise" ? "noise" : "real") : C.cm;
+if (self.HTMLCanvasElement && gid) for (const name of ["toDataURL", "toBlob"]) {
+  wrap(HTMLCanvasElement.prototype, name, function (orig, a) {
+    const m = modeOf(this);
+    if (m === "real") return orig.apply(this, a);
+    const c = copyOf(this, m === "noise");
+    return orig.apply(c || this, a);
+  });
 }
-if (C.an && self.AudioBuffer) {
-  const done = new WeakSet();
+if (gid && C.cm !== "real") {
+  for (const P of [C2, self.OffscreenCanvasRenderingContext2D && OffscreenCanvasRenderingContext2D.prototype]) {
+    if (!P) continue;
+    wrap(P, "getImageData", function (orig, a) {
+      if (C.cm === "off") return new ImageData(Math.max(1, Math.abs(a[2] | 0)), Math.max(1, Math.abs(a[3] | 0)));
+      return noiseImg(orig.apply(this, a), a[0] | 0, a[1] | 0);
+    });
+  }
+}
+// Audio
+if (C.am === "off") {
+  for (const k of ["AudioContext", "webkitAudioContext", "OfflineAudioContext", "webkitOfflineAudioContext"]) { try { delete self[k]; } catch (e) {} }
+} else if (C.am === "noise" && self.AudioBuffer) {
+  const done = new WeakSet(), gcd = AudioBuffer.prototype.getChannelData;
   wrap(AudioBuffer.prototype, "getChannelData", function (orig, a) {
     const d = orig.apply(this, a);
-    if (!done.has(d)) { done.add(d); for (let i = 0; i < d.length; i += 100) d[i] += (rnd() - .5) * 1e-7; }
+    if (!done.has(d)) { done.add(d); const ch = a[0] | 0; for (let i = H(ch, 3) % 50; i < d.length; i += 50) d[i] += ((H(i, ch, 3) % 2001) - 1000) * 1e-10; }
     return d;
   });
-}
-if (C.rn) {
-  const off = (rnd() - .5) * 0.0002;
-  wrap(Element.prototype, "getBoundingClientRect", function (orig, a) {
-    const r = orig.apply(this, a);
-    return new DOMRect(r.x + off, r.y + off, r.width + off, r.height + off);
+  wrap(AudioBuffer.prototype, "copyFromChannel", function (orig, a) {
+    try { this.getChannelData(a[1] | 0); } catch (e) {}
+    return orig.apply(this, a);
   });
 }
-if (C.rtc === "disabled") {
-  for (const k of ["RTCPeerConnection", "webkitRTCPeerConnection", "RTCDataChannel"]) { try { delete self[k]; } catch (e) {} }
+// Client rects: a small offset per element, the same on every call.
+if (C.rm === "noise") {
+  const ek = (el) => {
+    const s = (el.tagName || "") + "#" + (el.id || "") + "." + (typeof el.className === "string" ? el.className : "") + ":" + ((el.textContent || "").length);
+    let h = 0; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+    return H(h, 5);
+  };
+  const jit = (r, k) => { const o = ((k % 2001) - 1000) * 1e-7, o2 = (((k >>> 11) % 2001) - 1000) * 1e-7; return new DOMRect(r.x + o, r.y + o2, r.width + o2, r.height + o); };
+  wrap(Element.prototype, "getBoundingClientRect", function (orig, a) { return jit(orig.apply(this, a), ek(this)); });
+  if (self.Range) wrap(Range.prototype, "getBoundingClientRect", function (orig, a) {
+    const n = this.startContainer; return jit(orig.apply(this, a), H(this.startOffset, this.endOffset, (n && n.textContent || "").length));
+  });
+} else if (C.rm === "off") {
+  wrap(Element.prototype, "getBoundingClientRect", function () { return new DOMRect(0, 0, 0, 0); });
 }
-if (C.media && self.MediaDevices) {
-  wrap(MediaDevices.prototype, "enumerateDevices", function () { return Promise.resolve([]); });
+// WebRTC
+if (C.rtc === "disabled") {
+  for (const k of ["RTCPeerConnection", "webkitRTCPeerConnection", "RTCDataChannel", "RTCSessionDescription", "RTCIceCandidate"]) { try { delete self[k]; } catch (e) {} }
+} else if (C.rtc === "proxy" && C.pip && self.RTCPeerConnection) {
+  const P = C.pip;
+  const cand = (l) => String(l).replace(/^((?:a=)?candidate:\S+ \d+ \S+ \d+ )(\S+)/i, (m, a, ip) => a + (/\.local$/i.test(ip) ? ip : P))
+    .replace(/( raddr )(\S+)/, (m, a, ip) => a + (ip === "0.0.0.0" || ip === "::" ? ip : P));
+  const sdp = (s) => typeof s !== "string" ? s : s.split(/\r\n/).map(l => /^a=candidate:/i.test(l) ? cand(l) : l.replace(/^c=IN IP4 (?!0\.0\.0\.0)\S+/, "c=IN IP4 " + P)).join("\r\n");
+  if (self.RTCIceCandidate) {
+    const I = RTCIceCandidate.prototype;
+    getter(I, "candidate", function (og) { const v = og.call(this); return v ? cand(v) : v; });
+    getter(I, "address", function (og) { const v = og.call(this); return v && !/\.local$/i.test(v) ? P : v; });
+    wrap(I, "toJSON", function (orig, a) { const j = orig.apply(this, a); if (j && j.candidate) j.candidate = cand(j.candidate); return j; });
+  }
+  if (self.RTCSessionDescription) {
+    getter(RTCSessionDescription.prototype, "sdp", function (og) { return sdp(og.call(this)); });
+    wrap(RTCSessionDescription.prototype, "toJSON", function (orig, a) { const j = orig.apply(this, a); if (j) j.sdp = sdp(j.sdp); return j; });
+  }
+  for (const n of ["createOffer", "createAnswer"]) wrap(RTCPeerConnection.prototype, n, function (orig, a) {
+    return orig.apply(this, a).then(d => { if (d && typeof d.sdp === "string" && !(d instanceof RTCSessionDescription)) d.sdp = sdp(d.sdp); return d; });
+  });
+}
+// Media devices
+if (self.MediaDevices && C.md !== "real") {
+  let list = [];
+  if (C.md === "custom") {
+    const hex = (k) => { let s = ""; for (let j = 0; j < 8; j++) s += H(k, j, 11).toString(16).padStart(8, "0"); return s; };
+    const MP = self.MediaDeviceInfo && MediaDeviceInfo.prototype, IP = self.InputDeviceInfo ? InputDeviceInfo.prototype : MP;
+    if (MP) {
+      fakeProto(MP, ["deviceId", "kind", "label", "groupId"]);
+      wrap(MP, "toJSON", function (orig, a) { return fakes.has(this) ? Object.assign({}, fakes.get(this)) : orig.apply(this, a); });
+      const add = (kind, n, P) => { for (let i = 0; i < n; i++) list.push(mkFake(P, { deviceId: hex(kind.length * 100 + i), kind, label: "", groupId: hex(kind.length * 100 + i + 50) })); };
+      add("audioinput", C.mic, IP); add("videoinput", C.cam, IP); add("audiooutput", C.spk, MP);
+    }
+  }
+  wrap(MediaDevices.prototype, "enumerateDevices", function () { return Promise.resolve(list.slice()); });
+}
+// Speech voices
+if (self.speechSynthesis && C.sv !== "real") {
+  let voices = [];
+  if (C.sv === "custom" && self.SpeechSynthesisVoice) {
+    const VP = SpeechSynthesisVoice.prototype;
+    fakeProto(VP, ["voiceURI", "name", "lang", "localService", "default"]);
+    voices = (C.voices || []).map(v => mkFake(VP, v));
+  }
+  wrap(Object.getPrototypeOf(speechSynthesis), "getVoices", function () { return voices.slice(); });
+}
+// WebGPU
+if (C.gpu === "off") {
+  try { delete Navigator.prototype.gpu; } catch (e) {}
+  try { if (self.WorkerNavigator) delete WorkerNavigator.prototype.gpu; } catch (e) {}
+  for (const k of Object.getOwnPropertyNames(self)) if (/^GPU[A-Z]/.test(k) || k === "GPU") { try { delete self[k]; } catch (e) {} }
+}
+// Port-scan protection: WebSockets to local addresses look like closed ports.
+if (C.ps && self.WebSocket) {
+  const localHost = (h) => { h = h.replace(/^\[|\]$/g, "").toLowerCase(); return h === "localhost" || h.endsWith(".localhost") || /^127\./.test(h) || h === "::1" || h === "0.0.0.0" || h === "::"; };
+  if (!localHost(location.hostname)) {
+    const WS = WebSocket, wl = new Set(C.wl || []), moved = new WeakMap();
+    const W = function WebSocket(url, protocols) {
+      if (!new.target) return WS(url, protocols);
+      let shown = null;
+      try {
+        const u = new URL(url, location.href), port = u.port || (u.protocol === "wss:" || u.protocol === "https:" ? "443" : "80"), h = u.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+        if (localHost(u.hostname) && !wl.has(port) && !wl.has(h + ":" + port) && !wl.has(h)) { shown = u.href.replace(/^http/, "ws"); url = "ws://127.0.0.1:1/"; }
+      } catch (e) {}
+      const sock = arguments.length > 1 ? Reflect.construct(WS, [url, protocols], new.target) : Reflect.construct(WS, [url], new.target);
+      if (shown) moved.set(sock, shown);
+      return sock;
+    };
+    getter(WS.prototype, "url", function (og) { return moved.has(this) ? moved.get(this) : og.call(this); });
+    hide.set(W, "function WebSocket() { [native code] }");
+    W.prototype = WS.prototype;
+    for (const k of ["CONNECTING", "OPEN", "CLOSING", "CLOSED"]) Object.defineProperty(W, k, { value: WS[k], enumerable: true });
+    Object.defineProperty(WS.prototype, "constructor", { value: W, writable: true, configurable: true });
+    Object.setPrototypeOf(W, Object.getPrototypeOf(WS));
+    Object.defineProperty(self, "WebSocket", { value: W, writable: true, configurable: true, enumerable: false });
+  }
+}
+// Video blocking (network side is done over CDP): videos refuse to play.
+if (C.bv && self.HTMLVideoElement) {
+  wrap(HTMLMediaElement.prototype, "play", function (orig, a) {
+    if (this instanceof HTMLVideoElement) return Promise.reject(new DOMException("play() failed because the user didn't interact with the document first.", "NotAllowedError"));
+    return orig.apply(this, a);
+  });
 }
 if (C.fonts && C.fonts.length && self.FontFaceSet) {
   const set = new Set(C.fonts.map(f => f.toLowerCase()));
