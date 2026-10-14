@@ -15,6 +15,11 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
   const [autoChromium, setAutoChromium] = useState('');
   const [chromiumMajor, setChromiumMajor] = useState('');
   useEffect(() => { api.ChromiumPath().then(setAutoChromium).catch(() => {}); api.ChromiumMajor().then(setChromiumMajor).catch(() => {}); }, [(s as any)?.chromiumPath]);
+  const [compat, setCompat] = useState<{ version: string; major: number; level: string; message: string } | null>(null);
+  useEffect(() => {
+    const t = setTimeout(() => { (api as any).ChromiumCompat((s as any)?.chromiumPath || '').then(setCompat).catch(() => setCompat(null)); }, 300);
+    return () => clearTimeout(t);
+  }, [(s as any)?.chromiumPath]);
   const refreshDefault = () => api.DefaultKernelPath().then(setDefaultKernel).catch(() => setDefaultKernel(''));
   useEffect(() => { refreshDefault(); }, []);
   const save = async () => { const out = await api.SaveSettings(s); onSaved(out); refreshDefault(); };
@@ -74,10 +79,11 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
 
       <div className="panel pad setting-card spot rise" style={{ ['--i' as any]: 1 }}>
         <div className="head"><span className="ic"><Icon.phone /></span><div><h4>开源内核</h4><span>手机、平板、折叠屏、Chromebook、电视、Mac 和 Linux 环境用它启动</span></div></div>
-        <Field label="chrome.exe 路径" hint={`留空自动检测：${autoChromium || '没找到已安装的 Chromium / Chrome / Edge'}${chromiumMajor ? ` · Chrome ${chromiumMajor}` : ''}`}>
+        <Field label="chrome.exe 路径" hint={`留空自动检测：${autoChromium || '没找到已安装的 Chromium / Chrome / Edge'}${(s as any).chromiumPath ? (compat?.version ? ` · 已选内核：Chrome ${compat.version}` : '') : compat?.version ? ` · Chrome ${compat.version}` : chromiumMajor ? ` · Chrome ${chromiumMajor}` : ''}`}>
           <div className="row"><input type="text" value={s.chromiumPath || ''} onChange={e => set({ chromiumPath: e.target.value } as any)} placeholder="Chromium、Chrome for Testing、ungoogled-chromium 或你自己编译的内核" /><button className="btn" style={{ flex: 'none' }} onClick={async () => { const f = await api.PickChromium(); if (f) set({ chromiumPath: f } as any); }}><Icon.folder s={15} /> 浏览</button>{s.chromiumPath && <button className="btn ghost" style={{ flex: 'none' }} onClick={() => set({ chromiumPath: '' } as any)}><Icon.refresh s={14} /> 自动检测</button>}</div>
         </Field>
-        <div className="sub">指纹通过 CDP 注入，不依赖扩展，Chrome 137 以后的正式版也能用。推荐 Chromium 或 Chrome for Testing。UA 里的大版本自动跟随内核。需要保持 GhostBrowser 运行。</div>
+        {compat && compat.level !== 'ok' && compat.message && <div className={`notice ${compat.level === 'unsupported' ? 'bad' : 'warn'} kc-notice`}><Icon.alert /><span className="grow">{compat.message}</span></div>}
+        <div className="sub">指纹通过 CDP 注入，不依赖扩展，Chrome 137 以后的正式版也能用。支持 Chrome 110 及以上，推荐 120 以上的 Chromium 或 Chrome for Testing。UA 里的大版本自动跟随内核。需要保持 GhostBrowser 运行。</div>
       </div>
 
       <div className="panel pad setting-card spot rise" style={{ ['--i' as any]: 2 }}>

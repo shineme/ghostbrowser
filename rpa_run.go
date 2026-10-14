@@ -421,6 +421,16 @@ func newCDPDriver(ws string) (rpaDriverCloser, error) {
 		conn.c.Close()
 		return nil, err
 	}
+	// A browser that just opened its debugging port can list no page for a
+	// moment (Chromium 110–120 register the first tab late); wait for it
+	// instead of opening a second, empty tab.
+	for i := 0; i < 15 && len(pages) == 0; i++ {
+		time.Sleep(200 * time.Millisecond)
+		if pages, err = d.pages(); err != nil {
+			conn.c.Close()
+			return nil, err
+		}
+	}
 	if len(pages) == 0 {
 		r, err := conn.call("", "Target.createTarget", map[string]any{"url": "about:blank"})
 		if err != nil {

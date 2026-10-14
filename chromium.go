@@ -36,14 +36,32 @@ func findChrome() string {
 	switch runtime.GOOS {
 	case "windows":
 		pf, pf86, local := os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)"), os.Getenv("LOCALAPPDATA")
-		cands = []string{
-			filepath.Join(local, "Chromium/Application/chrome.exe"),
-			filepath.Join(pf, "Chromium/Application/chrome.exe"),
-			filepath.Join(pf, "Google/Chrome/Application/chrome.exe"),
-			filepath.Join(pf86, "Google/Chrome/Application/chrome.exe"),
-			filepath.Join(local, "Google/Chrome/Application/chrome.exe"),
-			filepath.Join(pf86, "Microsoft/Edge/Application/msedge.exe"),
-			filepath.Join(pf, "Microsoft/Edge/Application/msedge.exe"),
+		if w := os.Getenv("ProgramW6432"); w != "" {
+			pf = w // a 32-bit process sees "Program Files (x86)" as ProgramFiles
+		}
+		// Unbranded first: Chromium / ungoogled-chromium installers use the
+		// Chromium folder and keep --load-extension; branded Chrome 137+
+		// ignores it, Edge brands its UA-CH as Microsoft Edge.
+		for _, base := range []string{local, pf, pf86} {
+			if base != "" {
+				cands = append(cands, filepath.Join(base, "Chromium/Application/chrome.exe"))
+			}
+		}
+		for _, base := range []string{pf, pf86, local} {
+			if base != "" {
+				cands = append(cands, filepath.Join(base, "Google/Chrome/Application/chrome.exe"))
+			}
+		}
+		if local != "" {
+			cands = append(cands,
+				filepath.Join(local, "Google/Chrome Beta/Application/chrome.exe"),
+				filepath.Join(local, "Google/Chrome Dev/Application/chrome.exe"),
+				filepath.Join(local, "Google/Chrome SxS/Application/chrome.exe"))
+		}
+		for _, base := range []string{pf86, pf, local} {
+			if base != "" {
+				cands = append(cands, filepath.Join(base, "Microsoft/Edge/Application/msedge.exe"))
+			}
 		}
 	case "darwin":
 		cands = []string{
@@ -92,10 +110,11 @@ func (s *Store) launchChromium(p *Profile, st Settings) (*RunState, error) {
 	fp.NoiseSeed = effectiveSeed(p.ID, fp.NoiseSeed, fp.RandomFingerprintOnLaunch)
 	// The UA's Chrome major always follows the kernel, so UA, UA-CH and the
 	// engine's real features agree. TVs keep their own fixed browser build.
-	if m := chromeMajorFrom(filepath.Dir(kernel)); m != "" && fp.DeviceType != "tv" {
-		fp.UserAgent = chromeMajorTok.ReplaceAllString(fp.UserAgent, "Chrome/"+m+".0.0.0")
-		fp.BrowserVersion = m
+	// (Re-checked against Browser.getVersion once CDP is up.)
+	if err := kernelUnsupportedErr(kernel); err != nil {
+		return nil, err
 	}
+	alignUAMajor(&fp, majorOf(kernelVersion(kernel)))
 
 	userDir := s.ProfileDir(p.ID)
 	_ = os.MkdirAll(userDir, 0o755)
@@ -353,6 +372,7 @@ type emulator struct {
 	startTarget string
 	net         *fpNet // port-scan protection / video blocking (nil = off)
 	workerPause sync.Map // worker session → chan signalled on Debugger.paused
+	major       int    // kernel's Chrome major from Browser.getVersion (0 = unknown)
 }
 
 func (e *emulator) Close() {
@@ -374,6 +394,10 @@ func startEmulation(ws string, fp Fingerprint, px *Proxy, startURLs []string) (*
 	}
 	e.conn = conn
 	brands, full := e.kernelBrands()
+	// The real kernel version is authoritative: the launch-time guess can miss
+	// (wrapper scripts, renamed folders), and UA vs UA-CH must never disagree.
+	alignUAMajor(&e.fp, e.major)
+	fp = e.fp
 	e.ua = uaOverride(fp, brands, full)
 	e.script = pageScript(fp, px)
 
@@ -425,6 +449,7 @@ func (e *emulator) kernelBrands() ([]map[string]string, []map[string]string) {
 		}
 	}
 	major := strings.Split(full, ".")[0]
+	e.major = majorOf(full)
 	fallback := []map[string]string{{"brand": "Chromium", "version": major}, {"brand": "Not_A Brand", "version": "24"}}
 	fallbackFull := []map[string]string{{"brand": "Chromium", "version": full}, {"brand": "Not_A Brand", "version": "24.0.0.0"}}
 	raw, err = e.conn.call("", "Target.getTargets", nil)
@@ -621,6 +646,9 @@ func (e *emulator) onEvent(m cdpMsg) {
 		e.net.attach(c, sid, ev.TargetInfo.TargetID, ev.TargetInfo.Type == "page")
 		_, _ = c.call(sid, "Target.setAutoAttach", map[string]any{"autoAttach": true, "waitForDebuggerOnStart": true, "flatten": true})
 		resume()
+		if ev.TargetInfo.Type == "page" && ev.Waiting && e.major > 0 && e.major < chromiumLegacyBelow {
+			go e.ensureScript(sid)
+		}
 		// The kernel's initial about:blank tab can register after our getTargets
 		// snapshot, so a blank page attaching first counts as the start tab too.
 		blank := ev.TargetInfo.URL == "" || ev.TargetInfo.URL == "about:blank"
@@ -942,9 +970,22 @@ if (self.MediaDevices && C.md !== "real") {
 // Speech voices
 if (self.speechSynthesis && C.sv !== "real") {
   let voices = [];
+  const VK = ["voiceURI", "name", "lang", "localService", "default"];
   if (C.sv === "custom" && self.SpeechSynthesisVoice) {
     const VP = SpeechSynthesisVoice.prototype;
-    fakeProto(VP, ["voiceURI", "name", "lang", "localService", "default"]);
+    fakeProto(VP, VK);
+    voices = (C.voices || []).map(v => mkFake(VP, v));
+  } else if (C.sv === "custom") {
+    // Some kernels (Chromium 120 and older Linux builds) expose no
+    // SpeechSynthesisVoice interface: voices get a private look-alike prototype.
+    const VP = {};
+    for (const k of VK) {
+      const g = { get [k]() { return fakes.has(this) ? fakes.get(this)[k] : undefined; } };
+      const f = Object.getOwnPropertyDescriptor(g, k).get;
+      hide.set(f, "function get " + k + "() { [native code] }");
+      Object.defineProperty(VP, k, { get: f, configurable: true, enumerable: true });
+    }
+    Object.defineProperty(VP, Symbol.toStringTag, { value: "SpeechSynthesisVoice", configurable: true });
     voices = (C.voices || []).map(v => mkFake(VP, v));
   }
   wrap(Object.getPrototypeOf(speechSynthesis), "getVoices", function () { return voices.slice(); });
