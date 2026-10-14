@@ -103,9 +103,9 @@ func TestRecordScrollCoalesce(t *testing.T) {
 func TestRecordNavigationAndTabs(t *testing.T) {
 	c := newRecCore(RecordOptions{})
 	c.addTab("A", "about:blank", false)
-	c.navigated("A", "chrome://newtab/", false, "", 10)    // ignored
-	c.navigated("A", "https://x.test/", false, "", 20)     // typed → goto
-	c.navigated("A", "https://x.test/", false, "", 30)     // reload → nothing
+	c.navigated("A", "chrome://newtab/", false, "", 10) // ignored
+	c.navigated("A", "https://x.test/", false, "", 20)  // typed → goto
+	c.navigated("A", "https://x.test/", false, "", 30)  // reload → nothing
 	c.event("A", recEvent{T: "click", Sel: "text:下一页", TS: 40})
 	c.navigated("A", "https://x.test/2", true, "anchorClick", 60) // caused by the click
 	// The click died with the old document; only its pointerdown made it out.

@@ -80,10 +80,11 @@ const (
 )
 
 type recTabInfo struct {
-	url    string
-	http   bool // has shown an http(s) page
-	opener bool // opened by the page (link/window.open)
-	down   *recEvent
+	touched bool // a step happened there or a recorded step opened it
+	url     string
+	http    bool // has shown an http(s) page
+	opener  bool // opened by the page (link/window.open)
+	down    *recEvent
 }
 
 type recCore struct {
@@ -139,6 +140,7 @@ func (c *recCore) addTab(id, url string, opener bool) {
 	}
 	ti := c.tab(id)
 	ti.opener = ti.opener || opener
+	ti.touched = ti.touched || opener
 	if url != "" {
 		ti.url = url
 		ti.http = ti.http || isHTTPURL(url)
@@ -148,7 +150,9 @@ func (c *recCore) addTab(id, url string, opener bool) {
 	}
 }
 
-func isHTTPURL(u string) bool { return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") }
+func isHTTPURL(u string) bool {
+	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
+}
 
 // lastReal is the index of the last step that is not a recorded pause.
 func (c *recCore) lastReal() int {
@@ -208,6 +212,9 @@ func (c *recCore) ensureTab(tab string) {
 func (c *recCore) push(tab string, ts int64, s RpaStep) {
 	c.think(ts)
 	c.ensureTab(tab)
+	if tab != "" {
+		c.tab(tab).touched = true
+	}
 	c.steps = append(c.steps, s)
 }
 
@@ -332,6 +339,7 @@ func (c *recCore) navigated(tab, url string, renderer bool, reason string, ts in
 		s.Name = "新标签页打开 " + clip(url, 60)
 		c.think(ts)
 		c.steps = append(c.steps, s)
+		ti.touched = true
 		return
 	}
 	if url == prev {
@@ -346,8 +354,10 @@ func (c *recCore) tabClosed(tab string, ts int64) {
 	if i < 0 {
 		return
 	}
-	c.think(ts)
-	c.steps = append(c.steps, recStep(stCloseTab, "index", strconv.Itoa(i+1)))
+	if ti := c.info[tab]; ti != nil && ti.touched {
+		c.think(ts)
+		c.steps = append(c.steps, recStep(stCloseTab, "index", strconv.Itoa(i+1)))
+	}
 	c.tabs = append(c.tabs[:i], c.tabs[i+1:]...)
 	delete(c.info, tab)
 	if c.cur == tab {

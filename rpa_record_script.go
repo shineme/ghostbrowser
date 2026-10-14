@@ -12,8 +12,13 @@ const recWorld = "__gb_rec"
 // overlay/scroll are the initial options; drain() keeps them in sync.
 func recCaptureScript(overlay, scroll bool) string {
 	return fmt.Sprintf(`(() => {
-if (window.top !== window || window.__gbRec) return;
-const R = window.__gbRec = { q: [], n: 0, paused: false, overlay: %t, scroll: %t, mode: '', dead: false, lastEnter: 0, lastLabel: null, lastUser: 0 };
+if (window.top !== window) return;
+// The initial about:blank of a new tab hands its window to the first real
+// page, listeners and all: install again per document and silence the old.
+const old = window.__gbRec;
+if (old && old.doc === document && !old.dead) return;
+if (old) { old.dead = true; try { old.unmount(); } catch (e) {} }
+const R = window.__gbRec = { doc: document, q: [], n: 0, paused: false, overlay: %t, scroll: %t, mode: '', dead: false, lastEnter: 0, lastLabel: null, lastUser: 0 };
 const send = (o) => { if (R.dead || R.q.length >= 3000) return; o.ts = Date.now(); R.q.push(o); };
 const HTML = 'http://www.w3.org/1999/xhtml';
 let host = null, root = null, ui = {};
@@ -213,6 +218,7 @@ const mount = () => {
   paint();
 };
 const unmount = () => { if (host) host.remove(); };
+R.unmount = unmount;
 R.drain = (n, paused, overlay, scroll) => {
   if (R.n !== n || R.paused !== paused) { R.n = n; R.paused = paused; paint(); }
   R.scroll = scroll;
@@ -227,7 +233,7 @@ R.destroy = () => { R.dead = true; R.mode = ''; R.q = []; unmount(); };
 
 // recDrainExpr installs the script when this world lacks it and drains the queue.
 func recDrainExpr(n int, paused, overlay, scroll bool) string {
-	return fmt.Sprintf(`(() => { %s const R = window.__gbRec; if (!R || R.dead) return ''; return R.drain(%d, %t, %t, %t); })()`, recCaptureScript(overlay, scroll), n, paused, overlay, scroll)
+	return fmt.Sprintf(`(() => { %s const R = window.__gbRec; if (!R || R.dead || R.doc !== document) return ''; return R.drain(%d, %t, %t, %t); })()`, recCaptureScript(overlay, scroll), n, paused, overlay, scroll)
 }
 
 // recDestroyExpr removes the overlay and silences capture in a page.
