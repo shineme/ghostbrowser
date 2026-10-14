@@ -711,6 +711,40 @@ export namespace main {
 	    }
 	}
 	
+	export class TransferEvent {
+	    id: string;
+	    name: string;
+	    dir: string;
+	    phase: string;
+	    done: number;
+	    total: number;
+	    speed: number;
+	    eta: number;
+	    saved: number;
+	    started: number;
+	    error?: string;
+	    final: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new TransferEvent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.dir = source["dir"];
+	        this.phase = source["phase"];
+	        this.done = source["done"];
+	        this.total = source["total"];
+	        this.speed = source["speed"];
+	        this.eta = source["eta"];
+	        this.saved = source["saved"];
+	        this.started = source["started"];
+	        this.error = source["error"];
+	        this.final = source["final"];
+	    }
+	}
 	export class cloudMeta {
 	    id: string;
 	    name: string;

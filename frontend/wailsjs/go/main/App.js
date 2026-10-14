@@ -310,6 +310,10 @@ export function TestSync() {
   return window['go']['main']['App']['TestSync']();
 }
 
+export function Transfers() {
+  return window['go']['main']['App']['Transfers']();
+}
+
 export function UseUndetectableKit() {
   return window['go']['main']['App']['UseUndetectableKit']();
 }

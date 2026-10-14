@@ -156,4 +156,6 @@ export function SyncServerInfo():Promise<main.serverInfo>;
 
 export function TestSync():Promise<void>;
 
+export function Transfers():Promise<Array<main.TransferEvent>>;
+
 export function UseUndetectableKit():Promise<main.Settings>;
