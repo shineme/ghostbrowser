@@ -597,7 +597,7 @@ func httpDateProbe() (time.Time, time.Time, string, error) {
 		}
 		resp.Body.Close()
 		d := resp.Header.Get("Date")
-		st, err := http.ParseTime(d)
+		st, err := parseHTTPDate(d)
 		if err != nil {
 			lastErr = fmt.Errorf("%s 没有有效的 Date 头", u)
 			continue
@@ -681,3 +681,5 @@ func randomSeed() int64 {
 	_, _ = rand.Read(b[:])
 	return int64(binary.LittleEndian.Uint64(b[:])%2147483646) + 1
 }
+
+func parseHTTPDate(d string) (time.Time, error) { return http.ParseTime(d) }
