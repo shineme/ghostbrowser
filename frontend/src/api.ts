@@ -66,6 +66,24 @@ const mock = {
 // ---- arrange + syncer ---- (mock helpers; preview starts with 4 running browsers so the run strip shows)
 mock.profiles.slice(0, 4).forEach((p, i) => mock.running.push({ profileId: p.id, pid: 4100 + i, debugPort: 9300 + i, wsUrl: '', startedAt: Date.now() / 1000 - 600 - i * 1300 }));
 const mockSync: { st: any; timer: any } = { st: { running: false, master: '', masterName: '', followers: [], events: 0, lastEvent: '', startedAt: 0, reason: '' }, timer: 0 };
+// ---- syncer2 ---- (mock helpers)
+const sync2Mock: { prefs: any } = { prefs: { click: true, input: true, key: true, scroll: true, tabs: true, delayMin: 0, delayMax: 120, master: '', followers: [] as string[], newTab: false } };
+function sync2Norm(o: any) {
+  const c = (v: any) => Math.max(0, Math.min(10000, Math.round(Number(v) || 0)));
+  let a = c(o.delayMin), b = c(o.delayMax); if (a > b) [a, b] = [b, a];
+  return { click: !!o.click, input: !!o.input, key: !!o.key, scroll: !!o.scroll, tabs: !!o.tabs, delayMin: a, delayMax: b };
+}
+function sync2URL(raw: string): string {
+  let s = String(raw || '').trim();
+  if (!s) throw new Error('请输入网址');
+  if (/^(about:blank|chrome:\/\/|edge:\/\/)/i.test(s)) return s;
+  if (/\s/.test(s)) throw new Error('网址里不能有空格');
+  if (s.startsWith('//')) s = 'https:' + s; else if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) s = 'https://' + s;
+  let u: URL; try { u = new URL(s); } catch { throw new Error('网址格式不正确'); }
+  if (!/^https?:$/.test(u.protocol)) throw new Error('只支持 http / https 网址');
+  if (!u.hostname || (u.hostname !== 'localhost' && !u.hostname.includes('.'))) throw new Error('网址格式不正确');
+  return s;
+}
 function mockArrange(n: number, mode: string) {
   const screen = { x: 0, y: 0, w: 1920, h: 1040 }; const cells: any[] = [];
   mode = mode === 'cascade' || mode === 'stack' ? mode : 'grid';
@@ -325,8 +343,8 @@ const M = {
     if (!fs.length) throw new Error('请至少选择一个正在运行的跟随环境');
     clearInterval(mockSync.timer);
     const nm = (id: string) => mock.profiles.find(p => p.id === id)?.name || id;
-    mockSync.st = { running: true, master, masterName: nm(master), followers: fs.map(id => ({ id, name: nm(id), ok: true, events: 0, error: '' })), events: 0, lastEvent: '', startedAt: Date.now(), reason: '' };
-    const kinds = ['click', 'click', 'scroll', 'scroll', 'scroll', 'key', 'text', 'select', 'nav'];
+    mockSync.st = { running: true, master, masterName: nm(master), followers: fs.map(id => ({ id, name: nm(id), ok: true, events: 0, error: '', latencyMs: 0, tabs: 2 })), events: 0, lastEvent: '', startedAt: Date.now(), reason: '', options: sync2Norm(sync2Mock.prefs), tabs: 2 };
+    const kinds = ['click', 'click', 'scroll', 'scroll', 'scroll', 'key', 'text', 'select', 'nav', 'tabswitch', 'tabnew'];
     mockSync.timer = setInterval(() => {
       const st = mockSync.st;
       if (!mock.running.some(r => r.profileId === st.master)) { clearInterval(mockSync.timer); mockSync.st = { ...st, running: false, reason: '主控浏览器已关闭' }; mockEmit('syncer:event', mockSync.st); return; }
@@ -334,7 +352,7 @@ const M = {
       const followers = st.followers.map((f: any, i: number) => {
         if (!f.ok) return f;
         if (i === 2 && st.events >= 14) return { ...f, ok: false, error: '标签页已关闭，已移出同步' };
-        return { ...f, events: f.events + 1 };
+        const o = st.options || {}; return { ...f, events: f.events + 1, latencyMs: Math.round((o.delayMin || 0) + Math.random() * ((o.delayMax || 0) - (o.delayMin || 0)) + 6 + Math.random() * 14) };
       });
       mockSync.st = { ...st, followers, events: st.events + 1, lastEvent: ev };
       mockEmit('syncer:event', mockSync.st);
@@ -433,6 +451,25 @@ const M = {
   KernelInstallCancel: async () => { kernelMock.cancel = true; },
   KernelList: async (): Promise<any[]> => kernelMock.list.map(k => ({ ...k, active: k.path === mock.settings.chromiumPath })),
   KernelDelete: async (dir: string) => { await wait(300); kernelMock.list = kernelMock.list.filter(k => k.dir !== dir); },
+  // ---- syncer2 ----
+  GetSyncerPrefs: async (): Promise<any> => JSON.parse(JSON.stringify(sync2Mock.prefs)),
+  SaveSyncerPrefs: async (p: any): Promise<any> => {
+    const o = sync2Norm(p); sync2Mock.prefs = { ...p, ...o, followers: (p.followers || []).filter((f: string) => f && f !== p.master) };
+    if (mockSync.st.running) { mockSync.st = { ...mockSync.st, options: o }; mockEmit('syncer:event', mockSync.st); }
+    return JSON.parse(JSON.stringify(sync2Mock.prefs));
+  },
+  SetSyncOptions: async (o: any): Promise<any> => { mockSync.st = { ...mockSync.st, options: sync2Norm(o) }; mockEmit('syncer:event', mockSync.st); return mockSync.st; },
+  NormalizeSyncURL: async (u: string): Promise<string> => sync2URL(u),
+  SyncTabAction: async (master: string, followers: string[], action: string, url: string, _newTab: boolean): Promise<any> => {
+    await wait(action === 'unify' ? 1300 : 650);
+    const ids = action === 'unify' || action === 'size' ? followers.filter(f => f !== master) : [master, ...followers].filter(Boolean);
+    if ((action === 'unify' || action === 'size') && !master) throw new Error('请先选择主控窗口');
+    if (!ids.length) throw new Error('请先选择窗口');
+    const u = action === 'open' ? sync2URL(url) : '';
+    const nm = (id: string) => mock.profiles.find(p => p.id === id)?.name || id;
+    const failed = ids.filter(id => !mock.running.some(r => r.profileId === id)).map(id => `${nm(id)}：没有在运行`);
+    return { action, done: ids.length - failed.length, total: ids.length, failed, url: u };
+  },
 };
 
 export const api: typeof M = inWails ? (Go as any) : M;
