@@ -388,3 +388,154 @@ func TestIframeFingerprintLive(t *testing.T) {
 		t.Errorf("expected OOPIFs, got %v", oop)
 	}
 }
+
+// ifUser acts like a person on a page: real mouse clicks (translated into
+// frames by the RPA driver's frame resolver) and real key presses.
+type ifUser struct {
+	t *testing.T
+	d *cdpDriver
+}
+
+func newIfUser(t *testing.T, ws string) *ifUser {
+	dr, err := newCDPDriver(ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(dr.Close)
+	return &ifUser{t: t, d: dr.(*cdpDriver)}
+}
+
+func (u *ifUser) click(frame, sel string) {
+	u.t.Helper()
+	if err := u.d.UseFrame(parseFramePath(frame), 10*time.Second); err != nil {
+		u.t.Fatal(err)
+	}
+	if err := u.d.Click(sel, false); err != nil {
+		u.t.Fatalf("click %s in %q: %v", sel, frame, err)
+	}
+	time.Sleep(250 * time.Millisecond)
+}
+
+func (u *ifUser) typeText(s string) {
+	for _, r := range s {
+		ch := string(r)
+		_, _ = u.d.call("Input.dispatchKeyEvent", map[string]any{"type": "keyDown", "text": ch, "unmodifiedText": ch, "key": ch})
+		_, _ = u.d.call("Input.dispatchKeyEvent", map[string]any{"type": "keyUp", "key": ch})
+		time.Sleep(30 * time.Millisecond)
+	}
+	time.Sleep(150 * time.Millisecond)
+}
+
+func TestIframeRecordReplayLive(t *testing.T) {
+	bin := os.Getenv("GHOST_CHROME")
+	if bin == "" {
+		t.Skip("set GHOST_CHROME to a Chromium binary")
+	}
+	site := newIfSite()
+	defer site.close()
+	a := newRpaE2EApp(t, bin)
+	mk := func(name string) string {
+		fp := GenerateTyped("desktop", "windows", "")
+		fp.StartupParameters = "--headless=new --no-sandbox --site-per-process"
+		return a.store.PutProfile(Profile{Name: name, Kernel: "chromium", Fingerprint: fp}).ID
+	}
+	recPID, playPID := mk("录制环境"), mk("回放环境")
+	defer runReg.stop(recPID)
+	defer runReg.stop(playPID)
+	if _, err := a.StartRecording(recPID, RecordOptions{Overlay: true, StartURL: site.top.URL + "/"}); err != nil {
+		t.Fatal(err)
+	}
+	rs, _ := runReg.get(recPID)
+	u := newIfUser(t, rs.WSURL)
+	if err := u.d.WaitFor("#topin", "visible", 10*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1500 * time.Millisecond) // let the late iframe appear and frames get their scripts
+	if oop := iframeTargets(t, rs.WSURL); len(oop) < 3 {
+		t.Fatalf("no OOPIFs in the recorded browser: %v", oop)
+	}
+	u.click("", "#topin")
+	u.typeText("top")
+	frames := []struct{ name, path string }{
+		{"same", "iframe#same"},
+		{"cross", "iframe#cross"},
+		{"nest", `iframe#nest >> iframe[name="inner"]`},
+		{"late", "iframe#late"},
+		{"deep", "iframe#deep"},
+		{"sd", "iframe#sd"},
+	}
+	for _, f := range frames {
+		u.click(f.path, "#name")
+		u.typeText("r-" + f.name)
+		u.click(f.path, "#go")
+	}
+	// Pick mode inside a cross-origin frame: the click adds 提取文本 and
+	// does not reach the page.
+	before := site.hit("cross")
+	a.RecordPickMode("extract")
+	time.Sleep(400 * time.Millisecond)
+	u.click("iframe#cross", "#go")
+	time.Sleep(300 * time.Millisecond)
+	if site.hit("cross") != before {
+		t.Errorf("a click in pick mode reached the iframe page")
+	}
+	final := a.StopRecording()
+	f := a.FinalizeRecording(final.Steps, RecordFinalizeOptions{MergeFills: true})
+	got := []string{}
+	for _, s := range f.Steps {
+		line := s.Type + " " + strings.SplitN(s.Params["selector"], " || ", 2)[0]
+		if s.Params["frame"] != "" {
+			line = "[" + s.Params["frame"] + "] " + line
+		}
+		if s.Type == stFill {
+			line += " = " + s.Params["text"]
+		}
+		if s.Type == stGoto {
+			line += s.Params["url"]
+		}
+		got = append(got, line)
+	}
+	t.Logf("recorded:\n  %s", strings.Join(got, "\n  "))
+	want := []string{"goto " + site.top.URL + "/", "fill #topin = top"}
+	for _, fr := range frames {
+		want = append(want, "["+fr.path+"] fill #name = r-"+fr.name, "["+fr.path+"] click #go")
+	}
+	want = append(want, "[iframe#cross] extract_text #go")
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("recorded steps differ; want:\n  %s", strings.Join(want, "\n  "))
+	}
+	for _, fr := range frames[:5] {
+		if h := site.hit(fr.name); h != "r-"+fr.name+"|true" {
+			t.Errorf("recording session: %s hit %q", fr.name, h)
+		}
+	}
+
+	// ---- replay on a fresh profile ----
+	site.mu.Lock()
+	site.hits = map[string]string{}
+	site.mu.Unlock()
+	wf, err := a.SaveWorkflow(Workflow{Name: "框架录制回放", Steps: f.Steps})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if issues := a.ValidateWorkflow(wf); len(issues) != 0 {
+		t.Fatalf("issues: %+v", issues)
+	}
+	runID, err := a.RunWorkflowWith(wf.ID, []string{playPID}, RpaRunOptions{Concurrency: 1, AutoStart: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := waitRun(t, a, runID, 90*time.Second)
+	if run.Status != "ok" {
+		for _, s := range run.Targets[0].Steps {
+			t.Logf("  %s %s %s", s.Type, s.Status, s.Log)
+		}
+		t.Fatalf("replay %s: %s", run.Status, run.Targets[0].Error)
+	}
+	for _, fr := range frames[:5] {
+		site.waitHit(t, fr.name, "r-"+fr.name+"|true")
+	}
+	if v := run.Targets[0].Vars["text1"]; !strings.Contains(v, "提交") {
+		t.Errorf("extracted text in replay = %q", v)
+	}
+}

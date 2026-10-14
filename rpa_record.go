@@ -70,6 +70,7 @@ type recEvent struct {
 	A     string   `json:"a,omitempty"`
 	Text  string   `json:"text,omitempty"`
 	TS    int64    `json:"ts,omitempty"`
+	Frame string   `json:"frame,omitempty"` // frame path, set by Go (rpa_record_frames.go)
 }
 
 // ---------- core: events → steps (no CDP, unit tested) ----------
@@ -218,10 +219,11 @@ func (c *recCore) push(tab string, ts int64, s RpaStep) {
 	c.steps = append(c.steps, s)
 }
 
-// coalesce updates the last step when it is of type t on sel in the current tab.
-func (c *recCore) coalesce(tab, t, sel string, ts int64, fn func(*RpaStep)) bool {
+// coalesce updates the last step when it is of type t on sel in the current
+// tab and the same frame.
+func (c *recCore) coalesce(tab, frame, t, sel string, ts int64, fn func(*RpaStep)) bool {
 	i := c.lastReal()
-	if i < 0 || tab != c.cur || c.steps[i].Type != t || c.steps[i].Params["selector"] != sel {
+	if i < 0 || tab != c.cur || c.steps[i].Type != t || c.steps[i].Params["selector"] != sel || c.steps[i].Params["frame"] != frame {
 		return false
 	}
 	c.trimThink()
@@ -235,6 +237,13 @@ func (c *recCore) coalesce(tab, t, sel string, ts int64, fn func(*RpaStep)) bool
 // event handles one captured action from tab.
 func (c *recCore) event(tab string, ev recEvent) {
 	ti := c.tab(tab)
+	// Steps from inside an iframe carry its frame path.
+	recStep := func(t string, kv ...string) RpaStep {
+		if ev.Frame != "" {
+			kv = append(kv, "frame", ev.Frame)
+		}
+		return recStep(t, kv...)
+	}
 	switch ev.T {
 	case "down":
 		e := ev
@@ -242,13 +251,13 @@ func (c *recCore) event(tab string, ev recEvent) {
 	case "click":
 		ti.down = nil
 		if ev.Dyn {
-			if i := c.lastReal(); i < 0 || c.steps[i].Type != stWaitFor || c.steps[i].Params["selector"] != ev.Sel {
+			if i := c.lastReal(); i < 0 || c.steps[i].Type != stWaitFor || c.steps[i].Params["selector"] != ev.Sel || c.steps[i].Params["frame"] != ev.Frame {
 				c.push(tab, ev.TS, recStep(stWaitFor, "selector", ev.Sel, "state", "visible", "timeout", "10000"))
 			}
 		}
 		c.push(tab, ev.TS, recStep(stClick, "selector", ev.Sel))
 	case "dbl":
-		if !c.coalesce(tab, stClick, ev.Sel, ev.TS, func(s *RpaStep) { s.Params["double"] = "true" }) {
+		if !c.coalesce(tab, ev.Frame, stClick, ev.Sel, ev.TS, func(s *RpaStep) { s.Params["double"] = "true" }) {
 			c.push(tab, ev.TS, recStep(stClick, "selector", ev.Sel, "double", "true"))
 		}
 	case "input", "select":
@@ -257,7 +266,7 @@ func (c *recCore) event(tab string, ev recEvent) {
 			text = "{{password}}"
 		}
 		var id string
-		if !c.coalesce(tab, stFill, ev.Sel, ev.TS, func(s *RpaStep) { s.Params["text"] = text; id = s.ID }) {
+		if !c.coalesce(tab, ev.Frame, stFill, ev.Sel, ev.TS, func(s *RpaStep) { s.Params["text"] = text; id = s.ID }) {
 			s := recStep(stFill, "selector", ev.Sel, "text", text)
 			id = s.ID
 			c.push(tab, ev.TS, s)
@@ -293,7 +302,7 @@ func (c *recCore) event(tab string, ev recEvent) {
 		}
 		x, y := strconv.Itoa(ev.X), strconv.Itoa(ev.Y)
 		i := c.lastReal()
-		if i >= 0 && tab == c.cur && c.steps[i].Type == stScroll && c.steps[i].Params["mode"] == "to" {
+		if i >= 0 && tab == c.cur && c.steps[i].Type == stScroll && c.steps[i].Params["mode"] == "to" && c.steps[i].Params["frame"] == ev.Frame {
 			c.trimThink()
 			c.steps[i].Params["x"], c.steps[i].Params["y"] = x, y
 			c.lastTS = ev.TS
@@ -323,7 +332,7 @@ func (c *recCore) navigated(tab, url string, renderer bool, reason string, ts in
 		// The click that caused it may have died with the old document
 		// (only its pointerdown made it out): record the click from that.
 		if d := ti.down; d != nil && ts-d.TS < 3000 && (reason == "anchorClick" || strings.HasPrefix(reason, "formSubmission")) {
-			c.event(tab, recEvent{T: "click", Sel: d.Sel, Dyn: d.Dyn, TS: d.TS})
+			c.event(tab, recEvent{T: "click", Sel: d.Sel, Dyn: d.Dyn, TS: d.TS, Frame: d.Frame})
 		}
 		ti.down = nil
 		return
@@ -429,7 +438,7 @@ func finalizeRecording(steps []RpaStep, o RecordFinalizeOptions, secrets map[str
 				if barrier[out[j].Type] {
 					break
 				}
-				if out[j].Type == stFill && out[j].Params["selector"] == out[i].Params["selector"] {
+				if out[j].Type == stFill && out[j].Params["selector"] == out[i].Params["selector"] && out[j].Params["frame"] == out[i].Params["frame"] {
 					keep[i] = false
 					break
 				}
@@ -480,6 +489,7 @@ type recTabConn struct {
 	reason string
 	dialog bool
 	stall  time.Time
+	pickSeq int // last pick-mode change delivered to this tab's top document
 }
 
 type recorder struct {
@@ -505,7 +515,12 @@ type recorder struct {
 	emit      func(RecordState)
 	release   func()
 	dirty     bool
-	pick      string // pick mode to hand to the current tab: extract | assert | none
+	pickMode  string // current click-to-pick mode in the current tab: extract | assert | ""
+	pickSeq   int    // bumped on every pick-mode change; frames catch up on drain
+	ws        string
+	frames    map[string]*recFrame // iframe id → frame (rpa_record_frames.go)
+	fsess     map[string]string    // iframe target session → tab
+	treeDirty map[string]bool      // sessions whose frame tree changed
 }
 
 // recHolder owns the single active recording (one browser at a time).
@@ -549,6 +564,7 @@ func (h *recHolderT) Start(pid, pname, ws string, opts RecordOptions, release fu
 		return RecordState{}, fmt.Errorf("已经在录制另一个环境，请先停止")
 	}
 	r := &recorder{core: newRecCore(opts), pid: pid, pname: pname, tabs: map[string]*recTabConn{}, bySid: map[string]string{},
+		frames: map[string]*recFrame{}, fsess: map[string]string{}, treeDirty: map[string]bool{},
 		evq: make(chan cdpMsg, 4096), stopc: make(chan struct{}), done: make(chan struct{}), started: time.Now(), release: release}
 	r.emit = func(st RecordState) {
 		h.mu.Lock()
@@ -579,7 +595,7 @@ func (h *recHolderT) Start(pid, pname, ws string, opts RecordOptions, release fu
 func (r *recorder) onEvent(m cdpMsg) {
 	switch m.Method {
 	case "Target.attachedToTarget", "Target.detachedFromTarget", "Page.frameRequestedNavigation", "Page.frameNavigated",
-		"Page.javascriptDialogOpening", "Page.javascriptDialogClosed":
+		"Page.javascriptDialogOpening", "Page.javascriptDialogClosed", "Page.frameAttached", "Page.frameDetached":
 		select {
 		case r.evq <- m:
 		default:
@@ -592,7 +608,7 @@ func (r *recorder) attach(ws string) error {
 	if err != nil {
 		return fmt.Errorf("连接浏览器失败：%v", err)
 	}
-	r.conn = c
+	r.conn, r.ws = c, ws
 	d := &cdpDriver{conn: c}
 	pages, err := d.pages()
 	for i := 0; err == nil && i < 15 && len(pages) == 0; i++ {
@@ -722,8 +738,9 @@ func (r *recorder) handle(m cdpMsg) {
 			TargetInfo struct {
 				TargetID string `json:"targetId"`
 				Type     string `json:"type"`
-				URL      string `json:"url"`
+ 				URL      string `json:"url"`
 				OpenerID string `json:"openerId"`
+				Parent   string `json:"parentFrameId"`
 			} `json:"targetInfo"`
 			Waiting bool `json:"waitingForDebugger"`
 		}
@@ -731,6 +748,10 @@ func (r *recorder) handle(m cdpMsg) {
 			return
 		}
 		ti := p.TargetInfo
+		if ti.Type == "iframe" && m.Session != "" {
+			r.setupFrameSession(m.Session, p.SessionID, ti.TargetID, ti.Parent, p.Waiting)
+			return
+		}
 		if ti.Type != "page" || strings.HasPrefix(ti.URL, "devtools://") {
 			if p.Waiting {
 				_, _ = r.call(p.SessionID, "Runtime.runIfWaitingForDebugger", nil)
@@ -745,6 +766,9 @@ func (r *recorder) handle(m cdpMsg) {
 		r.mu.Unlock()
 		_, _ = r.call(p.SessionID, "Page.enable", nil)
 		_, _ = r.call(p.SessionID, "Page.addScriptToEvaluateOnNewDocument", map[string]any{"source": recCaptureScript(o.Overlay, o.Scroll), "worldName": recWorld, "runImmediately": true})
+		// Out-of-process iframes of this tab attach to us as "iframe" targets.
+		_, _ = r.call(p.SessionID, "Target.setAutoAttach", map[string]any{"autoAttach": true, "waitForDebuggerOnStart": true, "flatten": true})
+		guardUA(r.conn, r.ws, p.SessionID)
 		if p.Waiting {
 			_, _ = r.call(p.SessionID, "Runtime.runIfWaitingForDebugger", nil)
 		}
@@ -756,6 +780,7 @@ func (r *recorder) handle(m cdpMsg) {
 		r.core.addTab(ti.TargetID, ti.URL, opener)
 		r.tabs[ti.TargetID] = &recTabConn{id: ti.TargetID, sid: p.SessionID}
 		r.bySid[p.SessionID] = ti.TargetID
+		r.treeDirty[p.SessionID] = true
 		r.dirty = true
 		r.mu.Unlock()
 	case "Target.detachedFromTarget":
@@ -764,6 +789,10 @@ func (r *recorder) handle(m cdpMsg) {
 			TargetID  string `json:"targetId"`
 		}
 		_ = json.Unmarshal(m.Params, &p)
+		if r.fsess[p.SessionID] != "" {
+			r.sessionGone(p.SessionID)
+			return
+		}
 		tid := r.bySid[p.SessionID]
 		if tid == "" {
 			return
@@ -808,11 +837,20 @@ func (r *recorder) handle(m cdpMsg) {
 			} `json:"frame"`
 		}
 		_ = json.Unmarshal(m.Params, &p)
+		if p.Frame.ParentID != "" || r.fsess[m.Session] != "" {
+			// An iframe loaded a new document: its world is new.
+			if f := r.frames[p.Frame.ID]; f != nil {
+				f.ctx = 0
+			}
+			r.treeDirty[m.Session] = true
+			return
+		}
 		tc := r.tabs[r.bySid[m.Session]]
-		if tc == nil || p.Frame.ParentID != "" {
+		if tc == nil {
 			return
 		}
 		tc.ctx = 0
+		r.treeDirty[m.Session] = true
 		renderer := !tc.reqAt.IsZero() && time.Since(tc.reqAt) < 10*time.Second
 		reason := tc.reason
 		tc.reqAt, tc.reason = time.Time{}, ""
@@ -825,8 +863,22 @@ func (r *recorder) handle(m cdpMsg) {
 		}
 		r.dirty = true
 		r.mu.Unlock()
+	case "Page.frameAttached":
+		r.treeDirty[m.Session] = true
+	case "Page.frameDetached":
+		var p struct {
+			FrameID string `json:"frameId"`
+			Reason  string `json:"reason"`
+		}
+		_ = json.Unmarshal(m.Params, &p)
+		// "swap" = the frame moves to another process (it re-attaches as an
+		// iframe target); anything else means it is gone.
+		if f := r.frames[p.FrameID]; f != nil && (p.Reason != "swap" || !f.oopif) {
+			r.frameGone(p.FrameID)
+		}
+		r.treeDirty[m.Session] = true
 	case "Page.javascriptDialogOpening", "Page.javascriptDialogClosed":
-		if tc := r.tabs[r.bySid[m.Session]]; tc != nil {
+		if tc := r.tabs[r.tabOfSession(m.Session)]; tc != nil {
 			tc.dialog = m.Method == "Page.javascriptDialogOpening"
 		}
 	}
@@ -839,6 +891,7 @@ func (r *recorder) drainAll() {
 	for _, id := range ids {
 		if tc := r.tabs[id]; tc != nil {
 			r.drain(tc)
+			r.drainFrames(tc)
 		}
 	}
 }
@@ -875,8 +928,12 @@ func (r *recorder) drain(tc *recTabConn) {
 	n := countSteps(r.core.steps)
 	paused, o := r.paused, r.core.opts
 	mode := ""
-	if r.pick != "" && tc.id == r.core.cur {
-		mode, r.pick = r.pick, ""
+	if tc.id == r.core.cur && tc.pickSeq != r.pickSeq {
+		mode = r.pickMode
+		if mode == "" {
+			mode = "none"
+		}
+		tc.pickSeq = r.pickSeq
 	}
 	r.mu.Unlock()
 	t0 := time.Now()
@@ -903,23 +960,7 @@ func (r *recorder) drain(tc *recTabConn) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, ev := range evs {
-		if ev.T == "ctl" {
-			switch ev.A {
-			case "pause":
-				r.setPaused(true)
-			case "resume":
-				r.setPaused(false)
-			case "stop":
-				r.stoppedBy = "overlay"
-			}
-			r.dirty = true
-			continue
-		}
-		if r.paused {
-			continue
-		}
-		r.core.event(tc.id, ev)
-		r.dirty = true
+		r.applyEvent(tc, ev, &tc.pickSeq)
 	}
 }
 
@@ -946,6 +987,15 @@ func (r *recorder) shutdownPages() {
 		if tc.ctx != 0 && !tc.dialog {
 			_, _ = r.call(tc.sid, "Runtime.evaluate", map[string]any{"expression": recDestroyExpr, "contextId": tc.ctx})
 		}
+	}
+	for _, f := range r.frames {
+		if f.ctx != 0 {
+			_, _ = r.call(f.sid, "Runtime.evaluate", map[string]any{"expression": recDestroyExpr, "contextId": f.ctx})
+		}
+	}
+	for sid := range r.fsess {
+		_, _ = r.call(sid, "Target.setAutoAttach", map[string]any{"autoAttach": false, "waitForDebuggerOnStart": false, "flatten": true})
+		_, _ = r.call("", "Target.detachFromTarget", map[string]any{"sessionId": sid})
 	}
 	_, _ = r.call("", "Target.setAutoAttach", map[string]any{"autoAttach": false, "waitForDebuggerOnStart": false, "flatten": true})
 	for sid := range r.bySid {
@@ -1003,7 +1053,11 @@ func (r *recorder) Pause(p bool) RecordState {
 func (r *recorder) Pick(mode string) RecordState {
 	r.mu.Lock()
 	if r.active && (mode == "extract" || mode == "assert" || mode == "none") {
-		r.pick = mode
+		if mode == "none" {
+			mode = ""
+		}
+		r.pickMode = mode
+		r.pickSeq++
 	}
 	r.mu.Unlock()
 	return r.state()

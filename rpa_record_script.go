@@ -6,19 +6,21 @@ import "fmt"
 // Page scripts share the DOM with it but never see its globals.
 const recWorld = "__gb_rec"
 
-// recCaptureScript is injected into every page of the recorded browser (main
-// frame only) in recWorld. It queues user actions in window.__gbRec.q; Go
+// recCaptureScript is injected into every frame of the recorded browser
+// (top documents, same-process iframes and out-of-process iframes) in
+// recWorld. The control bar lives in the top document only; iframes get just
+// the pick-mode highlight. It queues user actions in window.__gbRec.q; Go
 // drains the queue with Runtime.evaluate (no Runtime.enable, no bindings).
 // overlay/scroll are the initial options; drain() keeps them in sync.
 func recCaptureScript(overlay, scroll bool) string {
 	return fmt.Sprintf(`(() => {
-if (window.top !== window) return;
+const SUB = window.top !== window;
 // The initial about:blank of a new tab hands its window to the first real
 // page, listeners and all: install again per document and silence the old.
 const old = window.__gbRec;
 if (old && old.doc === document && !old.dead) return;
 if (old) { old.dead = true; try { old.unmount(); } catch (e) {} }
-const R = window.__gbRec = { doc: document, q: [], n: 0, paused: false, overlay: %t, scroll: %t, mode: '', dead: false, lastEnter: 0, lastLabel: null, lastUser: 0 };
+const R = window.__gbRec = { sub: SUB, doc: document, q: [], n: 0, paused: false, overlay: %t, scroll: %t, mode: '', dead: false, lastEnter: 0, lastLabel: null, lastUser: 0 };
 const send = (o) => { if (R.dead || R.q.length >= 3000) return; o.ts = Date.now(); R.q.push(o); };
 const HTML = 'http://www.w3.org/1999/xhtml';
 let host = null, root = null, ui = {};
@@ -159,7 +161,7 @@ addEventListener('change', (e) => {
 addEventListener('keydown', (e) => {
   if (!e.isTrusted || inOverlay(e)) return;
   user();
-  if (R.mode && e.key === 'Escape') { R.mode = ''; paint(); return; }
+  if (R.mode && e.key === 'Escape') { R.mode = ''; paint(); send({ t: 'mode', a: '' }); return; }
   if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;
   const el = e.target;
   if (el instanceof Element && el.tagName === 'INPUT' && textField(el)) { R.lastEnter = Date.now(); send({ t: 'enter', sel: S(el) }); }
@@ -194,7 +196,7 @@ const paint = () => {
   ui.pause.textContent = R.paused ? '继续' : '暂停';
   ui.ex.classList.toggle('on', R.mode === 'extract'); ui.as.classList.toggle('on', R.mode === 'assert');
   if (!R.mode && ui.hl) ui.hl.style.display = 'none';
-  if (R.mode) toast(R.mode === 'extract' ? '点击要提取文字的元素（Esc 取消）' : '点击要等待出现的元素（Esc 取消）');
+  if (R.mode && !SUB) toast(R.mode === 'extract' ? '点击要提取文字的元素（Esc 取消）' : '点击要等待出现的元素（Esc 取消）');
 };
 const mount = () => {
   if (host && host.isConnected) return;
@@ -208,11 +210,12 @@ const mount = () => {
     ui.ex = mk('button', '', '提取文本'); ui.as = mk('button', '', '等待元素'); ui.pause = mk('button', '', '暂停'); ui.stop = mk('button', 'stop', '停止');
     ui.ex.title = '点击页面元素，把它的文字保存到变量'; ui.as.title = '点击页面元素，回放时等它出现再继续';
     ui.bar.append(mk('span', 'dot'), ui.lbl, ui.n, ui.ex, ui.as, mk('span', 'sep'), ui.pause, ui.stop);
-    ui.ex.onclick = () => { R.mode = R.mode === 'extract' ? '' : 'extract'; paint(); };
-    ui.as.onclick = () => { R.mode = R.mode === 'assert' ? '' : 'assert'; paint(); };
+    ui.ex.onclick = () => { R.mode = R.mode === 'extract' ? '' : 'extract'; paint(); send({ t: 'mode', a: R.mode }); };
+    ui.as.onclick = () => { R.mode = R.mode === 'assert' ? '' : 'assert'; paint(); send({ t: 'mode', a: R.mode }); };
     ui.pause.onclick = () => send({ t: 'ctl', a: R.paused ? 'resume' : 'pause' });
     ui.stop.onclick = () => send({ t: 'ctl', a: 'stop' });
-    root.append(ui.hl, ui.fl, ui.tip, ui.bar);
+    root.append(ui.hl, ui.fl);
+    if (!SUB) root.append(ui.tip, ui.bar);
   }
   (document.documentElement || document).appendChild(host);
   paint();
@@ -224,7 +227,8 @@ R.drain = (n, paused, overlay, scroll, mode) => {
   if (R.n !== n || R.paused !== paused) { R.n = n; R.paused = paused; paint(); }
   R.scroll = scroll;
   if (overlay !== R.overlay) { R.overlay = overlay; if (!overlay) { R.mode = ''; unmount(); } }
-  if (R.overlay && document.documentElement) mount();
+  // iframes only show the pick highlight, so they host it only while picking.
+  if (R.overlay && document.documentElement && (!SUB || R.mode)) mount(); else if (SUB) unmount();
   const q = R.q; R.q = [];
   return q.length ? JSON.stringify(q) : '';
 };
