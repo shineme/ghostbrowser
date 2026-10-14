@@ -400,6 +400,15 @@ func (s *Store) ImportCookies(id, format, data string) (CookieImportResult, erro
 	if len(list) == 0 {
 		return CookieImportResult{}, fmt.Errorf("没有可导入的 Cookie（每条需要 name 和 domain）")
 	}
+	if n, live, err := firefoxSetLiveCookies(id, list); live { // Firefox kernel (WebDriver BiDi)
+		if err != nil {
+			return CookieImportResult{}, fmt.Errorf("写入浏览器失败：%w", err)
+		}
+		if r := getFirefoxRun(id); r != nil {
+			_ = firefoxSnapshotSession(r.dir, r.device, r.bidi)
+		}
+		return CookieImportResult{Count: n, Skipped: skipped + len(list) - n, Mode: "live"}, nil
+	}
 	if rs, ok := runReg.get(id); ok && strings.HasPrefix(rs.WSURL, "ws") {
 		n, err := liveSetCookies(rs.WSURL, list)
 		if err != nil {
@@ -421,6 +430,12 @@ func (s *Store) ExportCookies(id, format string) (string, error) {
 		return "", fmt.Errorf("环境不存在")
 	}
 	var list []Cookie
+	if l, live, err := firefoxLiveCookies(id); live { // Firefox kernel (WebDriver BiDi)
+		if err != nil {
+			return "", fmt.Errorf("读取浏览器 Cookie 失败：%w", err)
+		}
+		return formatCookies(format, l)
+	}
 	if rs, ok := runReg.get(id); ok && strings.HasPrefix(rs.WSURL, "ws") {
 		l, err := liveGetCookies(rs.WSURL)
 		if err != nil {

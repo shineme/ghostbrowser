@@ -77,6 +77,13 @@ func (a *App) saveProfile(p Profile) (Profile, error) {
 	if p.Fingerprint.UserAgent == "" && needsOpenKernel(p.Fingerprint) {
 		p.Fingerprint = GenerateTyped(p.Fingerprint.DeviceType, p.Fingerprint.OS, a.ChromiumMajor())
 	}
+	if p.useFirefox() { // Firefox kernel: desktop only, no native template
+		p.Native = nil
+		if t := p.Fingerprint.DeviceType; t != "" && t != "desktop" && t != "laptop" {
+			p.Fingerprint.DeviceType = "desktop"
+		}
+		return a.store.PutProfile(p), nil
+	}
 	chromium := p.useChromium()
 	if chromium {
 		if needsOpenKernel(p.Fingerprint) {
@@ -1218,3 +1225,43 @@ func (a *App) PendingCloudDeletes() int { return len(a.store.pendingDeletes()) }
 
 // RetryCloudDeletes sends queued cloud deletes now; returns how many are left.
 func (a *App) RetryCloudDeletes() int { return a.syncer().RetryPendingDeletes() }
+
+// ---- firefox kernel ----
+
+// FirefoxInfo reports the Firefox the Firefox kernel launches (setting or auto-detected) and its version.
+func (a *App) FirefoxInfo() FirefoxInfo { return firefoxInfo(a.store.GetSettings()) }
+
+// PickFirefox opens a file dialog for firefox.exe.
+func (a *App) PickFirefox() string {
+	dir := filepath.Dir(firefoxKernel(a.store.GetSettings()))
+	f, _ := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{Title: "选择 firefox.exe", DefaultDirectory: dir,
+		Filters: []wruntime.FileFilter{{DisplayName: "Firefox (firefox.exe)", Pattern: "firefox.exe;*.exe"}}})
+	return f
+}
+
+// FirefoxInstallStatus returns the one-click Firefox install state.
+func (a *App) FirefoxInstallStatus() KernelProgress { return ffInst.snapshot() }
+
+// FirefoxInstallStart downloads the official Firefox ("esr" | "release") from
+// Mozilla over HTTPS, checks it against Mozilla's SHA512SUMS, installs it into
+// AppData and makes it the Firefox kernel. Progress: "firefox:install" events.
+func (a *App) FirefoxInstallStart(channel string) (KernelProgress, error) {
+	if ffInst.emit == nil {
+		ffInst.emit = func(p KernelProgress) {
+			if a.ctx != nil {
+				wruntime.EventsEmit(a.ctx, "firefox:install", p)
+			}
+		}
+	}
+	return firefoxInstallStart(channel, func(path string) {
+		st := a.store.GetSettings()
+		st.FirefoxPath = path
+		a.store.PutSettings(st)
+	})
+}
+
+// FirefoxInstallCancel stops the running Firefox install.
+func (a *App) FirefoxInstallCancel() { ffInst.Cancel() }
+
+// FirefoxDownloadPage opens Mozilla's official download page in the system browser.
+func (a *App) FirefoxDownloadPage() { wruntime.BrowserOpenURL(a.ctx, firefoxDownloadPage) }

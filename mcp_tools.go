@@ -154,6 +154,9 @@ func (c *mcpCore) envView(p Profile) mcpEnv {
 	if p.useChromium() {
 		e.Kernel = "chromium"
 	}
+	if p.useFirefox() {
+		e.Kernel = "firefox"
+	}
 	if p.InlineProxy != nil && p.InlineProxy.Host != "" {
 		e.ProxyName = fmt.Sprintf("inline %s:%d", p.InlineProxy.Host, p.InlineProxy.Port)
 	} else if p.ProxyID != "" {

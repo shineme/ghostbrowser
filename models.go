@@ -63,6 +63,13 @@ type Fingerprint struct {
 	BlockVideo                bool   `json:"blockVideo,omitempty"`
 	BlockSound                bool   `json:"blockSound,omitempty"`
 	StartupParameters         string `json:"startupParameters,omitempty"`
+
+	// ---- Firefox kernel (Profile.Kernel == "firefox") ----
+	FFStrict         bool `json:"ffStrict,omitempty"`         // privacy.resistFingerprinting (excludes language follows IP)
+	FFFontVisibility int  `json:"ffFontVisibility,omitempty"` // 0 = Firefox default, 1 base system fonts, 2 + language packs, 3 all
+	FFWebGLOff       bool `json:"ffWebglOff,omitempty"`       // webgl.disabled
+	FFUAOverride     bool `json:"ffUaOverride,omitempty"`     // write general.useragent.override = UserAgent
+	GPC              bool `json:"gpc,omitempty"`              // Global Privacy Control
 }
 
 type Proxy struct {
@@ -129,7 +136,12 @@ func needsOpenKernel(fp Fingerprint) bool {
 	return fp.OS != "windows" || !(t == "" || t == "desktop" || t == "laptop")
 }
 
-func (p *Profile) useChromium() bool { return p.Kernel == "chromium" || needsOpenKernel(p.Fingerprint) }
+func (p *Profile) useChromium() bool {
+	return p.Kernel != "firefox" && (p.Kernel == "chromium" || needsOpenKernel(p.Fingerprint))
+}
+
+// useFirefox: the Firefox kernel (desktop only).
+func (p *Profile) useFirefox() bool { return p.Kernel == "firefox" }
 
 type Settings struct {
 	UndetectableKit string `json:"undetectableKit"`
@@ -161,6 +173,8 @@ type Settings struct {
 	Syncer *SyncerPrefs `json:"syncer,omitempty"`
 	// cloud delete: last choice in the delete dialog ("local" | "cloud").
 	DeleteMode string `json:"deleteMode,omitempty"`
+	// Firefox kernel: firefox.exe ("" = auto-detect).
+	FirefoxPath string `json:"firefoxPath,omitempty"`
 }
 
 type RunState struct {
@@ -169,4 +183,7 @@ type RunState struct {
 	DebugPort int    `json:"debugPort"`
 	WSURL     string `json:"wsUrl"`
 	Started   int64  `json:"startedAt"`
+	// Firefox kernel: WSURL stays empty (no CDP); BiDiURL is its WebDriver BiDi endpoint.
+	Kernel  string `json:"kernel,omitempty"`
+	BiDiURL string `json:"bidiUrl,omitempty"`
 }
