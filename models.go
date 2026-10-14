@@ -137,6 +137,12 @@ type Profile struct {
 	TrashedAt         int64  `json:"trashedAt,omitempty"`
 	TrashDir          string `json:"trashDir,omitempty"`          // where the data folder is kept
 	TrashCloudDeleted bool   `json:"trashCloudDeleted,omitempty"` // the cloud copy was deleted too
+	// profile sharing: set on a copy received from another user on the same
+	// sync server (read-only config, never pushed to this user's cloud).
+	ShareID      string `json:"shareId,omitempty"`
+	SharedFrom   string `json:"sharedFrom,omitempty"`
+	ShareMode    string `json:"shareMode,omitempty"` // session | config
+	ShareExpires int64  `json:"shareExpires,omitempty"`
 }
 
 // needsOpenKernel: the custom kernel only carries Windows desktop templates.

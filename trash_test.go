@@ -228,3 +228,23 @@ func TestTrashSync(t *testing.T) {
 		t.Fatal("restored-as-new profile not uploaded")
 	}
 }
+
+// A received share (someone else's data) is deleted outright, never kept in
+// the recycle bin where it could be restored after the share ended.
+func TestTrashSkipsSharedCopy(t *testing.T) {
+	s := trashStore(t)
+	a := &autoSyncer{s: s, busy: map[string]bool{}}
+	p := mkProfileWithData(t, s, "共享-店铺")
+	p.ShareID = "a1b2c3d4e5f6a7b8c9d0e1f2"
+	s.PutProfile(p)
+	res := a.DeleteProfiles("ui", []string{p.ID}, "local", false)
+	if len(res) != 1 || !res[0].Local || inList(s, p.ID) {
+		t.Fatalf("delete %+v", res)
+	}
+	if len(s.ListTrash()) != 0 {
+		t.Fatal("shared copy must not go to the recycle bin")
+	}
+	if _, e := os.Stat(s.ProfileDir(p.ID)); !os.IsNotExist(e) {
+		t.Fatal("shared copy data must be removed")
+	}
+}

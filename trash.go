@@ -90,6 +90,13 @@ func (s *Store) TrashProfile(id string, cloudDeleted bool) bool {
 		s.mu.Unlock()
 		return false
 	}
+	if p.ShareID != "" {
+		// A copy received through sharing is someone else's data and cannot be
+		// restored once the share ends: delete it outright, never keep it here.
+		s.mu.Unlock()
+		s.DeleteProfile(id)
+		return true
+	}
 	root := filepath.Join(s.Settings.ProfilesDir, trashDirName)
 	src := filepath.Join(s.Settings.ProfilesDir, id)
 	s.mu.Unlock()

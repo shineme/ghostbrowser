@@ -37,6 +37,26 @@
 - 每个令牌至少 32 个字符
 - 用户各自在客户端填自己的令牌和自己的同步密码
 
+- 也可以用环境变量 `GHOST_SYNC_USERS="令牌1=名字1;令牌2=名字2"` 添加用户（与 `GHOST_USERS` 合并）
+- 主令牌的用户名是 `owner`，环境分享时用这个名字指定接收者
+
+## 设备管理、恢复密钥与环境分享
+
+新版服务端额外提供（`ping` 的 `features` 里出现 `devices`、`keys`、`directory`、`shares`），旧客户端不受影响：
+
+- **设备管理**：每个请求带 `X-Device-ID`，服务端在用户目录的 `devices.json` 里登记设备。账号的第一台设备自动批准；客户端可开启「新设备需要批准」（默认值见 `GHOST_REQUIRE_APPROVAL`）。被吊销的设备所有请求返回 403；待批准的设备除 `ping`、`devices/self` 外返回 403。注意：持有令牌的人可以换一个设备 ID 重新登记，所以设备丢失时请开启「新设备需要批准」或更换令牌
+- **恢复密钥**：客户端把加密后的“密钥包”存到用户目录的 `keys.json`（`GET/PUT /api/keys`，PUT 带读到的 `epoch` 做并发保护）。密钥包里只有用同步密码和恢复密钥分别加密的主密钥，服务器无法解开
+- **环境分享**：共享目录 `_shared/`（在主数据目录下）保存公钥目录 `directory.json`、分享记录 `shares.json` 和加密分享包 `shares/*.gbe`。分享包用接收者公钥加密，服务端只校验格式（GBE1）。分享结束（撤销 / 拒绝 / 退出 / 过期）后分享包立即删除，记录 30 天后清理。单个分享包上限 `GHOST_SHARE_MAX_MB`（默认 256，环境变量 `GHOST_SYNC_SHARE_MAX_MB`），同时受 `post_max_size` 和 nginx `client_max_body_size` 限制；包含登录状态的大环境建议调大，或改用「仅配置」分享
+
+## 管理页（只看元数据）
+
+在文件顶部把 `GHOST_ADMIN_TOKEN` 设为 32 位以上的随机字符串（或环境变量 `GHOST_SYNC_ADMIN_TOKEN`），然后用浏览器打开 `https://你的域名/ghostsync.php?r=/admin`，输入管理令牌即可（登录状态 12 小时，Cookie 为 HttpOnly + SameSite=Strict）。
+
+- 显示：用户、存储占用、云端环境数、设备数（已批准 / 待批准 / 已吊销）、是否设置密钥、分享数、最近活动、最近 40 条错误（4xx/5xx，不含 404）
+- 从不显示：令牌、密码、密钥、环境名称或任何解密内容
+- 输错管理令牌同样计入防暴力破解
+- 未设置管理令牌时管理页处于关闭状态
+
 ## 防暴力破解
 
 同一个 IP 在 15 分钟内输错令牌 10 次（`GHOST_MAX_FAILS`），这个 IP 会被封 15 分钟，返回 429。计数保存在 `.ghostsync-guard` 目录。
@@ -94,3 +114,4 @@
   - `chunks/missing`、`chunks`（批量上传）、`chunks/get`（批量下载）
 - `ping` 会返回 `features`（含 `tombstones`）、`tombstoneDays`、`keepVersions`、`maxBody`、`usedBytes`、`freeBytes`
 - 版本冲突返回 412
+- 设备、密钥、公钥目录、分享接口见上文「设备管理、恢复密钥与环境分享」，完整列表在 `ghostsync.php` 文件头注释和项目 README 的 Sync server contract

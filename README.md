@@ -168,6 +168,11 @@ go test -run TestEnsureAgainstRealShop -v .
 - 显示服务器信息：已用空间、磁盘剩余、单次上传上限、保留的版本数
 - 同步地址使用 http 时会提示：令牌会明文传输，建议改用 https
 - 旧版服务端（不支持增量）会自动改用整包同步
+- **账号安全与分享**（「云同步 → 设备与密钥 / 分享」，需要新版 `ghostsync.php`）：
+  - 设备管理：每台电脑首次连接时自动登记（名称、系统、首次 / 最近连接）；可开启「新设备需要批准」，批准前该设备只能看到自己的状态；**吊销**后它的所有请求被服务器拒绝（HTTP 403，中文提示），可重新批准或移除记录。不能吊销当前设备
+  - 恢复密钥：云端数据改用「账号主密钥」加密，同步密码和恢复密钥（8 组 4 位，只显示一次，可复制 / 下载 .txt，必须勾选「我已保存」）都能解开它。新设备可用同步密码或恢复密钥解锁；修改同步密码、轮换恢复密钥都只重新包装主密钥，不重新加密云端数据。**老账号无缝迁移**：已有云端数据时主密钥就是当前同步密码（会先用它解密云端全局数据核对），旧数据保持可读
+  - 环境分享：把环境分享给同一服务器上的其他用户，可选「仅配置」或「包含登录状态」、有效期 1 / 7 / 30 / 90 天或自定义（≤366 天）和备注。分享包在本机用对方的 X25519 公钥加密，服务器只存密文。对方在「收到的」里接受 / 拒绝，接受后环境列表出现带「共享 · 发送者」标记的只读环境（不能编辑、复制、上传到对方自己的云端，浏览数据只留在对方本机）；发送者可撤销 / 续期，接收者可退出。撤销、过期或退出后，对方本机副本在下次分享同步（每 5 分钟、打开分享页、启动该环境前）自动删除
+  - 管理页：`ghostsync.php?r=/admin`（设置 `GHOST_ADMIN_TOKEN` 后启用）只显示用户、存储、设备数、分享数和最近错误，从不显示令牌、密码或任何解密内容
 
 ### 界面
 - 左侧边栏可收起为图标栏（侧栏底部按钮或 Ctrl+B），悬停显示名称和快捷键，数量变为圆点；状态会记住，下次启动保持；系统开启「减少动态效果」时不播放动画
@@ -213,6 +218,20 @@ Deletion leaves a tombstone: the index entry keeps id/name, its version is bumpe
 deleted/deletedAt/deletedBy are set. The plain list (old clients) omits tombstones; ping lists the "tombstones" feature and tombstoneDays.
 Blob/history GET, lock and commit on a tombstone return 410, so a stale device cannot resurrect it; an explicit lock {"restore": true}
 re-creates it. Tombstones are purged after GHOST_TOMBSTONE_DAYS (default 90, env GHOST_SYNC_TOMBSTONE_DAYS).
+Accounts & security (ping features "devices", "keys", "directory", "shares"; every route is additive, old clients are unaffected):
+    GET  /api/devices/self                  {id, status: approved|pending|revoked, requireApproval} (allowed while pending)
+    GET  /api/devices                       {self, requireApproval, devices:[{id,name,os,firstSeen,lastSeen,status}]}
+    POST /api/devices/{id}/approve|revoke|forget ; POST /api/devices/settings {"requireApproval": bool}
+    GET  /api/keys | PUT /api/keys          {epoch, envelope}; PUT {"envelope": {...}, "epoch": <read epoch>} is compare-and-swap (409)
+    GET  /api/directory | GET /api/directory/{user} | POST /api/directory {"pub": base64 X25519}
+    GET  /api/shares                        {self, out:[...], in:[... with wrap]}  (statuses pending|accepted|declined|revoked|left|expired)
+    POST /api/shares                        {to, name, mode: session|config, note, days 1..366, os, wrap:{eph,nonce,ct}} -> {id, expiresAt}
+    PUT|GET /api/shares/{sid}/blob          GBE1 share package (PUT by sender once; GET by recipient while pending/accepted, else 410)
+    POST /api/shares/{sid}/accept|decline|leave (recipient), revoke|extend {"days"} (sender)
+Every request registers X-Device-ID (+ X-Device-Name, X-Device-OS); revoked devices get 403 everywhere, pending ones everywhere except ping and devices/self.
+Key envelope (opaque to the server): v=1, kid, legacy, pw = AES-256-GCM(PBKDF2-SHA256(password, salt, 200000), M), rk = AES-256-GCM(HKDF-SHA256(160-bit recovery key, salt), M),
+id = X25519 private key sealed with HKDF(M, "GBK1 identity"). M replaces the password as the input of the existing per-blob PBKDF2 (GBE1) and is M = password bytes for accounts
+that already had cloud data, so nothing is re-encrypted. Share key K (32 random bytes) is wrapped with ephemeral X25519 -> HKDF-SHA256 -> AES-256-GCM; the package is encrypt(zip, K).
 Chunk IDs are HMAC-SHA256(per-profile chunk key, plaintext); chunk bodies are "GBC1" + nonce + AES-256-GCM(deflate(data)). The chunk key lives only inside the encrypted manifest.
 
 ### Session snapshot (ghost-session.json) schema

@@ -121,7 +121,11 @@ func (s *Store) PushGlobal() (err error) {
 	}
 	payload := s.globalPayload()
 	raw, _ := json.Marshal(payload)
-	enc, e := encrypt(raw, []byte(st.SyncPassword))
+	secret, e := s.dataSecret()
+	if e != nil {
+		return e
+	}
+	enc, e := encrypt(raw, secret)
 	if e != nil {
 		return e
 	}
@@ -201,7 +205,11 @@ func (s *Store) PullGlobal() (err error) {
 	if e != nil {
 		return e
 	}
-	raw, e := decrypt(enc, []byte(st.SyncPassword))
+	secret, e := s.dataSecret()
+	if e != nil {
+		return e
+	}
+	raw, e := decrypt(enc, secret)
 	if e != nil {
 		return fmt.Errorf("decrypt failed; check the sync password: %w", e)
 	}
