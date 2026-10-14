@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -19,6 +20,8 @@ type Store struct {
 	Proxies  map[string]*Proxy
 	Settings Settings
 	Global   GlobalSyncState
+
+	bodyCap atomic.Int64 // largest upload body the sync server accepted after a 413
 }
 
 func newID() string {

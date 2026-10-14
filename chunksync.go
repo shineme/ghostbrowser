@@ -436,21 +436,56 @@ func (s *Store) buildChunked(dir, root string, archived *Profile, password strin
 			return nil, nil, 0, nil, fmt.Errorf("服务器单次上传上限只有 %d MB，至少需要 8 MB：请调大 PHP post_max_size / upload_max_filesize", si.MaxBody>>20)
 		}
 	}
+	if learned := s.bodyCap.Load(); learned > 0 && learned < limit {
+		limit = learned
+	}
 	var sent int64
-	var frame []byte
-	flush := func() error {
-		if len(frame) == 0 {
-			return nil
+	type piece struct {
+		id   string
+		blob []byte
+	}
+	// send uploads a batch; on a 413 it halves the batch and remembers the
+	// smaller size, so a front-end limit we cannot query is found by itself.
+	var send func(ps []piece) error
+	send = func(ps []piece) error {
+		var frame []byte
+		for _, p := range ps {
+			var hdr [4]byte
+			binary.BigEndian.PutUint32(hdr[:], uint32(len(p.blob)))
+			frame = append(frame, p.id...)
+			frame = append(frame, hdr[:]...)
+			frame = append(frame, p.blob...)
 		}
-		if e := c.putChunks(frame); e != nil {
+		e := c.putChunks(frame)
+		if e != nil && isTooLarge(e) && len(ps) > 1 {
+			if l := int64(len(frame)) / 2; l < limit {
+				limit = l
+				s.bodyCap.Store(l)
+			}
+			h := len(ps) / 2
+			if e = send(ps[:h]); e != nil {
+				return e
+			}
+			return send(ps[h:])
+		}
+		if e != nil {
 			return e
 		}
 		sent += int64(len(frame))
-		frame = frame[:0]
 		if progress != nil {
 			progress(sent, total)
 		}
 		return nil
+	}
+	var batch []piece
+	var batchLen int64
+	flush := func() error {
+		if len(batch) == 0 {
+			return nil
+		}
+		e := send(batch)
+		batch, batchLen = nil, 0
+		return e
 	}
 	for _, id := range miss {
 		l, ok := locs[id]
@@ -468,16 +503,13 @@ func (s *Store) buildChunked(dir, root string, archived *Profile, password strin
 		if e != nil {
 			return nil, nil, 0, nil, e
 		}
-		if int64(len(frame)+68+len(blob)) > limit {
+		if batchLen+int64(68+len(blob)) > limit {
 			if e = flush(); e != nil {
 				return nil, nil, 0, nil, e
 			}
 		}
-		var hdr [4]byte
-		binary.BigEndian.PutUint32(hdr[:], uint32(len(blob)))
-		frame = append(frame, id...)
-		frame = append(frame, hdr[:]...)
-		frame = append(frame, blob...)
+		batch = append(batch, piece{id, blob})
+		batchLen += int64(68 + len(blob))
 	}
 	if e = flush(); e != nil {
 		return nil, nil, 0, nil, e

@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -250,6 +251,23 @@ func syncURL(base, path string) string {
 	return u.String()
 }
 
+// errBodyTooLarge is a 413. front=true means the rejection came from a web
+// server or CDN in front of PHP (nginx client_max_body_size, Cloudflare),
+// which ping's maxBody cannot see.
+type errBodyTooLarge struct{ front bool }
+
+func (e errBodyTooLarge) Error() string {
+	if e.front {
+		return "上传被服务器前端拒绝（HTTP 413，请求体过大）：这是 nginx/CDN 的上传上限，不是 PHP 的。请在站点 nginx 配置里加 client_max_body_size 64m;（宝塔：网站→设置→配置文件，或 软件商店→Nginx→设置→性能调整），然后重载 nginx"
+	}
+	return "上传超过 ghostsync.php 的单次上限（HTTP 413）：请调大 PHP post_max_size / upload_max_filesize，或 GHOST_SYNC_MAX_BLOB_MB"
+}
+
+func isTooLarge(e error) bool {
+	var t errBodyTooLarge
+	return errors.As(e, &t)
+}
+
 func syncStatus(resp *http.Response) error {
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return nil
@@ -257,6 +275,9 @@ func syncStatus(resp *http.Response) error {
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
 	if resp.StatusCode == 412 {
 		return fmt.Errorf("conflict: a newer cloud version exists; pull first")
+	}
+	if resp.StatusCode == 413 {
+		return errBodyTooLarge{front: !strings.Contains(string(b), `"error"`)}
 	}
 	return fmt.Errorf("sync HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
 }
