@@ -563,6 +563,17 @@ const rpaMock = {
       { id: 'f1', type: 'goto', params: { url: 'https://adsmanager.facebook.com/', timeout: '30000' } },
       { id: 'f2', type: 'extract_text', params: { selector: '', var: 'balance', attr: '', trim: 'true' } },
     ] },
+    { id: 'wf-pay', name: '独立站结账 · 信用卡 iframe', description: '在支付网关的跨域 iframe 里填写卡号并提交，读取支付结果', vars: { card: '4242 4242 4242 4242' }, createdAt: RNOW - 86400, updatedAt: RNOW - 3600, lastRunAt: 0, lastStatus: '', lastRunId: '', runCount: 0, steps: [
+      { id: 'p1', type: 'goto', params: { url: 'https://shop.example.com/checkout', timeout: '30000' } },
+      { id: 'p2', type: 'fill', params: { selector: '#email', text: '{{email}}', clear: 'true' } },
+      { id: 'p3', type: 'switch_frame', params: { mode: 'frame', frame: 'iframe[title="Secure card payment input frame"]', timeout: '10000' } },
+      { id: 'p4', type: 'fill', params: { selector: 'input[name=cardnumber]', text: '{{card}}', clear: 'true' } },
+      { id: 'p5', type: 'fill', params: { selector: 'input[name=exp-date]', text: '12 / 29', clear: 'true' } },
+      { id: 'p6', type: 'switch_frame', params: { mode: 'top' } },
+      { id: 'p7', type: 'click', params: { selector: 'button#submit', double: 'false' } },
+      { id: 'p8', type: 'wait_for', params: { selector: 'text:支付成功', state: 'visible', timeout: '20000', frame: 'iframe#pay-result >> iframe[name=status]' } },
+      { id: 'p9', type: 'extract_text', params: { selector: '.order-no', var: 'order_no', attr: '', trim: 'true', frame: 'iframe#pay-result' } },
+    ] },
   ] as any[],
   runs: [] as any[],
 };
@@ -579,7 +590,7 @@ function rpaValidate(w: any): any[] {
   const out: any[] = [];
   if (!String(w.name || '').trim()) out.push({ stepId: '', message: '流程名称不能为空' });
   if (!(w.steps || []).length) out.push({ stepId: '', message: '流程里还没有步骤' });
-  const names: Record<string, string> = { goto: '打开网址', click: '点击', fill: '输入文本', extract_text: '提取文本', execute_js: '执行 JS', upload: '上传文件', select_tab: '切换标签页', condition: '条件判断', loop: '循环' };
+  const names: Record<string, string> = { goto: '打开网址', click: '点击', fill: '输入文本', extract_text: '提取文本', execute_js: '执行 JS', upload: '上传文件', select_tab: '切换标签页', condition: '条件判断', loop: '循环', switch_frame: '切换框架' };
   const go = (l: any[], inLoop: boolean) => (l || []).forEach(s => {
     const p = s.params || {}; const lab = s.name || names[s.type] || s.type;
     const req = (k: string, what: string) => { if (!String(p[k] || '').trim()) out.push({ stepId: s.id, message: `${lab}：缺少${what}` }); };
@@ -592,6 +603,7 @@ function rpaValidate(w: any): any[] {
       if (s.type === 'execute_js') req('code', '代码');
       if (s.type === 'upload') { req('selector', '选择器'); req('files', '文件路径'); }
       if (s.type === 'select_tab') req('index', '标签页序号');
+      if (s.type === 'switch_frame' && p.mode === 'frame') req('frame', 'iframe 选择器');
       const cond = () => p.kind === 'js' ? req('code', '判断代码') : (p.kind === 'equals' || p.kind === 'contains') ? req('left', '比较值') : req('selector', '选择器');
       if (s.type === 'condition') cond();
       if (s.type === 'loop' && p.mode === 'while') cond();

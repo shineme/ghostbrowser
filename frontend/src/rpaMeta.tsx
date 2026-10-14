@@ -43,6 +43,7 @@ export const RI = {
   history: (p: IP) => <svg {...S(p)}><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5M12 7v5l3 2" /></svg>,
   dot: (p: IP) => <svg {...S(p)}><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" /></svg>,
   braces: (p: IP) => <svg {...S(p)}><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1M16 3h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2 2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1" /></svg>,
+  frame: (p: IP) => <svg {...S(p)}><rect x="2.5" y="3.5" width="19" height="17" rx="2.5" /><path d="M2.5 8h19" /><rect x="7" y="11" width="10" height="6.5" rx="1.2" /></svg>,
   image: (p: IP) => <svg {...S(p)}><rect x="3" y="3" width="18" height="18" rx="2.5" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" /></svg>,
 };
 
@@ -55,6 +56,9 @@ export type FieldDef = {
 };
 export type StepDef = { type: string; label: string; group: string; icon: keyof typeof RI; desc: string; defaults: Record<string, string>; fields: FieldDef[]; container?: boolean };
 
+// Optional iframe locator shared by every element step (rpa_frames.go).
+const FRAME_HINT = '元素在 iframe 里时填写；留空 = 主页面或「切换框架」进入的框架。多层用 >> 连接，从主页面写起，如 iframe#pay >> iframe[name=card]';
+const frameField = (show?: (p: Record<string, string>) => boolean): FieldDef => ({ k: 'frame', label: '所在框架', kind: 'selector', ph: '留空 = 主页面', hint: FRAME_HINT, show });
 const condShow = (...kinds: string[]) => (p: Record<string, string>) => kinds.includes(p.kind || 'exists');
 const COND_KIND: [string, string][] = [['exists', '元素存在'], ['not_exists', '元素不存在'], ['contains', '文本包含'], ['equals', '值相等'], ['js', 'JS 结果为真']];
 const condFields = (gate: (p: Record<string, string>) => boolean = () => true): FieldDef[] => [
@@ -63,6 +67,7 @@ const condFields = (gate: (p: Record<string, string>) => boolean = () => true): 
   { k: 'left', label: '左值', kind: 'text', ph: '{{price}}', half: true, show: p => gate(p) && condShow('equals', 'contains')(p) },
   { k: 'right', label: '右值', kind: 'text', ph: '$19.99', half: true, show: p => gate(p) && condShow('equals', 'contains')(p) },
   { k: 'code', label: '判断代码', kind: 'code', ph: "return document.querySelectorAll('.item').length > 0;", hint: '返回真值即视为成立；可用 vars.名字 读取变量', show: p => gate(p) && condShow('js')(p) },
+  frameField(p => gate(p) && condShow('exists', 'not_exists', 'js')(p)),
 ];
 
 export const STEP_DEFS: StepDef[] = [
@@ -79,38 +84,52 @@ export const STEP_DEFS: StepDef[] = [
     { k: 'selector', label: '元素选择器', kind: 'selector', show: p => p.mode === 'el' },
     { k: 'x', label: '水平 X', kind: 'num', unit: 'px', half: true, show: p => p.mode !== 'el' },
     { k: 'y', label: '垂直 Y', kind: 'num', unit: 'px', half: true, show: p => p.mode !== 'el' },
+    frameField(),
   ] },
-  { type: 'screenshot', label: '截图', group: '页面', icon: 'camera', desc: '保存当前页面截图', defaults: { fullPage: 'false', saveAs: '' }, fields: [
-    { k: 'fullPage', label: '截取整页', kind: 'bool', hint: '关闭则只截可视区域' },
+  { type: 'screenshot', label: '截图', group: '页面', icon: 'camera', desc: '保存当前页面或某个元素的截图', defaults: { fullPage: 'false', saveAs: '' }, fields: [
+    { k: 'selector', label: '只截元素', kind: 'selector', ph: '留空 = 截页面', hint: '填写后只截这个元素（可在 iframe 里）' },
+    { k: 'fullPage', label: '截取整页', kind: 'bool', hint: '关闭则只截可视区域', show: p => !p.selector },
     { k: 'saveAs', label: '保存路径到变量', kind: 'var', ph: '可选，如 shot' },
+    frameField(p => !!p.selector),
+  ] },
+  { type: 'switch_frame', label: '切换框架', group: '页面', icon: 'frame', desc: '进入 iframe 或返回主页面，后续步骤都在其中执行', defaults: { mode: 'frame', frame: '', timeout: '10000' }, fields: [
+    { k: 'mode', label: '切换到', kind: 'seg', opts: [['frame', '进入框架'], ['parent', '上一级'], ['top', '返回主页面']] },
+    { k: 'frame', label: 'iframe 选择器', kind: 'selector', ph: 'iframe#pay', hint: '相对当前所在框架；多层用 >> 连接，如 iframe#pay >> iframe[name=card]。可用 {{变量}}', show: p => (p.mode || 'frame') === 'frame' },
+    { k: 'timeout', label: '等待框架出现', kind: 'num', unit: 'ms', half: true, show: p => (p.mode || 'frame') === 'frame' },
   ] },
   { type: 'click', label: '点击', group: '元素', icon: 'pointer', desc: '点击按钮、链接等元素', defaults: { selector: '', double: 'false' }, fields: [
     { k: 'selector', label: '元素选择器', kind: 'selector' },
     { k: 'double', label: '双击', kind: 'bool' },
+    frameField(),
   ] },
   { type: 'fill', label: '输入文本', group: '元素', icon: 'type', desc: '在输入框里填写内容', defaults: { selector: '', text: '', clear: 'true' }, fields: [
     { k: 'selector', label: '输入框选择器', kind: 'selector' },
     { k: 'text', label: '内容', kind: 'area', ph: '支持 {{变量}}' },
     { k: 'clear', label: '先清空原内容', kind: 'bool' },
+    frameField(),
   ] },
   { type: 'wait_for', label: '等待元素', group: '元素', icon: 'hourglass', desc: '等元素出现、可见或消失', defaults: { selector: '', state: 'visible', timeout: '10000' }, fields: [
     { k: 'selector', label: '元素选择器', kind: 'selector', hint: '留空则单纯等待「超时」时长' },
     { k: 'state', label: '等到', kind: 'seg', opts: [['visible', '可见'], ['present', '存在'], ['hidden', '消失']] },
     { k: 'timeout', label: '超时', kind: 'num', unit: 'ms', half: true },
+    frameField(p => !!p.selector),
   ] },
   { type: 'upload', label: '上传文件', group: '元素', icon: 'upload', desc: '给文件输入框选择本地文件', defaults: { selector: 'input[type=file]', files: '' }, fields: [
     { k: 'selector', label: '文件输入框', kind: 'selector' },
     { k: 'files', label: '文件路径', kind: 'area', ph: 'C:\\图片\\主图.jpg\nC:\\图片\\细节.jpg', hint: '每行一个，也可用 ; 分隔' },
+    frameField(),
   ] },
   { type: 'extract_text', label: '提取文本', group: '数据', icon: 'quote', desc: '读取元素文本或属性存入变量', defaults: { selector: '', var: '', attr: '', trim: 'true' }, fields: [
     { k: 'selector', label: '元素选择器', kind: 'selector' },
     { k: 'var', label: '保存到变量', kind: 'var', ph: 'price', half: true },
     { k: 'attr', label: '读取', kind: 'text', ph: '文本（留空）/ value / html / href', half: true },
     { k: 'trim', label: '去掉首尾空白', kind: 'bool' },
+    frameField(),
   ] },
   { type: 'execute_js', label: '执行 JS', group: '数据', icon: 'code', desc: '在页面里运行一段脚本', defaults: { code: 'return document.title;', saveAs: '' }, fields: [
     { k: 'code', label: '代码', kind: 'code', hint: '函数体或表达式；变量通过 vars 对象读取，不做 {{}} 替换' },
     { k: 'saveAs', label: '返回值存入变量', kind: 'var', ph: '可选', half: true },
+    frameField(),
   ] },
   { type: 'select_tab', label: '切换标签页', group: '标签页', icon: 'tabs', desc: '切到第 N 个标签页', defaults: { index: '1' }, fields: [
     { k: 'index', label: '标签页序号', kind: 'num', half: true, hint: '从 1 开始，按打开顺序' },
@@ -148,6 +167,13 @@ const condText = (p: Record<string, string>) => {
 };
 /** One-line description shown on a step row. */
 export const summary = (s: RStep): string => {
+  const base = summaryBase(s);
+  const fr = s.type !== 'switch_frame' ? (s.params?.frame || '').trim() : '';
+  return fr ? `⧉ ${frameText(fr)} › ${base}` : base;
+};
+/** A frame path as shown in summaries: "iframe#pay › iframe[name=card]". */
+export const frameText = (f: string) => f.replace(/^frame:/, '').split('>>').map(x => x.trim()).filter(Boolean).join(' › ');
+const summaryBase = (s: RStep): string => {
   // Recorded selectors carry a fallback ("css || xpath:…"); show the primary one.
   const p = s.params?.selector?.includes(' || ') ? { ...s.params, selector: s.params.selector.split(' || ')[0] } : (s.params || {});
   switch (s.type) {
@@ -159,13 +185,14 @@ export const summary = (s: RStep): string => {
     case 'scroll': return p.mode === 'el' ? `到 ${p.selector || '…'}` : `${p.mode === 'to' ? '到' : '滚动'} (${p.x || 0}, ${p.y || 0})`;
     case 'extract_text': return `${p.selector || '…'} → {{${p.var || '?'}}}`;
     case 'execute_js': return clip((p.code || '').replace(/\s+/g, ' '), 52) + (p.saveAs ? ` → {{${p.saveAs}}}` : '');
-    case 'screenshot': return (p.fullPage === 'true' ? '整页' : '可视区域') + (p.saveAs ? ` → {{${p.saveAs}}}` : '');
+    case 'screenshot': return (p.selector ? `元素 ${p.selector}` : p.fullPage === 'true' ? '整页' : '可视区域') + (p.saveAs ? ` → {{${p.saveAs}}}` : '');
     case 'upload': return `${(p.files || '').split(/[\n;|]/).filter(x => x.trim()).length} 个文件 → ${p.selector || '…'}`;
     case 'select_tab': return `第 ${p.index || 1} 个标签页`;
     case 'close_tab': return p.index && p.index !== '0' ? `第 ${p.index} 个标签页` : '当前标签页';
     case 'condition': return `如果 ${condText(p)}`;
     case 'loop': return (p.mode === 'while' ? `当 ${condText(p)}` : `重复 ${p.count || 0} 次`) + ` · {{${p.indexVar || 'loop_index'}}}`;
     case 'break_loop': return '结束当前循环';
+    case 'switch_frame': return p.mode === 'top' ? '返回主页面' : p.mode === 'parent' ? '返回上一级框架' : `进入 ${p.frame ? frameText(p.frame) : '…'}`;
   }
   return '';
 };

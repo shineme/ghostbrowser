@@ -204,7 +204,7 @@ const Live: React.FC<{ st: RecState; setSt: (s: RecState) => void; onStop: () =>
 };
 
 const RecRow: React.FC<{ s: RStep; n: number; isNew: boolean; editing: boolean; onEdit: () => void; onDel: () => void; onSave: (s: RStep) => void }> = ({ s, n, isNew, editing, onEdit, onDel, onSave }) => {
-  const keys = EDIT_KEYS[s.type] || [];
+  const keys: [string, string][] = [...(EDIT_KEYS[s.type] || []), ...(s.params?.frame ? [['frame', '所在框架'] as [string, string]] : [])];
   const [draft, setDraft] = useState<Record<string, string>>(s.params);
   useEffect(() => { if (editing) setDraft(s.params); }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
   const pw = s.params?._rec === 'password';

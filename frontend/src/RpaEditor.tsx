@@ -255,7 +255,7 @@ const AddMenu: React.FC<{ onPick: (t: string) => void; onClose: () => void; hint
 
 // ---------------- inspector ----------------
 // Backend issue text "<step>：缺少<what>" → the param it refers to.
-const MISSING: Record<string, string> = { 网址: 'url', 选择器: 'selector', 变量名: 'var', 代码: 'code', 判断代码: 'code', 文件路径: 'files', 标签页序号: 'index', 比较值: 'left' };
+const MISSING: Record<string, string> = { 网址: 'url', 选择器: 'selector', 变量名: 'var', 代码: 'code', 判断代码: 'code', 文件路径: 'files', 标签页序号: 'index', 比较值: 'left', 'iframe 选择器': 'frame' };
 const Inspector: React.FC<{ s: RStep; issues: RIssue[]; vars: string[]; onPatch: (fn: (s: RStep) => RStep) => void; onVar: (v: string) => void; onFocusField: (k: string, el: any) => void; onDelete: () => void }> = ({ s, issues, vars, onPatch, onVar, onFocusField, onDelete }) => {
   const def = DEF[s.type];
   const p = s.params || {};

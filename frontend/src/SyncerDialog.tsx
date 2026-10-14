@@ -262,7 +262,7 @@ export const SyncerDialog: React.FC<{ running: Profile[]; st: SyncerState; onClo
         <div className="dbody sd-body">
           {!st.running && <div className="sd-note"><span className="sd-note-ic">{G.info(16)}</span><div>
             <b>主控窗口的网页操作、地址跳转与标签页新建、切换、关闭会复制到受控窗口。</b>
-            <span>所有操作仅在本机通过调试协议传递，不经过任何服务器；输入法候选、文件选择框与 iframe 内的操作不会同步。</span>
+            <span>所有操作仅在本机通过调试协议传递，不经过任何服务器；iframe（含跨域）内的点击与输入会同步到受控窗口的对应 iframe；输入法候选与文件选择框不会同步。</span>
           </div></div>}
 
           <div className="sd-pickers">

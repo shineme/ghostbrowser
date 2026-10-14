@@ -339,7 +339,18 @@ func (e *rpaEngine) exec(ctx context.Context, s *RpaStep) (log, shot string, err
 	case stSelectTab, stCloseTab:
 		e.frame = nil // a frame path belongs to the tab it was set in
 	case stSwitchFrame:
-		next := switchFramePath(e.frame, e.p(s, "frame"))
+		target := e.p(s, "frame")
+		switch s.Params["mode"] {
+		case "top":
+			target = ""
+		case "parent":
+			target = "parent"
+		case "frame":
+			if strings.TrimSpace(target) == "" {
+				return "", "", fmt.Errorf("缺少 iframe 选择器")
+			}
+		}
+		next := switchFramePath(e.frame, target)
 		if len(next) > 0 {
 			f, ok := e.d.(rpaFramer)
 			if !ok {
@@ -695,6 +706,10 @@ func validateWorkflow(wf Workflow) []RpaIssue {
 				req("files", "文件路径")
 			case stSelectTab:
 				req("index", "标签页序号")
+			case stSwitchFrame:
+				if s.Params["mode"] == "frame" {
+					req("frame", "iframe 选择器")
+				}
 			case stCondition:
 				switch s.Params["kind"] {
 				case "js":
