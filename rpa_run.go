@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -336,16 +337,92 @@ func newCDPDriver(ws string) (rpaDriverCloser, error) {
 		_ = json.Unmarshal(r, &t)
 		pages = []string{t.TargetID}
 	}
-	// Target.getTargets lists the most recently opened tab first.
-	for i := len(pages) - 1; i >= 0; i-- {
-		d.order = append(d.order, pages[i])
-	}
+	// Target.getTargets returns pages in no useful order (verified against
+	// Chromium 155: it is neither creation nor activation order), so number
+	// the tabs that are already open by when their document loaded and
+	// attach to the one the user is looking at. Tabs opened later are
+	// appended in creation order from Target.targetCreated events.
+	cur := d.orderExisting(pages)
 	_, _ = conn.call("", "Target.setDiscoverTargets", map[string]any{"discover": true})
-	if err := d.attach(pages[0]); err != nil {
+	if err := d.attach(cur); err != nil {
 		conn.c.Close()
 		return nil, err
 	}
 	return d, nil
+}
+
+// orderExisting fills d.order with pages sorted by performance.timeOrigin
+// (oldest first) and returns the tab to drive: the focused one, else a
+// visible one, else the newest. Pages that cannot be probed keep their
+// getTargets position after the probed ones.
+func (d *cdpDriver) orderExisting(pages []string) string {
+	type info struct {
+		id      string
+		origin  float64
+		visible bool
+		focus   bool
+		ok      bool
+	}
+	infos := make([]info, len(pages))
+	for i, id := range pages {
+		infos[i] = info{id: id}
+		r, err := d.conn.call("", "Target.attachToTarget", map[string]any{"targetId": id, "flatten": true})
+		if err != nil {
+			continue
+		}
+		var at struct{ SessionID string }
+		_ = json.Unmarshal(r, &at)
+		ev, err := d.conn.call(at.SessionID, "Runtime.evaluate", map[string]any{"expression": "[performance.timeOrigin, document.visibilityState === 'visible', document.hasFocus()]", "returnByValue": true, "timeout": 2000})
+		_, _ = d.conn.call("", "Target.detachFromTarget", map[string]any{"sessionId": at.SessionID})
+		if err != nil {
+			continue
+		}
+		var v struct {
+			Result struct {
+				Value []json.RawMessage `json:"value"`
+			} `json:"result"`
+		}
+		if json.Unmarshal(ev, &v) != nil || len(v.Result.Value) != 3 {
+			continue
+		}
+		_ = json.Unmarshal(v.Result.Value[0], &infos[i].origin)
+		_ = json.Unmarshal(v.Result.Value[1], &infos[i].visible)
+		_ = json.Unmarshal(v.Result.Value[2], &infos[i].focus)
+		infos[i].ok = true
+	}
+	sort.SliceStable(infos, func(a, b int) bool {
+		if infos[a].ok != infos[b].ok {
+			return infos[a].ok
+		}
+		return infos[a].ok && infos[a].origin < infos[b].origin
+	})
+	d.order = d.order[:0]
+	for _, in := range infos {
+		d.order = append(d.order, in.id)
+	}
+	pick := -1
+	for i := len(infos) - 1; i >= 0 && pick < 0; i-- {
+		if infos[i].focus {
+			pick = i
+		}
+	}
+	for i := len(infos) - 1; i >= 0 && pick < 0; i-- {
+		if infos[i].visible {
+			pick = i
+		}
+	}
+	if pick < 0 {
+		for i := len(infos) - 1; i >= 0; i-- {
+			if infos[i].ok {
+				pick = i
+				break
+			}
+		}
+	}
+	if pick < 0 {
+		pick = len(infos) - 1
+	}
+	return infos[pick].id
 }
 
 func (d *cdpDriver) Close() {
@@ -734,9 +811,9 @@ func (d *cdpDriver) tabs() []string {
 				known[id] = true
 			}
 		}
-		for i := len(live) - 1; i >= 0; i-- {
-			if !known[live[i]] {
-				kept = append(kept, live[i])
+		for _, id := range live {
+			if !known[id] {
+				kept = append(kept, id)
 			}
 		}
 		d.order = kept
