@@ -34,14 +34,32 @@ func findChrome() string {
 	switch runtime.GOOS {
 	case "windows":
 		pf, pf86, local := os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)"), os.Getenv("LOCALAPPDATA")
-		cands = []string{
-			filepath.Join(local, "Chromium/Application/chrome.exe"),
-			filepath.Join(pf, "Chromium/Application/chrome.exe"),
-			filepath.Join(pf, "Google/Chrome/Application/chrome.exe"),
-			filepath.Join(pf86, "Google/Chrome/Application/chrome.exe"),
-			filepath.Join(local, "Google/Chrome/Application/chrome.exe"),
-			filepath.Join(pf86, "Microsoft/Edge/Application/msedge.exe"),
-			filepath.Join(pf, "Microsoft/Edge/Application/msedge.exe"),
+		if w := os.Getenv("ProgramW6432"); w != "" {
+			pf = w // a 32-bit process sees "Program Files (x86)" as ProgramFiles
+		}
+		// Unbranded first: Chromium / ungoogled-chromium installers use the
+		// Chromium folder and keep --load-extension; branded Chrome 137+
+		// ignores it, Edge brands its UA-CH as Microsoft Edge.
+		for _, base := range []string{local, pf, pf86} {
+			if base != "" {
+				cands = append(cands, filepath.Join(base, "Chromium/Application/chrome.exe"))
+			}
+		}
+		for _, base := range []string{pf, pf86, local} {
+			if base != "" {
+				cands = append(cands, filepath.Join(base, "Google/Chrome/Application/chrome.exe"))
+			}
+		}
+		if local != "" {
+			cands = append(cands,
+				filepath.Join(local, "Google/Chrome Beta/Application/chrome.exe"),
+				filepath.Join(local, "Google/Chrome Dev/Application/chrome.exe"),
+				filepath.Join(local, "Google/Chrome SxS/Application/chrome.exe"))
+		}
+		for _, base := range []string{pf86, pf, local} {
+			if base != "" {
+				cands = append(cands, filepath.Join(base, "Microsoft/Edge/Application/msedge.exe"))
+			}
 		}
 	case "darwin":
 		cands = []string{

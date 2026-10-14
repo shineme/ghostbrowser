@@ -90,6 +90,10 @@ func TestKernelCompatLevels(t *testing.T) {
 		{"/x/chrome", "115.0.5790.170", "warn"},
 		{"/x/chrome", "155.0.8059.39", "ok"},
 		{`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`, "141.0.3537.57", "warn"},
+		{`C:\Program Files\Google\Chrome\Application\chrome.exe`, "141.0.7390.122", "warn"}, // branded: no --load-extension
+		{`C:\Program Files\Google\Chrome\Application\chrome.exe`, "136.0.7103.113", "ok"},
+		{`D:\cft\chrome-win64\chrome.exe`, "141.0.7390.122", "ok"}, // Chrome for Testing keeps it
+		{`C:\Users\a\AppData\Local\Chromium\Application\chrome.exe`, "155.0.8059.39", "ok"},
 	} {
 		k := kernelCompatFor(c.path, c.full)
 		if k.Level != c.level || (c.level != "ok" && k.Message == "") {

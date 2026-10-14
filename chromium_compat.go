@@ -184,10 +184,23 @@ func kernelCompatFor(path, full string) KernelCompat {
 	case k.Major < chromiumRecommendedMajor:
 		k.Level, k.Message = "warn", fmt.Sprintf("Chrome %d 可以使用，但新标签页会多加载一次以注入指纹，建议升级到 %d 以上", k.Major, chromiumRecommendedMajor)
 	}
+	if k.Level == "ok" && isBrandedChrome(path) && k.Major >= 137 {
+		k.Level, k.Message = "warn", fmt.Sprintf("品牌版 Google Chrome %d 不再支持命令行加载扩展：扩展中心分配的扩展不会生效（指纹不受影响）。需要扩展请改用 Chromium 或 Chrome for Testing", k.Major)
+	}
 	if k.Level == "ok" && strings.Contains(lower, "msedge") {
 		k.Level, k.Message = "warn", "Edge 内核的 UA-CH 品牌是 Microsoft Edge，与 Chrome 指纹模板不一致，推荐 Chromium 或 Chrome for Testing"
 	}
 	return k
+}
+
+// isBrandedChrome: Google Chrome stable/beta/dev/canary, not Chrome for
+// Testing (which keeps --load-extension) and not Chromium builds.
+func isBrandedChrome(path string) bool {
+	p := strings.ToLower(strings.ReplaceAll(path, `\`, "/"))
+	if strings.Contains(p, "for testing") || strings.Contains(p, "chrome-win") || strings.Contains(p, "chrome-linux") || strings.Contains(p, "chrome-mac") {
+		return false
+	}
+	return strings.Contains(p, "/google/chrome") || strings.Contains(p, "google chrome.app") || strings.HasSuffix(p, "/google-chrome") || strings.Contains(p, "/opt/google/chrome")
 }
 
 // kernelUnsupportedErr is the launch-time guard (nil when the version is
