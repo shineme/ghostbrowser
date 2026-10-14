@@ -166,6 +166,10 @@ export function ExportWorkflow(arg1) {
   return window['go']['main']['App']['ExportWorkflow'](arg1);
 }
 
+export function FinalizeRecording(arg1, arg2) {
+  return window['go']['main']['App']['FinalizeRecording'](arg1, arg2);
+}
+
 export function FingerprintCatalog(arg1) {
   return window['go']['main']['App']['FingerprintCatalog'](arg1);
 }
@@ -326,6 +330,10 @@ export function ParseProxy(arg1) {
   return window['go']['main']['App']['ParseProxy'](arg1);
 }
 
+export function PauseRecording() {
+  return window['go']['main']['App']['PauseRecording']();
+}
+
 export function PendingSyncPrompt() {
   return window['go']['main']['App']['PendingSyncPrompt']();
 }
@@ -358,6 +366,18 @@ export function PushProfiles(arg1) {
   return window['go']['main']['App']['PushProfiles'](arg1);
 }
 
+export function RecordRemoveStep(arg1) {
+  return window['go']['main']['App']['RecordRemoveStep'](arg1);
+}
+
+export function RecordUpdateStep(arg1) {
+  return window['go']['main']['App']['RecordUpdateStep'](arg1);
+}
+
+export function RecordingState() {
+  return window['go']['main']['App']['RecordingState']();
+}
+
 export function RemoveExtension(arg1) {
   return window['go']['main']['App']['RemoveExtension'](arg1);
 }
@@ -368,6 +388,10 @@ export function ResetAPIKey() {
 
 export function RestoreVersion(arg1, arg2) {
   return window['go']['main']['App']['RestoreVersion'](arg1, arg2);
+}
+
+export function ResumeRecording() {
+  return window['go']['main']['App']['ResumeRecording']();
 }
 
 export function RetrySync(arg1, arg2) {
@@ -442,6 +466,10 @@ export function StartProfile(arg1) {
   return window['go']['main']['App']['StartProfile'](arg1);
 }
 
+export function StartRecording(arg1, arg2) {
+  return window['go']['main']['App']['StartRecording'](arg1, arg2);
+}
+
 export function StartSync(arg1, arg2) {
   return window['go']['main']['App']['StartSync'](arg1, arg2);
 }
@@ -456,6 +484,10 @@ export function StopProfile(arg1) {
 
 export function StopProfiles(arg1) {
   return window['go']['main']['App']['StopProfiles'](arg1);
+}
+
+export function StopRecording() {
+  return window['go']['main']['App']['StopRecording']();
 }
 
 export function StopSync() {

@@ -1084,6 +1084,172 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class RecordFinalizeOptions {
+	    keepDelays: boolean;
+	    mergeFills: boolean;
+	    passwordVar: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new RecordFinalizeOptions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.keepDelays = source["keepDelays"];
+	        this.mergeFills = source["mergeFills"];
+	        this.passwordVar = source["passwordVar"];
+	    }
+	}
+	export class RpaStep {
+	    id: string;
+	    type: string;
+	    name?: string;
+	    disabled?: boolean;
+	    continueOnError?: boolean;
+	    params: Record<string, string>;
+	    children?: RpaStep[];
+	    else?: RpaStep[];
+	
+	    static createFrom(source: any = {}) {
+	        return new RpaStep(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.type = source["type"];
+	        this.name = source["name"];
+	        this.disabled = source["disabled"];
+	        this.continueOnError = source["continueOnError"];
+	        this.params = source["params"];
+	        this.children = this.convertValues(source["children"], RpaStep);
+	        this.else = this.convertValues(source["else"], RpaStep);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class RecordFinalized {
+	    steps: RpaStep[];
+	    vars: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new RecordFinalized(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.steps = this.convertValues(source["steps"], RpaStep);
+	        this.vars = source["vars"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class RecordOptions {
+	    overlay: boolean;
+	    scroll: boolean;
+	    passwordVar: boolean;
+	    maxDelayMs: number;
+	    startUrl: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RecordOptions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.overlay = source["overlay"];
+	        this.scroll = source["scroll"];
+	        this.passwordVar = source["passwordVar"];
+	        this.maxDelayMs = source["maxDelayMs"];
+	        this.startUrl = source["startUrl"];
+	    }
+	}
+	export class RecordState {
+	    active: boolean;
+	    paused: boolean;
+	    profileId: string;
+	    profileName: string;
+	    startedAt: number;
+	    pausedMs: number;
+	    pausedAt: number;
+	    steps: RpaStep[];
+	    vars: Record<string, string>;
+	    tabs: number;
+	    reason?: string;
+	    stoppedBy?: string;
+	    options: RecordOptions;
+	
+	    static createFrom(source: any = {}) {
+	        return new RecordState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.active = source["active"];
+	        this.paused = source["paused"];
+	        this.profileId = source["profileId"];
+	        this.profileName = source["profileName"];
+	        this.startedAt = source["startedAt"];
+	        this.pausedMs = source["pausedMs"];
+	        this.pausedAt = source["pausedAt"];
+	        this.steps = this.convertValues(source["steps"], RpaStep);
+	        this.vars = source["vars"];
+	        this.tabs = source["tabs"];
+	        this.reason = source["reason"];
+	        this.stoppedBy = source["stoppedBy"];
+	        this.options = this.convertValues(source["options"], RecordOptions);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	
 	export class RpaIssue {
 	    stepId: string;
@@ -1235,50 +1401,7 @@ export namespace main {
 	        this.closeAfter = source["closeAfter"];
 	    }
 	}
-	export class RpaStep {
-	    id: string;
-	    type: string;
-	    name?: string;
-	    disabled?: boolean;
-	    continueOnError?: boolean;
-	    params: Record<string, string>;
-	    children?: RpaStep[];
-	    else?: RpaStep[];
 	
-	    static createFrom(source: any = {}) {
-	        return new RpaStep(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.type = source["type"];
-	        this.name = source["name"];
-	        this.disabled = source["disabled"];
-	        this.continueOnError = source["continueOnError"];
-	        this.params = source["params"];
-	        this.children = this.convertValues(source["children"], RpaStep);
-	        this.else = this.convertValues(source["else"], RpaStep);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	
 	
 	export class RunState {
