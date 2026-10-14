@@ -64,6 +64,75 @@ const mock = {
   mock.profiles.push({ id: rid(), name: n, group: i < 3 ? '广告投放' : '电商', tags: i % 2 ? ['养号'] : ['主力'], notes: '', storage: i % 3 === 0 ? 'cloud' : 'local', proxyId: i % 2 ? 'px2' : 'px1', startUrls: [], cookies: '', fingerprint: mockFP(i === 3 ? 'macos' : 'windows'), createdAt: Date.now() / 1000 - i * 3600, lastRun: i < 4 ? Date.now() / 1000 - i * 5000 : 0, cloudVersion: i % 3 === 0 ? 3 : 0, syncedAt: 0 });
 });
 const wait = (ms = 250) => new Promise(r => setTimeout(r, ms));
+// ---- mcp / audit (mock state) ----
+const mcpMock = { running: !location.hash.includes('mcperr'), enabled: true, port: location.hash.includes('mcperr') ? 25326 : 25326, error: location.hash.includes('mcperr') ? 'listen tcp 127.0.0.1:25326: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.' : '', calls: 128, lastCall: Date.now() - 42e3, lastClient: 'cursor-vscode 1.7.2', startedAt: Date.now() - 3 * 3600e3 };
+const MCP_TOOLS = ['list_environments', 'create_environment', 'start_environment', 'stop_environment', 'list_proxies', 'assign_proxy', 'list_groups', 'create_group', 'set_environment_group', 'list_tags', 'list_kernels'];
+function mcpMockStatus() {
+  if (!mock.settings.apiKey) mock.settings.apiKey = 'gb_7f3a9c21e84b4d06a5c1f2e9d3b87a40';
+  const key = mock.settings.apiKey as string, keyRequired = !mock.settings.apiKeyOff, url = `http://127.0.0.1:${mcpMock.port}/mcp`;
+  const http: any = { url }; if (keyRequired) http.headers = { 'X-API-Key': key };
+  const exe = 'C:\\Program Files\\GhostBrowser\\GhostBrowser.exe';
+  return { ...mcpMock, url, keyRequired, tools: MCP_TOOLS, calls: mcpMock.running ? mcpMock.calls : 0, lastCall: mcpMock.running ? mcpMock.lastCall : 0, lastClient: mcpMock.running ? mcpMock.lastClient : '', startedAt: mcpMock.running ? mcpMock.startedAt : 0, exePath: exe, protocol: '2025-06-18',
+    configHttp: JSON.stringify({ mcpServers: { ghostbrowser: http } }, null, 2),
+    configStdio: JSON.stringify({ mcpServers: { ghostbrowser: { command: exe, args: ['--mcp-stdio'] } } }, null, 2),
+    claudeCodeCl: `claude mcp add --transport http ghostbrowser ${url}` + (keyRequired ? ` --header "X-API-Key: ${key}"` : '') };
+}
+const auditMock = { list: [] as any[] };
+const auditPush = (source: string, action: string, target: string, name: string, error: string, detail: string, time = Date.now()) =>
+  auditMock.list.unshift({ id: rid(), time, source, action, target, name, ok: !error, error: error || undefined, detail: detail || undefined });
+if (!location.hash.includes('auditempty')) {
+  const P = mock.profiles; const pick = (i: number) => P[i % P.length];
+  const rows: [number, string, string, number, string, string][] = [
+    // [minutes ago, source, action, profile index (-1 none), error, detail]
+    [2, 'mcp', 'mcp.call', -1, '', 'list_environments {"group":"广告投放"} · cursor-vscode 1.7.2'],
+    [3, 'mcp', 'mcp.call', -1, '', 'start_environment {"id":"FB-Ads-01"} · cursor-vscode 1.7.2'],
+    [3, 'mcp', 'profile.start', 1, '', 'chromium · CDP 127.0.0.1:52144'],
+    [5, 'mcp', 'mcp.call', -1, '代理 US Residential 01 连接超时 (10s)', 'assign_proxy {"proxy":"px1","ids":["FB-Ads-02"]} · cursor-vscode 1.7.2'],
+    [7, 'ui', 'profile.stop', 0, '', ''],
+    [9, 'sync', 'sync.push', 0, '', '24117248 B, 3180 ms'],
+    [12, 'api', 'profile.start', 4, '', 'POST /api/profiles/start · puppeteer'],
+    [12, 'api', 'profile.stop', 4, '', 'POST /api/profiles/stop'],
+    [18, 'ui', 'proxy.assign', 2, '', 'px2'],
+    [18, 'ui', 'proxy.assign', 3, '', 'px2'],
+    [25, 'ui', 'group.set', 5, '', '电商 养号'],
+    [31, 'mcp', 'mcp.call', -1, '', 'create_group {"name":"TikTok 矩阵"} · claude-ai 0.9.4'],
+    [31, 'mcp', 'group.create', -1, '', ''],
+    [33, 'mcp', 'mcp.call', -1, '', 'create_environment {"count":3,"os":"android","group":"TikTok 矩阵"} · claude-ai 0.9.4'],
+    [33, 'mcp', 'profile.create', 4, '', '创建 3 个环境'],
+    [40, 'sync', 'sync.pull', 3, 'sync HTTP 413: Request Entity Too Large', '0 B, 912 ms'],
+    [46, 'ui', 'profile.edit', 3, '', ''],
+    [52, 'ui', 'profile.clone', 1, '', '源: FB-Ads-01'],
+    [58, 'api', 'profile.start', 2, '内核启动失败：chrome.exe 退出码 0xC0000005', 'POST /api/profiles/start'],
+    [64, 'ui', 'mcp.start', -1, '', 'port 25326'],
+    [70, 'ui', 'mcp.stop', -1, '', ''],
+    [95, 'sync', 'sync.push', 1, '', '81264640 B, 9120 ms'],
+    [120, 'ui', 'profile.start', 0, '', ''],
+    [135, 'mcp', 'mcp.call', -1, '', 'list_proxies {} · claude-ai 0.9.4'],
+    [140, 'mcp', 'profile.edit', 2, '', '分配代理「DE Datacenter」给 2 个环境'],
+    [160, 'api', 'group.create', -1, '', 'POST /api/groups'],
+    [190, 'ui', 'profile.delete', 5, '', ''],
+    [220, 'ui', 'profile.create', 5, '', 'phone/android'],
+    [260, 'sync', 'sync.push', 2, 'dial tcp 203.0.113.8:443: i/o timeout', '0 B, 30004 ms'],
+    [300, 'mcp', 'mcp.call', -1, 'unknown environment "Shopify-Store-Z"', 'stop_environment {"id":"Shopify-Store-Z"} · claude-ai 0.9.4'],
+    [340, 'ui', 'group.create', -1, '', ''],
+    [420, 'api', 'profile.start', 3, '', 'POST /api/profiles/start · playwright'],
+    [500, 'ui', 'profile.edit', 0, '', ''],
+    [640, 'sync', 'sync.pull', 0, '', '18874368 B, 2410 ms'],
+    [800, 'ui', 'proxy.assign', 1, '', 'px1'],
+    [1020, 'mcp', 'mcp.call', -1, '', 'list_kernels {} · cursor-vscode 1.7.2'],
+    [1300, 'ui', 'profile.start', 3, '', ''],
+    [1800, 'ui', 'profile.create', 2, '', 'desktop/windows'],
+    [2600, 'sync', 'sync.push', 3, '', '52428800 B, 6020 ms'],
+    [3900, 'ui', 'profile.create', 0, '', 'desktop/windows'],
+  ];
+  const names: Record<string, string> = { 'group.create': 'TikTok 矩阵' };
+  for (const [m, src, act, pi, err, det] of rows.reverse()) {
+    const p = pi >= 0 ? pick(pi) : null;
+    const nm = act === 'mcp.call' ? det.split(' ')[0] : p ? p.name : (names[act] || (act === 'group.create' && src === 'api' ? '亚马逊欧洲站' : ''));
+    auditPush(src, act, p ? p.id : '', act === 'group.create' && src === 'ui' ? '店铺运营' : nm, err, det, Date.now() - m * 60e3);
+  }
+}
+
 
 const M = {
  NativePresets: async (): Promise<NativePreset[]> => [{id:'demo', name:'Windows / Intel', configId:'3285798'}],
@@ -178,6 +247,27 @@ const M = {
   StopProfiles: async (_ids: string[]) => {},
   PushProfiles: async (ids: string[]): Promise<any> => { await wait(900); return { ok: ids.length, failed: 0, errors: [] }; },
   FocusProfile: async (_id: string) => {},
+  // ---- mcp / audit ----
+  McpStatus: async (): Promise<any> => mcpMockStatus(),
+  StartMcp: async (port: number): Promise<any> => { await wait(500); if (port > 0) mcpMock.port = port; if (mcpMock.port < 1024) { mcpMock.running = false; mcpMock.error = `listen tcp 127.0.0.1:${mcpMock.port}: bind: An attempt was made to access a socket in a way forbidden by its access permissions.`; auditPush('ui', 'mcp.start', '', '', mcpMock.error, `port ${mcpMock.port}`); throw mcpMock.error; } Object.assign(mcpMock, { running: true, enabled: true, error: '', startedAt: Date.now() }); auditPush('ui', 'mcp.start', '', '', '', `port ${mcpMock.port}`); return mcpMockStatus(); },
+  StopMcp: async (): Promise<any> => { await wait(250); Object.assign(mcpMock, { running: false, enabled: false, error: '' }); auditPush('ui', 'mcp.stop', '', '', '', ''); return mcpMockStatus(); },
+  AuditLog: async (f: any): Promise<any> => {
+    const all = auditMock.list;
+    const r: any = { items: [], total: 0, all: all.length, failed: all.filter(e => !e.ok).length, categories: {}, sources: {}, targets: [] };
+    const tg: Record<string, any> = {};
+    const q = (f.query || '').trim().toLowerCase();
+    for (const e of all) {
+      const cat = e.action.split('.')[0];
+      r.categories[cat] = (r.categories[cat] || 0) + 1; r.sources[e.source] = (r.sources[e.source] || 0) + 1;
+      if (e.target) (tg[e.target] ||= { id: e.target, name: e.name, count: 0 }).count++;
+      const hit = (!f.category || cat === f.category) && (!f.action || e.action === f.action) && (!f.source || e.source === f.source) && (!f.target || e.target === f.target) && (!f.onlyFail || !e.ok) && (!f.since || e.time >= f.since) && (!q || [e.name, e.detail, e.error, e.target, e.action].join('\u0000').toLowerCase().includes(q));
+      if (hit) { r.total++; if (!f.limit || r.items.length < f.limit) r.items.push(e); }
+    }
+    r.targets = Object.values(tg).sort((a: any, b: any) => b.count - a.count || a.name.localeCompare(b.name));
+    return r;
+  },
+  ClearAuditLog: async () => { auditMock.list = []; },
+  ExportAuditLog: async (_f: any, format: string) => { await wait(300); return `C:\\Users\\me\\Documents\\ghostbrowser-audit-20261014-0930.${format === 'json' ? 'json' : 'csv'}`; },
 };
 
 export const api: typeof M = inWails ? (Go as any) : M;
