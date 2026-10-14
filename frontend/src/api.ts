@@ -521,6 +521,8 @@ function rpaValidate(w: any): any[] {
     if (!s.disabled) {
       if (s.type === 'goto') { req('url', '网址'); if (p.url === 'https://') out.push({ stepId: s.id, message: `${lab}：缺少网址` }); }
       if (s.type === 'click' || s.type === 'fill') req('selector', '选择器');
+      if (s.type === 'scroll' && p.mode === 'el') req('selector', '元素选择器');
+      for (const k of ['var', 'saveAs', 'indexVar']) { const n = String(p[k] || '').trim(); if (n && !/^[A-Za-z_\u4e00-\u9fff][\w\u4e00-\u9fff.-]*$/.test(n)) out.push({ stepId: s.id, message: `${lab}：变量名「${n}」要以字母、下划线或汉字开头` }); }
       if (s.type === 'extract_text') { req('selector', '选择器'); req('var', '变量名'); }
       if (s.type === 'execute_js') req('code', '代码');
       if (s.type === 'upload') { req('selector', '选择器'); req('files', '文件路径'); }

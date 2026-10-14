@@ -397,3 +397,51 @@ func TestRpaServiceRun(t *testing.T) {
 		t.Fatalf("persisted runs = %d", len(runs))
 	}
 }
+
+// The editor keeps the selector field when the user switches scroll mode
+// away from "滚动到元素"; only el mode (or no mode) may use it.
+func TestRpaScrollModeIgnoresHiddenSelector(t *testing.T) {
+	f := newFake()
+	_, _, err := run(t, f, st(stScroll, "mode", "by", "selector", "#x", "y", "300"), st(stScroll, "mode", "el", "selector", "#x"), st(stScroll, "selector", "#y"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(f.calls, ","); got != "scroll,scrollto #x,scrollto #y" {
+		t.Fatalf("calls = %s", got)
+	}
+	if _, _, err := run(t, newFake(), st(stScroll, "mode", "el")); err == nil || !strings.Contains(err.Error(), "缺少元素选择器") {
+		t.Fatalf("el mode without selector: %v", err)
+	}
+	is := validateWorkflow(Workflow{Name: "x", Steps: []RpaStep{st(stScroll, "mode", "el"),
+		st(stExtractText, "selector", "#a", "var", "1abc"), st(stExecuteJS, "code", "1", "saveAs", "价格"), withKids(st(stLoop, "count", "1", "indexVar", "a b"))}})
+	msgs := []string{}
+	for _, i := range is {
+		msgs = append(msgs, i.Message)
+	}
+	j := strings.Join(msgs, "|")
+	if len(is) != 3 || !strings.Contains(j, "缺少元素选择器") || !strings.Contains(j, "「1abc」") || !strings.Contains(j, "「a b」") {
+		t.Fatalf("issues = %v", msgs)
+	}
+}
+
+func TestRpaJSBodyShapes(t *testing.T) {
+	if got := jsBody("document.title"); got != `return eval("document.title");` {
+		t.Fatalf("expr = %s", got)
+	}
+	// code with return is tried as an expression first, then as a body
+	got := jsBody("xs.map(x => { return x })")
+	if !strings.HasPrefix(got, "try { return eval(") || !strings.HasSuffix(got, "\nxs.map(x => { return x })") {
+		t.Fatalf("body = %s", got)
+	}
+}
+
+func TestRpaServiceClaim(t *testing.T) {
+	s := &rpaService{}
+	if !s.claim("p", "r1") || s.claim("p", "r2") {
+		t.Fatal("second claim on a busy profile should fail")
+	}
+	s.release("p")
+	if !s.claim("p", "r3") {
+		t.Fatal("claim after release")
+	}
+}

@@ -499,6 +499,8 @@ func (e *rpaEngine) loop(ctx context.Context, s *RpaStep) (string, string, error
 	return fmt.Sprintf("已循环 %d 轮", done), "", nil
 }
 
+var varName = regexp.MustCompile(`^[A-Za-z_\p{Han}][\w\p{Han}.-]*$`)
+
 var tplVar = regexp.MustCompile(`\{\{\s*([A-Za-z_\p{Han}][\w\p{Han}.-]*)\s*\}\}`)
 
 // interpolate replaces {{name}} with the variable's value. Unknown names are
@@ -565,6 +567,12 @@ func validateWorkflow(wf Workflow) []RpaIssue {
 			}
 			if s.Disabled {
 				continue
+			}
+			// Variable names must be usable as {{name}} later on.
+			for _, k := range []string{"var", "saveAs", "indexVar"} {
+				if n := strings.TrimSpace(s.Params[k]); n != "" && !varName.MatchString(n) {
+					add(fmt.Sprintf("%s：变量名「%s」要以字母、下划线或汉字开头", stepLabel(&s), n))
+				}
 			}
 			switch s.Type {
 			case stGoto:
