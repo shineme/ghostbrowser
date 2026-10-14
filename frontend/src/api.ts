@@ -330,6 +330,43 @@ const M = {
   },
   StopSync: async (): Promise<any> => { clearInterval(mockSync.timer); mockSync.st = { ...mockSync.st, running: false, reason: '' }; mockEmit('syncer:event', mockSync.st); return mockSync.st; },
   SyncerState: async (): Promise<any> => ({ ...mockSync.st }),
+  // ---- rpa ----
+  ListWorkflows: async (): Promise<any[]> => rpaMock.wfs.map(w => JSON.parse(JSON.stringify(w))),
+  SaveWorkflow: async (w: any): Promise<any> => {
+    if (!String(w.name || '').trim()) throw '请填写流程名称';
+    const now = Math.floor(Date.now() / 1000);
+    const i = rpaMock.wfs.findIndex(x => x.id === w.id && w.id);
+    const x = i >= 0 ? { ...rpaMock.wfs[i], ...w, name: w.name.trim(), updatedAt: now } : { lastRunAt: 0, lastStatus: '', lastRunId: '', runCount: 0, vars: {}, ...w, id: w.id || rid(), name: w.name.trim(), createdAt: now, updatedAt: now };
+    if (i >= 0) rpaMock.wfs[i] = x; else rpaMock.wfs.unshift(x);
+    return JSON.parse(JSON.stringify(x));
+  },
+  DeleteWorkflow: async (id: string) => { rpaMock.wfs = rpaMock.wfs.filter(w => w.id !== id); },
+  ValidateWorkflow: async (w: any): Promise<any[]> => rpaValidate(w),
+  DuplicateWorkflow: async (id: string): Promise<any> => {
+    const w = rpaMock.wfs.find(x => x.id === id); if (!w) throw '流程不存在';
+    const fresh = (l: any[]): any[] => (l || []).map(s => ({ ...s, id: rid(), children: s.children && fresh(s.children), else: s.else && fresh(s.else) }));
+    const now = Math.floor(Date.now() / 1000);
+    const x = { ...JSON.parse(JSON.stringify(w)), id: rid(), name: w.name + ' 副本', steps: fresh(w.steps), createdAt: now, updatedAt: now, lastRunAt: 0, lastStatus: '', lastRunId: '', runCount: 0 };
+    rpaMock.wfs.splice(rpaMock.wfs.indexOf(w) + 1, 0, x); return x;
+  },
+  RunWorkflow: async (id: string, ids: string[]): Promise<string> => rpaSimRun(id, ids, { concurrency: 1, autoStart: true, closeAfter: false }),
+  RunWorkflowWith: async (id: string, ids: string[], opt: any): Promise<string> => rpaSimRun(id, ids, opt),
+  CancelWorkflowRun: async (runId: string): Promise<boolean> => { const r = rpaMock.runs.find(x => x.id === runId); if (!r || r.status !== 'running') return false; r.cancel = true; return true; },
+  WorkflowRuns: async (wfId: string): Promise<any[]> => rpaMock.runs.filter(r => r.workflowId === wfId).map(rpaPub),
+  WorkflowRun: async (runId: string): Promise<any> => { const r = rpaMock.runs.find(x => x.id === runId); if (!r) throw '运行记录不存在'; return rpaPub(r); },
+  RpaScreenshot: async (path: string): Promise<string> => { await wait(120); return rpaShot(path); },
+  ExportWorkflow: async (id: string): Promise<string> => { const w = rpaMock.wfs.find(x => x.id === id); if (!w) throw '流程不存在'; return JSON.stringify({ format: 'ghostbrowser-rpa', version: 1, workflow: { ...w, lastRunAt: 0, lastStatus: '', lastRunId: '', runCount: 0 } }, null, 2); },
+  ImportWorkflow: async (raw: string): Promise<any> => {
+    let o: any; try { o = JSON.parse(raw); } catch (e: any) { throw `不是有效的 JSON：${e.message}`; }
+    const w = o.workflow || o; if (!w.steps?.length) throw 'JSON 里没有步骤（steps）';
+    return M.SaveWorkflow({ ...w, id: '', name: w.name || '导入的流程' });
+  },
+  SaveWorkflowFile: async (id: string): Promise<string> => { const w = rpaMock.wfs.find(x => x.id === id); return `C:\\Users\\me\\Desktop\\${w?.name || 'workflow'}.rpa.json`; },
+  OpenWorkflowFile: async (): Promise<string> => { await wait(200); return JSON.stringify({ format: 'ghostbrowser-rpa', version: 1, workflow: { name: 'Shopee 店铺签到', description: '每天打开卖家中心领取签到积分', vars: {}, steps: [
+    { id: 'i1', type: 'goto', params: { url: 'https://seller.shopee.sg/', timeout: '30000' } },
+    { id: 'i2', type: 'wait_for', params: { selector: 'text:签到', state: 'visible', timeout: '15000' } },
+    { id: 'i3', type: 'click', params: { selector: 'text:签到' } },
+    { id: 'i4', type: 'screenshot', params: { fullPage: 'false', saveAs: '' } }] } }, null, 2); },
 };
 
 export const api: typeof M = inWails ? (Go as any) : M;
@@ -365,6 +402,169 @@ function simTransfer(id: string, name: string, dir: 'up' | 'down', total: number
       }, 200);
     }, 700);
   });
+}
+
+// ---------------- rpa mock ----------------
+const RNOW = Math.floor(Date.now() / 1000);
+const rpaMock = {
+  wfs: [
+    { id: 'wf-amz', name: '亚马逊商品价格采集', description: '搜索关键词，翻 5 页采集标题与价格，低于目标价时截图留证', vars: { keyword: 'wireless earbuds', target: '25' }, createdAt: RNOW - 86400 * 6, updatedAt: RNOW - 7200, lastRunAt: RNOW - 1260, lastStatus: 'ok', lastRunId: 'run-a2', runCount: 14, steps: [
+      { id: 'a1', type: 'goto', params: { url: 'https://www.amazon.com/s?k={{keyword}}', timeout: '30000' } },
+      { id: 'a2', type: 'wait_for', params: { selector: '[data-component-type="s-search-result"]', state: 'visible', timeout: '15000' } },
+      { id: 'a3', type: 'loop', params: { mode: 'count', count: '5', indexVar: 'page' }, children: [
+        { id: 'a4', type: 'extract_text', name: '读取首个商品价格', params: { selector: '.s-result-item .a-price .a-offscreen', var: 'price', attr: '', trim: 'true' } },
+        { id: 'a5', type: 'condition', params: { kind: 'js', code: 'return parseFloat(vars.price.replace(/[^0-9.]/g, "")) < Number(vars.target);' }, children: [
+          { id: 'a6', type: 'screenshot', name: '低价截图', params: { fullPage: 'false', saveAs: 'deal_shot' } },
+        ], else: [
+          { id: 'a7', type: 'delay', params: { ms: '800', maxMs: '1600' } },
+        ] },
+        { id: 'a8', type: 'condition', params: { kind: 'not_exists', selector: 'a.s-pagination-next' }, children: [{ id: 'a9', type: 'break_loop', params: {} }], else: [] },
+        { id: 'a10', type: 'click', params: { selector: 'a.s-pagination-next', double: 'false' } },
+        { id: 'a11', type: 'scroll', params: { mode: 'by', x: '0', y: '900' } },
+      ] },
+      { id: 'a12', type: 'execute_js', params: { code: 'return document.querySelectorAll(".s-result-item").length;', saveAs: 'items' } },
+    ] },
+    { id: 'wf-gm', name: 'Gmail 养号 · 每日浏览', description: '登录检查、随机阅读邮件、滚动停留，模拟真人使用', vars: {}, createdAt: RNOW - 86400 * 12, updatedAt: RNOW - 86400, lastRunAt: RNOW - 5400, lastStatus: 'partial', lastRunId: 'run-g1', runCount: 37, steps: [
+      { id: 'g1', type: 'goto', params: { url: 'https://mail.google.com/mail/u/0/#inbox', timeout: '30000' } },
+      { id: 'g2', type: 'condition', params: { kind: 'exists', selector: 'input[type=email]' }, children: [
+        { id: 'g3', type: 'fill', params: { selector: 'input[type=email]', text: '{{email}}', clear: 'true' } },
+        { id: 'g4', type: 'click', params: { selector: 'text:下一步' } },
+      ], else: [] },
+      { id: 'g5', type: 'loop', params: { mode: 'count', count: '3', indexVar: 'n' }, children: [
+        { id: 'g6', type: 'click', params: { selector: 'xpath://tr[contains(@class,"zA")][{{n}}]' } },
+        { id: 'g7', type: 'delay', params: { ms: '3000', maxMs: '8000' } },
+        { id: 'g8', type: 'scroll', params: { mode: 'by', x: '0', y: '700' } },
+      ] },
+      { id: 'g9', type: 'select_tab', disabled: true, params: { index: '1' } },
+    ] },
+    { id: 'wf-tt', name: 'TikTok Shop 订单导出', description: '', vars: {}, createdAt: RNOW - 86400 * 2, updatedAt: RNOW - 86400 * 2, lastRunAt: RNOW - 86400, lastStatus: 'failed', lastRunId: 'run-t1', runCount: 3, steps: [
+      { id: 't1', type: 'goto', params: { url: 'https://seller-us.tiktok.com/order', timeout: '30000' } },
+      { id: 't2', type: 'click', continueOnError: true, params: { selector: 'text:导出订单' } },
+      { id: 't3', type: 'upload', params: { selector: 'input[type=file]', files: 'D:\\exports\\template.xlsx' } },
+    ] },
+    { id: 'wf-fb', name: 'Facebook 广告账户巡检（新建，未运行）', description: '打开广告管理器，检查账户状态是否受限，提取余额并截图存档，超长名称用于测试省略显示效果', vars: {}, createdAt: RNOW - 3600, updatedAt: RNOW - 3600, lastRunAt: 0, lastStatus: '', lastRunId: '', runCount: 0, steps: [
+      { id: 'f1', type: 'goto', params: { url: 'https://adsmanager.facebook.com/', timeout: '30000' } },
+      { id: 'f2', type: 'extract_text', params: { selector: '', var: 'balance', attr: '', trim: 'true' } },
+    ] },
+  ] as any[],
+  runs: [] as any[],
+};
+const mkTarget = (p: any, status: string, steps: any[], vars: any, err = '') => ({ profileId: p?.id || rid(), profileName: p?.name || '已删除的环境', status, error: err, startedAt: RNOW - 1300, endedAt: RNOW - 1240, autoStarted: false, steps, vars });
+rpaMock.runs.push(
+  { id: 'run-a2', workflowId: 'wf-amz', workflowName: '亚马逊商品价格采集', status: 'ok', startedAt: RNOW - 1300, endedAt: RNOW - 1228, concurrency: 3, stepCount: 12, targets: [mkTarget(mock.profiles[0], 'ok', [{ stepId: 'a1', index: 0, type: 'goto', status: 'ok', log: 'https://www.amazon.com/s?k=wireless+earbuds', ms: 2140 }, { stepId: 'a12', index: 11, type: 'execute_js', status: 'ok', log: '48', ms: 31, vars: { price: '$22.99', items: '48' } }], { price: '$22.99', items: '48', page: '5' })] },
+  { id: 'run-a1', workflowId: 'wf-amz', workflowName: '亚马逊商品价格采集', status: 'partial', startedAt: RNOW - 86400 - 600, endedAt: RNOW - 86400 - 480, concurrency: 5, stepCount: 12, targets: [mkTarget(mock.profiles[0], 'ok', [], {}), mkTarget(mock.profiles[3], 'failed', [], {}, '等待元素：等待 [data-component-type="s-search-result"] 超时（15 秒）')] },
+  { id: 'run-a0', workflowId: 'wf-amz', workflowName: '亚马逊商品价格采集', status: 'cancelled', startedAt: RNOW - 86400 * 3, endedAt: RNOW - 86400 * 3 + 40, concurrency: 1, stepCount: 11, targets: [mkTarget(mock.profiles[1], 'cancelled', [], {}, '已取消')] },
+  { id: 'run-g1', workflowId: 'wf-gm', workflowName: 'Gmail 养号 · 每日浏览', status: 'partial', startedAt: RNOW - 5500, endedAt: RNOW - 5400, concurrency: 3, stepCount: 9, targets: [mkTarget(mock.profiles[5], 'ok', [], {}), mkTarget(mock.profiles[4], 'failed', [], {}, '浏览器未打开：请先启动这个环境，或勾选「自动启动未运行的环境」')] },
+  { id: 'run-t1', workflowId: 'wf-tt', workflowName: 'TikTok Shop 订单导出', status: 'failed', startedAt: RNOW - 86460, endedAt: RNOW - 86400, concurrency: 1, stepCount: 3, targets: [mkTarget(mock.profiles[4], 'failed', [], {}, '上传文件：找不到元素 input[type=file]')] },
+);
+const rpaPub = (r: any) => { const { cancel, ...x } = r; return JSON.parse(JSON.stringify(x)); };
+function rpaValidate(w: any): any[] {
+  const out: any[] = [];
+  if (!String(w.name || '').trim()) out.push({ stepId: '', message: '流程名称不能为空' });
+  if (!(w.steps || []).length) out.push({ stepId: '', message: '流程里还没有步骤' });
+  const names: Record<string, string> = { goto: '打开网址', click: '点击', fill: '输入文本', extract_text: '提取文本', execute_js: '执行 JS', upload: '上传文件', select_tab: '切换标签页', condition: '条件判断', loop: '循环' };
+  const go = (l: any[], inLoop: boolean) => (l || []).forEach(s => {
+    const p = s.params || {}; const lab = s.name || names[s.type] || s.type;
+    const req = (k: string, what: string) => { if (!String(p[k] || '').trim()) out.push({ stepId: s.id, message: `${lab}：缺少${what}` }); };
+    if (!s.disabled) {
+      if (s.type === 'goto') { req('url', '网址'); if (p.url === 'https://') out.push({ stepId: s.id, message: `${lab}：缺少网址` }); }
+      if (s.type === 'click' || s.type === 'fill') req('selector', '选择器');
+      if (s.type === 'extract_text') { req('selector', '选择器'); req('var', '变量名'); }
+      if (s.type === 'execute_js') req('code', '代码');
+      if (s.type === 'upload') { req('selector', '选择器'); req('files', '文件路径'); }
+      if (s.type === 'select_tab') req('index', '标签页序号');
+      const cond = () => p.kind === 'js' ? req('code', '判断代码') : (p.kind === 'equals' || p.kind === 'contains') ? req('left', '比较值') : req('selector', '选择器');
+      if (s.type === 'condition') cond();
+      if (s.type === 'loop' && p.mode === 'while') cond();
+      if (s.type === 'break_loop' && !inLoop) out.push({ stepId: s.id, message: '「跳出循环」必须放在循环里' });
+    }
+    go(s.children, inLoop || s.type === 'loop'); go(s.else, inLoop);
+  });
+  go(w.steps, false);
+  return out;
+}
+// A stylised page thumbnail so screenshots look like something in the preview.
+function rpaShot(path: string) {
+  let h = 0; for (const c of path) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const hue = h % 360;
+  const cards = [0, 1, 2].map(i => `<rect x="${24 + i * 196}" y="120" width="180" height="200" rx="10" fill="hsl(${hue},30%,${18 + i * 3}%)"/><rect x="${36 + i * 196}" y="250" width="120" height="10" rx="5" fill="#cfd6ff" opacity=".6"/><rect x="${36 + i * 196}" y="270" width="60" height="12" rx="6" fill="#3ee6a8"/>`).join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400"><rect width="640" height="400" fill="#0d1017"/><rect width="640" height="44" fill="hsl(${hue},40%,22%)"/><rect x="16" y="14" width="220" height="16" rx="8" fill="#fff" opacity=".25"/><rect x="24" y="66" width="300" height="22" rx="6" fill="#fff" opacity=".12"/>${cards}<rect x="24" y="340" width="592" height="40" rx="10" fill="#fff" opacity=".05"/></svg>`;
+  return 'data:image/svg+xml;base64,' + btoa(svg);
+}
+// Simulated run: walks the tree (taking the "then" branch, honouring loop counts and break_loop) and emits rpa:event like rpa_run.go.
+function rpaSimRun(wfId: string, ids: string[], opt: any): string {
+  const wf = rpaMock.wfs.find(w => w.id === wfId); if (!wf) throw '流程不存在或已删除';
+  const issues = rpaValidate(wf); if (issues.length) throw `流程有 ${issues.length} 处需要修改：${issues[0].message}`;
+  if (!ids.length) throw '请至少选择一个环境';
+  const flatAll: any[] = []; const fw = (l: any[]) => (l || []).forEach(s => { flatAll.push(s); fw(s.children); fw(s.else); }); fw(wf.steps);
+  const index: Record<string, number> = {}; flatAll.forEach((s, i) => (index[s.id] = i));
+  const now = () => Math.floor(Date.now() / 1000);
+  const run: any = { id: 'run-' + rid().slice(0, 8), workflowId: wf.id, workflowName: wf.name, status: 'running', startedAt: now(), endedAt: 0, concurrency: opt?.concurrency || 1, stepCount: flatAll.length, targets: ids.map(id => ({ profileId: id, profileName: mock.profiles.find(p => p.id === id)?.name || id, status: 'pending', error: '', startedAt: 0, endedAt: 0, autoStarted: false, steps: [], vars: {} })) };
+  rpaMock.runs.unshift(run); Object.assign(wf, { lastRunAt: run.startedAt, lastStatus: 'running', lastRunId: run.id, runCount: wf.runCount + 1 });
+  const E = (e: any) => mockEmit('rpa:event', { runId: run.id, index: 0, ...e });
+  E({ profileId: '', phase: 'run', status: 'running' });
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+  const logOf = (s: any, vars: any, iter: number) => { const p = s.params || {}; const fill = (t: string) => String(t || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => vars[k] ?? ''); switch (s.type) {
+    case 'goto': return fill(p.url); case 'click': return fill(p.selector); case 'fill': return `${p.selector} ← ${fill(p.text)}`; case 'delay': return `${p.ms} ms`;
+    case 'wait_for': return `${p.selector} 已可见`; case 'scroll': return `滚动 (${p.x || 0}, ${p.y || 600})`; case 'extract_text': return `${p.var} = ${vars[p.var]}`;
+    case 'execute_js': return String(vars[p.saveAs] ?? '48'); case 'screenshot': return '已保存截图'; case 'condition': return '条件成立 → 则'; case 'loop': return `完成 ${iter} 轮`; default: return ''; } };
+  const target = async (t: any, ti: number) => {
+    const failAt = ti === 1 ? flatAll.findIndex(s => s.type === 'click' || s.type === 'upload') : -1;
+    if (!(mock.running.some(r => r.profileId === t.profileId))) {
+      if (!opt?.autoStart) { Object.assign(t, { status: 'failed', error: '浏览器未打开：请先启动这个环境，或勾选「自动启动未运行的环境」', endedAt: now() }); E({ profileId: t.profileId, phase: 'target', status: 'failed', error: t.error }); return; }
+      Object.assign(t, { status: 'starting', startedAt: now(), autoStarted: true }); E({ profileId: t.profileId, phase: 'target', status: 'starting' }); await sleep(700);
+    }
+    t.status = 'running'; t.startedAt ||= now(); E({ profileId: t.profileId, phase: 'target', status: 'running' });
+    const vars: any = { ...(wf.vars || {}) }; let iter = 0; let failed = '';
+    const BRK = {};
+    const exec = async (s: any): Promise<void> => {
+      if (run.cancel) throw new Error('已取消');
+      const base = { profileId: t.profileId, phase: 'step', stepId: s.id, index: index[s.id], type: s.type, iter };
+      if (s.disabled) { const ev = { ...base, status: 'skipped', log: '已停用', ms: 0 }; t.steps.push(ev); E(ev); return; }
+      E({ ...base, status: 'running' });
+      const t0 = Date.now();
+      if (s.type === 'loop') {
+        const n = s.params.mode === 'while' ? 3 : Math.min(+s.params.count || 1, 6); const outer = iter; let done = 0;
+        try { for (let i = 1; i <= n; i++) { iter = i; vars[s.params.indexVar || 'loop_index'] = String(i); done = i; for (const c of s.children || []) await exec(c); } }
+        catch (e) { if (e !== BRK) { iter = outer; throw e; } }
+        iter = outer;
+        const ev = { ...base, iter, status: 'ok', log: `完成 ${done} 轮`, ms: Date.now() - t0, vars: { ...vars } }; t.steps.push(ev); E(ev); return;
+      }
+      await sleep(s.type === 'delay' ? 520 : s.type === 'goto' ? 640 : 260 + Math.random() * 240);
+      if (run.cancel) { const ev = { ...base, status: 'failed', log: '已取消', ms: Date.now() - t0 }; t.steps.push(ev); E(ev); throw new Error('已取消'); }
+      if (index[s.id] === failAt && !failed) {
+        const msg = `找不到元素 ${s.params.selector}（等待 8 秒）`;
+        const ev = { ...base, status: 'failed', log: msg + (s.continueOnError ? '（已设置出错继续）' : ''), ms: Date.now() - t0, vars: { ...vars } }; t.steps.push(ev); E(ev);
+        if (!s.continueOnError) { failed = `${s.name || ({ click: '点击', upload: '上传文件' } as any)[s.type] || s.type}：${msg}`; throw new Error(failed); }
+        return;
+      }
+      if (s.type === 'break_loop') { const ev = { ...base, status: 'ok', log: '跳出循环', ms: 1 }; t.steps.push(ev); E(ev); throw BRK; }
+      if (s.type === 'extract_text') vars[s.params.var] = s.params.var === 'price' ? `$${(18 + Math.random() * 14).toFixed(2)}` : '1,280.50 USD';
+      if (s.type === 'execute_js' && s.params.saveAs) vars[s.params.saveAs] = '48';
+      const shot = s.type === 'screenshot' ? `C:\\GhostBrowser\\rpa\\shots\\${run.id}\\${t.profileId}-${index[s.id] + 1}-${Date.now()}.png` : '';
+      if (shot && s.params.saveAs) vars[s.params.saveAs] = shot;
+      const ev: any = { ...base, status: 'ok', log: logOf(s, vars, iter), ms: Date.now() - t0, vars: { ...vars }, shot };
+      t.steps.push(ev); E(ev);
+      if (s.type === 'condition') {
+        const branch = s.params.kind === 'not_exists' && iter < 3 ? s.else : s.children;
+        for (const c of branch || []) await exec(c);
+      }
+    };
+    try { for (const s of wf.steps) await exec(s); Object.assign(t, { status: 'ok', vars }); }
+    catch (e: any) { Object.assign(t, { status: run.cancel ? 'cancelled' : 'failed', error: run.cancel ? '已取消' : String(e?.message || e), vars }); }
+    t.endedAt = now(); E({ profileId: t.profileId, phase: 'target', status: t.status, error: t.error, vars });
+    if (t.autoStarted && opt?.closeAfter) mock.running = mock.running.filter(r => r.profileId !== t.profileId);
+  };
+  (async () => {
+    const queue = run.targets.map((t: any, i: number) => [t, i]);
+    const worker = async () => { while (queue.length) { const [t, i] = queue.shift(); await target(t, i); } };
+    await Promise.all(Array.from({ length: Math.max(1, Math.min(run.concurrency, run.targets.length)) }, worker));
+    const st = run.targets.map((t: any) => t.status); const ok = st.filter((s: string) => s === 'ok').length;
+    run.status = run.cancel ? 'cancelled' : ok === st.length ? 'ok' : ok === 0 ? 'failed' : 'partial'; run.endedAt = now();
+    wf.lastStatus = run.status;
+    E({ profileId: '', phase: 'run', status: run.status });
+  })();
+  return run.id;
 }
 
 if (!inWails) (window as any).__mock = { api: M, emit: mockEmit };
