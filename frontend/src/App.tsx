@@ -13,8 +13,11 @@ import { SyncPrompt } from './SyncPrompt';
 import { EnvSetup } from './EnvSetup';
 import { NativeTools } from './NativeTools';
 import { TransferDock, InlineTransfer } from './Transfers';
+import { RpaView } from './RpaView';
+import { ExtensionsView } from './ExtensionsView';
+import { AuditView } from './AuditView';
 
-type Tab = 'profiles' | 'proxies' | 'cloud' | 'settings';
+type Tab = 'profiles' | 'proxies' | 'rpa' | 'extensions' | 'cloud' | 'audit' | 'settings';
 
 function Shell() {
   const toast = useToast();
@@ -48,14 +51,20 @@ function Shell() {
   const titles: Record<Tab, [string, string]> = {
     profiles: ['浏览器环境', '每个环境拥有独立指纹、代理与数据目录'],
     proxies: ['代理管理', '导入、检测并为环境分配代理'],
+    rpa: ['自动化', '可视化流程，批量在多个环境中运行'],
+    extensions: ['扩展中心', '下载 Chrome 扩展并分配给环境'],
     cloud: ['云端同步', '把环境加密同步到你自己的 VPS'],
+    audit: ['接口与审计', 'MCP、本地 API 与操作日志'],
     settings: ['设置', '内核、本地 API、同步服务器'],
   };
 
   const nav: [Tab, keyof typeof Icon, string, number | null][] = [
     ['profiles', 'layers', '环境', profiles.length],
     ['proxies', 'globe', '代理', proxies.length],
+    ['rpa', 'bolt', '自动化', null],
+    ['extensions', 'grid', '扩展', null],
     ['cloud', 'cloud', '云同步', null],
+    ['audit', 'terminal', '接口审计', null],
     ['settings', 'settings', '设置', null],
   ];
 
@@ -68,7 +77,7 @@ function Shell() {
   useSpotlight();
   // Ctrl/Cmd+1..4 switches sections
   useEffect(() => {
-    const k = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && /^[1-4]$/.test(e.key)) { e.preventDefault(); setTab(nav[+e.key - 1][0]); } };
+    const k = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && /^[1-7]$/.test(e.key)) { e.preventDefault(); setTab(nav[+e.key - 1][0]); } };
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
   });
 
@@ -111,6 +120,9 @@ function Shell() {
           <div key={tab} className="page">
             {tab === 'profiles' && <ProfilesView {...{ profiles, proxyName, running, setRunning, reload }} />}
             {tab === 'proxies' && <ProxyView proxies={proxies} profiles={profiles} reload={reload} />}
+            {tab === 'rpa' && <RpaView profiles={profiles} reload={reload} />}
+            {tab === 'extensions' && <ExtensionsView profiles={profiles} reload={reload} />}
+            {tab === 'audit' && <AuditView profiles={profiles} />}
             {tab === 'cloud' && <CloudView profiles={profiles} settings={settings} reload={reload} />}
             {tab === 'settings' && settings && <SettingsView key={settingsRev} settings={settings} onSaved={s => { setSettings(s); toast('设置已保存'); }} />}
           </div>
