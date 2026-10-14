@@ -432,7 +432,15 @@ const M = {
   KernelInstallStart: async (source: string, url: string): Promise<any> => { if (kernelMock.p.running) throw '已有内核正在安装'; Object.assign(mock.settings, { kernelSource: source, kernelUrl: url }); simKernel(source); return { ...kernelMock.p }; },
   KernelInstallCancel: async () => { kernelMock.cancel = true; },
   KernelList: async (): Promise<any[]> => kernelMock.list.map(k => ({ ...k, active: k.path === mock.settings.chromiumPath })),
-  KernelDelete: async (dir: string) => { await wait(300); kernelMock.list = kernelMock.list.filter(k => k.dir !== dir); },
+  KernelDelete: async (dir: string) => { await wait(300); kernelMock.list = kernelMock.list.filter(k => k.dir !== dir); },  // ---- rpa recorder ----
+  StartRecording: async (profileId: string, opts: any): Promise<any> => recSimStart(profileId, opts),
+  StopRecording: async (): Promise<any> => recSimStop('user'),
+  PauseRecording: async (): Promise<any> => recSimPause(true),
+  ResumeRecording: async (): Promise<any> => recSimPause(false),
+  RecordingState: async (): Promise<any> => recSim.pub(),
+  RecordRemoveStep: async (id: string): Promise<any> => { recSim.st.steps = recSim.st.steps.filter((s: any) => s.id !== id); return recSim.emit(); },
+  RecordUpdateStep: async (step: any): Promise<any> => { recSim.st.steps = recSim.st.steps.map((s: any) => (s.id === step.id ? { ...step, params: { ...step.params, _rec: s.params._rec || step.params._rec || '' } } : s)); return recSim.emit(); },
+  FinalizeRecording: async (steps: any[], o: any): Promise<any> => recFinalize(steps, o),
 };
 
 export const api: typeof M = inWails ? (Go as any) : M;
@@ -719,3 +727,93 @@ function simKernel(source: string) {
     }, 250);
   }, 900);
 }
+
+// ---- rpa recorder mock: a scripted user session streamed as rpa:record ----
+const recSim = {
+  st: null as any,
+  timer: 0 as any,
+  i: 0,
+  pub: (): any => (recSim.st ? JSON.parse(JSON.stringify(recSim.st)) : { active: false, paused: false, steps: [], vars: {}, profileId: '', profileName: '', startedAt: 0, pausedMs: 0, pausedAt: 0, tabs: 0, options: {} }),
+  emit: (): any => { const p = recSim.pub(); mockEmit('rpa:record', p); return p; },
+};
+const rs = (type: string, params: Record<string, string>, name = ''): any => ({ id: rid(), type, name, params });
+// Each op either appends a step or keeps typing into the last fill.
+const recScript = (): Array<() => void> => {
+  const S = recSim.st;
+  const push = (s: any) => { S.steps.push(s); };
+  const typeInto = (sel: string, full: string, pw = false) => {
+    const ops: Array<() => void> = [];
+    for (let n = 1; n <= full.length; n += Math.max(1, Math.ceil(full.length / 4))) {
+      const v = full.slice(0, n);
+      ops.push(() => { const l = S.steps[S.steps.length - 1]; if (l?.type === 'fill' && l.params.selector === sel) l.params.text = pw ? '{{password}}' : v; else push(rs('fill', { selector: sel, text: pw ? '{{password}}' : v, ...(pw ? { _rec: 'password' } : {}) })); });
+    }
+    ops.push(() => { const l = S.steps[S.steps.length - 1]; l.params.text = pw ? '{{password}}' : full; if (pw) S.vars.password = ''; });
+    return ops;
+  };
+  return [
+    () => push(rs('goto', { url: 'https://seller.example-shop.com/login' })),
+    ...typeInto('#username', 'seller_0921'),
+    ...typeInto('input[name="password"]', 'hunter22', true),
+    () => push(rs('click', { selector: 'text:记住我 || xpath://form/label[2]' })),
+    () => push(rs('click', { selector: 'text:登录 || xpath://form/button' })),
+    () => push(rs('delay', { ms: '2300', _rec: 'think' }, '停顿')),
+    () => push(rs('wait_for', { selector: '.dashboard-card', state: 'visible', timeout: '10000' })),
+    () => push(rs('click', { selector: 'text:订单管理' })),
+    ...typeInto('#order-search', '2026101488'),
+    () => push(rs('execute_js', { code: 'el.form.requestSubmit()', _rec: 'enter' }, '按回车键')),
+    () => push(rs('fill', { selector: '#status-filter', text: 'shipped' })),
+    () => push(rs('extract_text', { selector: '.order-row:nth-of-type(1) .amount', var: 'text1' })),
+    () => push(rs('click', { selector: '[data-testid="export-csv"]' })),
+    () => push(rs('select_tab', { index: '2' })),
+    () => push(rs('click', { selector: 'button[aria-label="下载报表"]' })),
+    () => push(rs('upload', { selector: '#invoice-file', files: '{{upload_file}}' }, '上传文件（录制时：invoice-1014.pdf）')),
+    () => { S.vars.upload_file = ''; push(rs('close_tab', { index: '2' })); },
+    () => push(rs('click', { selector: '#refresh-list', double: 'true' })),
+  ];
+};
+const recSimStart = async (profileId: string, opts: any) => {
+  await wait(700);
+  if (recSim.st?.active) throw '已经在录制另一个环境，请先停止';
+  const p = mock.profiles.find(x => x.id === profileId); if (!p) throw '环境不存在或已删除';
+  if (!mock.running.some(r => r.profileId === profileId)) mock.running.push({ profileId, pid: 4242, debugPort: 9333, wsUrl: 'ws://127.0.0.1:9333/devtools/browser/x', started: Date.now() / 1000 });
+  recSim.st = { active: true, paused: false, profileId, profileName: p.name, startedAt: Date.now(), pausedMs: 0, pausedAt: 0, steps: [], vars: {}, tabs: 1, options: opts || {} };
+  const ops = recScript(); recSim.i = 0;
+  const auto = !location.hash.includes('recmanual');
+  clearInterval(recSim.timer);
+  if (auto) recSim.timer = setInterval(() => {
+    const S = recSim.st; if (!S?.active || S.paused) return;
+    if (recSim.i >= ops.length) { clearInterval(recSim.timer); return; }
+    ops[recSim.i++](); recSim.emit();
+  }, 900);
+  (window as any).__recStep = (n = 1) => { for (let k = 0; k < n && recSim.i < ops.length; k++) ops[recSim.i++](); return recSim.emit(); };
+  return recSim.pub();
+};
+const recSimPause = async (p: boolean) => {
+  const S = recSim.st; if (!S?.active) return recSim.pub();
+  if (p && !S.paused) { S.paused = true; S.pausedAt = Date.now(); }
+  if (!p && S.paused) { S.pausedMs += Date.now() - S.pausedAt; S.paused = false; S.pausedAt = 0; }
+  return recSim.emit();
+};
+const recSimStop = async (by: string) => {
+  await wait(300);
+  const S = recSim.st; if (!S) return recSim.pub();
+  clearInterval(recSim.timer);
+  if (S.paused) await recSimPause(false);
+  S.active = false; S.stoppedBy = by;
+  return recSim.emit();
+};
+const recFinalize = (steps: any[], o: any) => {
+  let out = JSON.parse(JSON.stringify(steps || [])).filter((s: any) => !(s.type === 'delay' && s.params._rec === 'think' && !o.keepDelays));
+  out.forEach((s: any) => { if (s.params._rec === 'password' && !o.passwordVar) s.params.text = 'hunter22'; });
+  if (o.mergeFills) {
+    const bar = new Set(['click', 'goto', 'execute_js', 'select_tab', 'close_tab', 'upload', 'condition', 'loop']);
+    out = out.filter((s: any, i: number) => {
+      if (s.type !== 'fill') return true;
+      for (let j = i + 1; j < out.length; j++) { if (bar.has(out[j].type)) break; if (out[j].type === 'fill' && out[j].params.selector === s.params.selector) return false; }
+      return true;
+    });
+  }
+  const vars: Record<string, string> = {};
+  out.forEach((s: any) => { delete s.params._rec; Object.values(s.params).forEach((v: any) => { for (const m of String(v).matchAll(/\{\{\s*(password|upload_file\d*)\s*\}\}/g)) vars[m[1]] = ''; }); });
+  return { steps: out, vars };
+};
