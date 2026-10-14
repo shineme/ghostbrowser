@@ -85,7 +85,7 @@ func TestChromiumEmulationLive(t *testing.T) {
 		const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
 		const he = await navigator.userAgentData.getHighEntropyValues(['model','platformVersion']);
 		const fr = document.querySelector('iframe').contentWindow.navigator;
-		return JSON.stringify({ua: navigator.userAgent, plat: navigator.platform, mobile: navigator.userAgentData.mobile, chPlat: navigator.userAgentData.platform,
+		return JSON.stringify({glok: !!gl, ua: navigator.userAgent, plat: navigator.platform, mobile: navigator.userAgentData.mobile, chPlat: navigator.userAgentData.platform,
 		  model: he.model, pver: he.platformVersion, touch: navigator.maxTouchPoints, sw: screen.width, dpr: devicePixelRatio, iw: innerWidth,
 		  coarse: matchMedia('(pointer: coarse)').matches, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, lang: navigator.language,
 		  gpu: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '', hc: navigator.hardwareConcurrency, frameUA: fr.userAgent, frameMem: fr.deviceMemory})
@@ -116,7 +116,13 @@ func TestChromiumEmulationLive(t *testing.T) {
 	check("coarse", true)
 	check("tz", "Asia/Tokyo")
 	check("lang", "ja-JP")
-	check("gpu", fp.WebGLRenderer)
+	if got["glok"] == true {
+		check("gpu", fp.WebGLRenderer)
+	} else {
+		// Kernel without WebGL here (no GPU and no SwiftShader, e.g. Debian's
+		// arm64 Chromium <= 125): nothing to spoof; not a GhostBrowser bug.
+		t.Logf("kernel has no WebGL in this environment; GPU string not checked")
+	}
 	check("hc", fp.HardwareConc)
 	check("frameMem", fp.DeviceMemory)
 	if !strings.Contains(fmt.Sprint(got["ua"]), "Mobile Safari") || got["frameUA"] != got["ua"] {

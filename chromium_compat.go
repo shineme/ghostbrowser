@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"io"
 	"context"
 	"fmt"
 	"os"
@@ -96,6 +98,9 @@ func kernelVersion(path string) string {
 		return v.(kernelVerEntry).full
 	}
 	full := chromeFullFrom(filepath.Dir(path))
+	if full == "" && strings.HasSuffix(strings.ToLower(path), ".exe") {
+		full = peProductVersion(path) // portable builds without a version folder
+	}
 	if full == "" && runtime.GOOS != "windows" {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		out, _ := exec.CommandContext(ctx, path, "--version").Output()
@@ -104,6 +109,52 @@ func kernelVersion(path string) string {
 	}
 	kernelVerCache.Store(path, kernelVerEntry{fi.ModTime(), full})
 	return full
+}
+
+// peProductVersion reads the "ProductVersion" string from a Windows
+// executable's VS_VERSIONINFO resource (UTF-16LE key followed by its value),
+// without running it.
+func peProductVersion(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	if fi, err := f.Stat(); err != nil || fi.Size() > 512<<20 {
+		return ""
+	}
+	b, err := io.ReadAll(f)
+	if err != nil {
+		return ""
+	}
+	key := utf16le("ProductVersion")
+	for off := 0; ; {
+		i := bytes.Index(b[off:], key)
+		if i < 0 {
+			return ""
+		}
+		j := off + i + len(key)
+		// skip NUL terminator and 32-bit padding, then read the UTF-16 value
+		for j+1 < len(b) && b[j] == 0 && b[j+1] == 0 {
+			j += 2
+		}
+		var sb strings.Builder
+		for ; j+1 < len(b) && b[j+1] == 0 && b[j] != 0 && sb.Len() < 32; j += 2 {
+			sb.WriteByte(b[j])
+		}
+		if v := fullVerRe.FindString(sb.String()); v != "" {
+			return v
+		}
+		off += i + len(key)
+	}
+}
+
+func utf16le(s string) []byte {
+	out := make([]byte, 0, len(s)*2)
+	for _, r := range s {
+		out = append(out, byte(r), 0)
+	}
+	return out
 }
 
 func majorOf(full string) int {
