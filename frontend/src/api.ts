@@ -196,6 +196,18 @@ const cdelMock: any[] = [
   { id: 'c9e8d7c6b5a4f3e2', name: 'Etsy-02', version: 2, updatedAt: cdelNow - 5 * 86400, deviceName: 'OFFICE-PC', size: 12e6, lockedBy: '', localDeleted: false, deletedVersion: 0, deletedAt: 0, cloudNewer: false, pendingDelete: false },
 ];
 
+// ---- recycle bin (mock data) ----
+const trashDaysMock = 30;
+const trashMock: any[] = [
+  { id: 't1a2b3c4d5e6f708', name: 'FB-广告-07', group: '广告投放', tags: ['养号'], storage: 'local', cloudVersion: 0, createdAt: cdelNow - 40 * 86400, lastRun: cdelNow - 3 * 86400, fingerprint: mockFP(), trashed: true, trashedAt: cdelNow - 2 * 3600, size: 182e6, hasData: true, cloudNote: '仅本机', restoreAsNew: false },
+  { id: 't2b3c4d5e6f70819', name: 'Amazon-Seller-DE-备用店铺-长名称测试环境-用于检查省略号效果是否正常', group: '电商', tags: ['主力'], storage: 'cloud', cloudVersion: 6, createdAt: cdelNow - 90 * 86400, lastRun: cdelNow - 6 * 86400, fingerprint: mockFP('macos'), trashed: true, trashedAt: cdelNow - 4 * 86400, size: 64e6, hasData: true, cloudNote: '云端副本保留', restoreAsNew: false },
+  { id: 't3c4d5e6f708192a', name: 'TikTok-Shop-11', group: '', tags: [], storage: 'cloud', cloudVersion: 3, createdAt: cdelNow - 20 * 86400, lastRun: 0, fingerprint: mockFP(), trashed: true, trashedAt: cdelNow - 26 * 86400, size: 0, hasData: false, cloudNote: '云端已删除', restoreAsNew: true },
+];
+const trashPush = (p: any, cloudDeleted: boolean) => {
+  if (!p) return;
+  trashMock.unshift({ ...p, trashed: true, trashedAt: Date.now() / 1000, size: 40e6 + Math.round(Math.random() * 120e6), hasData: true, cloudNote: cloudDeleted ? '云端已删除' : p.cloudVersion > 0 || p.storage === 'cloud' ? '云端副本保留' : '仅本机', restoreAsNew: cloudDeleted });
+};
+
 const M = {
  NativePresets: async (): Promise<NativePreset[]> => [{id:'demo', name:'Windows / Intel', configId:'3285798'}],
  UseUndetectableKit: async () => { mock.settings.kernelMode='undetectable'; mock.settings.undetectableKit='undetectable-kit'; return {...mock.settings}; },
@@ -501,6 +513,7 @@ const M = {
     return ids.map(id => {
       const p = mock.profiles.find(x => x.id === id); const co = cdelMock.find(x => x.id === id); const name = p?.name || co?.name || id;
       if (mode === 'cloud' && !force && /FB/i.test(name)) return { id, name, local: false, cloud: 'locked', error: '该环境正在被另一台设备（LAPTOP-HOME）同步，暂时不能删除；稍后重试或选择强制删除。' };
+      if (p) trashPush(p, mode === 'cloud' && p.storage === 'cloud'); // recycle bin
       mock.profiles = mock.profiles.filter(x => x.id !== id); mock.running = mock.running.filter(r => r.profileId !== id);
       if (mode === 'cloud') { cdelMock.splice(0, cdelMock.length, ...cdelMock.filter(x => x.id !== id)); return { id, name, local: !!p, cloud: p && p.storage !== 'cloud' ? 'skipped' : 'deleted' }; }
       if (p && p.storage === 'cloud') cdelMock.unshift({ id, name, version: p.cloudVersion, updatedAt: now - 600, deviceName: 'DESKTOP-01', size: 31e6, lockedBy: '', localDeleted: true, deletedVersion: p.cloudVersion, deletedAt: now, cloudNewer: false, pendingDelete: false });
@@ -515,6 +528,22 @@ const M = {
   },
   PendingCloudDeletes: async (): Promise<number> => cdelMock.filter(x => x.pendingDelete).length,
   RetryCloudDeletes: async (): Promise<number> => { await wait(600); return cdelMock.filter(x => x.pendingDelete).length; },
+  // ---- recycle bin ----
+  ListTrash: async (): Promise<any[]> => { await wait(220); return trashMock.map(x => ({ ...x, expiresAt: x.trashedAt + trashDaysMock * 86400 })).sort((a, b) => b.trashedAt - a.trashedAt); },
+  RestoreFromTrash: async (ids: string[]): Promise<any[]> => {
+    await wait(500);
+    return ids.map(id => {
+      const t = trashMock.find(x => x.id === id); if (!t) return { id, name: id, error: '回收站里没有这个环境' };
+      trashMock.splice(trashMock.indexOf(t), 1);
+      const { trashed, trashedAt, size, hasData, cloudNote, restoreAsNew, ...p } = t;
+      const nid = restoreAsNew ? rid() : id;
+      mock.profiles.unshift({ notes: '', proxyId: '', startUrls: [], cookies: '', syncedAt: 0, ...p, id: nid, ...(restoreAsNew ? { cloudVersion: 0, storage: 'local' } : {}) });
+      return { id: nid, oldId: restoreAsNew ? id : undefined, name: t.name };
+    });
+  },
+  PurgeTrash: async (ids: string[]): Promise<number> => { await wait(400); const n = trashMock.filter(x => ids.includes(x.id)).length; trashMock.splice(0, trashMock.length, ...trashMock.filter(x => !ids.includes(x.id))); return n; },
+  EmptyTrash: async (): Promise<number> => { await wait(500); const n = trashMock.length; trashMock.length = 0; return n; },
+  TrashDays: async (): Promise<number> => trashDaysMock,
 };
 
 export const api: typeof M = inWails ? (Go as any) : M;
