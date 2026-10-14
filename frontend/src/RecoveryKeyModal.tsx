@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api } from './api';
 import { Icon, useToast, useExit, Field, Segmented } from './ui';
@@ -49,7 +50,8 @@ export const RecoveryCard: React.FC = () => {
                     <button className="btn sm ghost" onClick={() => setModal('rotate')}><Icon.refresh s={13} /> 轮换恢复密钥</button>
                   </div>
                 </div>}
-      {modal && <RecoveryKeyModal mode={modal} onClose={() => setModal('')} onDone={load} />}
+      {/* portal: .panel's backdrop-filter would trap a fixed overlay inside the card */}
+      {modal && createPortal(<RecoveryKeyModal mode={modal} onClose={() => setModal('')} onDone={load} />, document.body)}
     </div>
   );
 };
