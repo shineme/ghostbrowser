@@ -17,6 +17,7 @@ import { RpaView } from './RpaView';
 import { ExtensionsView } from './ExtensionsView';
 import { AuditView } from './AuditView';
 import { WindowTools } from './WindowTools';
+import { KernelMissingModal } from './KernelInstall';
 
 type Tab = 'profiles' | 'proxies' | 'rpa' | 'extensions' | 'cloud' | 'audit' | 'settings';
 
@@ -153,6 +154,7 @@ const ProfilesView: React.FC<{
   const [fTag, setFTag] = useState('');
   const [sort, setSort] = useState<'recent' | 'name' | 'created'>('recent');
   const [modal, setModal] = useState<'' | 'group' | 'assign'>('');
+  const [needKernel, setNeedKernel] = useState<Profile | null>(null);
   const [syncBusy, setSyncBusy] = useState<Set<string>>(new Set());
   const [runs, setRuns] = useState<Record<string, number>>({});
   const [, tick] = useState(0);
@@ -188,7 +190,7 @@ const ProfilesView: React.FC<{
   const start = async (p: Profile) => {
     setBusyFor(p.id, true);
     try { await api.StartProfile(p.id); setRunning(s => new Set(s).add(p.id)); toast(`已启动 ${p.name}`); }
-    catch (e: any) { toast(String(e?.message || e), 'bad'); }
+    catch (e: any) { const m = String(e?.message || e); if (m.includes('没有找到开源内核')) setNeedKernel(p); else toast(m, 'bad'); }
     finally { setBusyFor(p.id, false); }
   };
   const stop = async (p: Profile) => { setBusyFor(p.id, true); await api.StopProfile(p.id); setRunning(s => { const n = new Set(s); n.delete(p.id); return n; }); setBusyFor(p.id, false); };
@@ -319,6 +321,7 @@ const ProfilesView: React.FC<{
       {bulk && <BulkModal proxies={Object.values(proxyName)} onClose={() => setBulk(false)} onDone={reload} />}
       {nativeTools && <NativeTools profiles={profiles} onClose={() => setNativeTools(false)} onChanged={reload} />}
       {modal === 'group' && <GroupModal ids={[...sel]} groups={groups} onClose={() => setModal('')} onDone={reload} />}
+      {needKernel && <KernelMissingModal name={needKernel.name} onClose={() => setNeedKernel(null)} onLaunch={() => start(needKernel)} />}
       {modal === 'assign' && <AssignModal ids={[...sel]} proxies={Object.values(proxyName)} profiles={profiles} onClose={() => setModal('')} onDone={reload} />}
     </div>
   );
