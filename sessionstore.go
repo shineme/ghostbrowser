@@ -179,7 +179,7 @@ func jsonLen(v any) int64 { b, _ := json.Marshal(v); return int64(len(b)) }
 func applySessionCap(s *sessionSnapV2, capBytes int64) {
 	sort.SliceStable(s.Origins, func(i, j int) bool { return s.Origins[i].SavedAt > s.Origins[j].SavedAt })
 	used := jsonLen(s.Cookies) + 256
-	keep := s.Origins[:0]
+	keep := make([]originStore, 0, len(s.Origins))
 	var dropped []string
 	idbs := make([][]idbDatabase, len(s.Origins))
 	for i := range s.Origins {

@@ -1218,3 +1218,9 @@ func (a *App) PendingCloudDeletes() int { return len(a.store.pendingDeletes()) }
 
 // RetryCloudDeletes sends queued cloud deletes now; returns how many are left.
 func (a *App) RetryCloudDeletes() int { return a.syncer().RetryPendingDeletes() }
+
+// ---- session store ----
+
+// SessionStoreInfo summarises what the profile's login snapshot carries
+// (cookies incl. partitioned, LocalStorage, IndexedDB) for the UI.
+func (a *App) SessionStoreInfo(id string) SessionStoreInfo { return a.store.SessionStoreInfo(id) }
