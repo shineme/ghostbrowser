@@ -3,6 +3,7 @@ import { ThinkingOrb } from 'thinking-orbs';
 import { api, onEvent, Proxy, Profile } from './api';
 import { Icon, Field, Toggle, ago, useToast, useConfirm, useExit, CC, Latency, StatCard, Pick, Segmented } from './ui';
 import { COUNTRIES } from './locales';
+import { MihomoModal } from './MihomoModal';
 
 const cname = (cc?: string) => (cc && COUNTRIES.find(c => c.cc === cc.toUpperCase())?.name) || cc || '';
 const IPTYPE: Record<string, [string, string]> = { residential: ['住宅', 'ok'], hosting: ['机房', 'warn'], mobile: ['移动', 'cy'] };
@@ -22,6 +23,7 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
   const [bulk, setBulk] = useState('');
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [live, setLive] = useState<Record<string, Proxy>>({});
+  const [mihomo, setMihomo] = useState(false);
 
   // Rows update one by one while a batch check runs.
   useEffect(() => onEvent('proxy:checked', (p: Proxy) => {
@@ -87,8 +89,9 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
       <div className="halo"><ThinkingOrb state="searching" size={64} theme="dark" /></div>
       <h3>还没有代理</h3>
       <div>直接 <b>Ctrl+V</b> 粘贴一批代理，或拖入 .txt / .csv 文件。格式、协议、国家和延迟都会自动识别。</div>
-      <button className="btn primary" onClick={() => setImportText('')}><Icon.upload s={15} /> 批量导入</button>
+      <div className="actions"><button className="btn" onClick={() => setMihomo(true)}><Icon.server s={15} /> Clash / Mihomo</button><button className="btn primary" onClick={() => setImportText('')}><Icon.upload s={15} /> 批量导入</button></div>
       {importText !== null && <ImportModal initial={importText} onClose={() => setImportText(null)} onDone={(ids, check) => { reload(); if (check) runCheck(ids, '导入检测'); }} />}
+      {mihomo && <MihomoModal onClose={() => setMihomo(false)} onAdded={reload} />}
     </div>
   );
 
@@ -125,6 +128,7 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
         <button className="btn" onClick={() => runSpeed(target)} disabled={!!bulk} title={`测速${scope}（每个下载约 5 MB）`}>{bulk === '测速' ? <><ThinkingOrb state="searching" size={20} theme="dark" /> 测速中…</> : <><Icon.bolt s={14} /> 测速{sel.size ? '所选' : ''}</>}</button>
         {sel.size > 0 ? <button className="btn danger" onClick={() => delMany([...sel], '所选代理')}><Icon.trash s={14} /> 删除所选</button>
           : failIds.length > 0 && <button className="btn" onClick={() => delMany(failIds, '全部不可用的代理')}><Icon.trash s={14} /> 清理不可用 ({failIds.length})</button>}
+        <button className="btn tb-mh" onClick={() => setMihomo(true)} title="Clash / Mihomo：连接 Clash Verge / Mihomo，切换节点并作为代理使用"><Icon.server s={15} /><span>Clash / Mihomo</span></button>
         <button className="btn primary" onClick={() => setImportText('')}><Icon.upload s={15} /> 批量导入</button>
       </div>
 
@@ -161,6 +165,7 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
         </table>
         {list.length === 0 && <div className="sub" style={{ padding: 24, textAlign: 'center' }}>没有符合筛选条件的代理</div>}
       </div>
+      {mihomo && <MihomoModal onClose={() => setMihomo(false)} onAdded={reload} />}
       {editing && <ProxyEditModal p={editing} onClose={() => setEditing(null)} onSaved={reload} />}
       {importText !== null && <ImportModal initial={importText} onClose={() => setImportText(null)} onDone={(ids, check) => { reload(); if (check) runCheck(ids, '导入检测'); }} />}
     </>
