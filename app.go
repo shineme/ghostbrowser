@@ -1218,3 +1218,36 @@ func (a *App) PendingCloudDeletes() int { return len(a.store.pendingDeletes()) }
 
 // RetryCloudDeletes sends queued cloud deletes now; returns how many are left.
 func (a *App) RetryCloudDeletes() int { return a.syncer().RetryPendingDeletes() }
+
+// ---- 环境自检 / 一键修复 ----
+
+// CheckEnvironment runs the environment self-check for one profile.
+func (a *App) CheckEnvironment(profileID string) (EnvReport, error) {
+	return a.store.CheckEnvironment(profileID)
+}
+
+// RepairEnvironment fixes the given items (empty = all fixable failing items),
+// backing up the old values into the profile's repair log.
+func (a *App) RepairEnvironment(profileID string, items []string) (RepairResult, error) {
+	r, err := a.store.RepairEnvironment(profileID, items)
+	if err == nil && r.Changed > 0 {
+		a.store.auditNamed("ui", "profile.repair", profileID, r.Profile.Name, nil, strings.Join(r.Entry.Items, ","))
+	}
+	return r, err
+}
+
+// RepairHistory lists a profile's repair log, newest first.
+func (a *App) RepairHistory(profileID string) []RepairEntry { return a.store.RepairHistory(profileID) }
+
+// RestoreRepair rolls back one repair-log entry.
+func (a *App) RestoreRepair(profileID, entryID string) (RepairResult, error) {
+	r, err := a.store.RestoreRepair(profileID, entryID)
+	if err == nil {
+		a.store.auditNamed("ui", "profile.repair.restore", profileID, r.Profile.Name, nil, entryID)
+	}
+	return r, err
+}
+
+// CheckSystemClock compares the system clock with an HTTPS server's Date
+// header (report only; never changes the system time).
+func (a *App) CheckSystemClock() ClockReport { return CheckClock(nil) }
