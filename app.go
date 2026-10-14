@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -757,3 +758,128 @@ func (a *App) MihomoSelect(group, node string) error { return MihomoSelect(group
 func (a *App) MihomoTestDelay(node string) (int, error) { return MihomoTestDelay(node, "", 0) }
 
 func (a *App) MihomoAddProxy() (Proxy, error) { return a.store.MihomoAddProxy() }
+
+// ---- rpa ----
+
+var (
+	rpaOnce sync.Once
+	rpaSvc  *rpaService
+)
+
+// rpa lazily builds the automation service (workflows.json next to data.json).
+func (a *App) rpa() *rpaService {
+	rpaOnce.Do(func() {
+		rpaSvc = &rpaService{
+			db:      newRpaStore(a.store.dir),
+			dir:     a.store.dir,
+			profile: a.store.GetProfile,
+			session: func(id string) (string, bool) {
+				rs, ok := runReg.get(id)
+				if !ok {
+					return "", false
+				}
+				return rs.WSURL, true
+			},
+			start: func(id string) (string, error) {
+				rs, err := a.StartProfile(id)
+				if err != nil {
+					return "", err
+				}
+				return rs.WSURL, nil
+			},
+			stop:      a.StopProfile,
+			emit:      func(e RpaEvent) { wruntime.EventsEmit(a.ctx, "rpa:event", e) },
+			newDriver: newCDPDriver,
+			cancels:   map[string]context.CancelFunc{},
+		}
+	})
+	return rpaSvc
+}
+
+func (a *App) ListWorkflows() []Workflow                 { return a.rpa().db.List() }
+func (a *App) SaveWorkflow(w Workflow) (Workflow, error) { return a.rpa().db.Put(w) }
+func (a *App) DeleteWorkflow(id string) error            { return a.rpa().db.Delete(id) }
+func (a *App) ValidateWorkflow(w Workflow) []RpaIssue    { return validateWorkflow(w) }
+
+// DuplicateWorkflow copies a workflow with fresh step IDs.
+func (a *App) DuplicateWorkflow(id string) (Workflow, error) {
+	w, ok := a.rpa().db.Get(id)
+	if !ok {
+		return Workflow{}, fmt.Errorf("流程不存在")
+	}
+	w.ID, w.Name, w.Steps = "", w.Name+" 副本", normaliseSteps(w.Steps, true)
+	w.LastRunAt, w.LastStatus, w.LastRunID, w.RunCount = 0, "", "", 0
+	return a.rpa().db.Put(w)
+}
+
+// RunWorkflow runs a workflow on the given profiles (3 in parallel, starting
+// browsers that are not open) and returns the run id; progress arrives as rpa:event.
+func (a *App) RunWorkflow(workflowID string, profileIDs []string) (string, error) {
+	return a.rpa().Run(workflowID, profileIDs, RpaRunOptions{Concurrency: 3, AutoStart: true})
+}
+
+// RunWorkflowWith is RunWorkflow with explicit concurrency / auto-start options.
+func (a *App) RunWorkflowWith(workflowID string, profileIDs []string, opt RpaRunOptions) (string, error) {
+	return a.rpa().Run(workflowID, profileIDs, opt)
+}
+
+func (a *App) CancelWorkflowRun(runID string) bool    { return a.rpa().Cancel(runID) }
+func (a *App) WorkflowRuns(workflowID string) []RpaRun { return a.rpa().db.Runs(workflowID) }
+func (a *App) WorkflowRun(runID string) (RpaRun, error) {
+	r, ok := a.rpa().db.Run(runID)
+	if !ok {
+		return RpaRun{}, fmt.Errorf("运行记录不存在")
+	}
+	return r, nil
+}
+func (a *App) RpaScreenshot(path string) (string, error) { return a.rpa().shotDataURL(path) }
+
+func (a *App) ExportWorkflow(id string) (string, error) {
+	w, ok := a.rpa().db.Get(id)
+	if !ok {
+		return "", fmt.Errorf("流程不存在")
+	}
+	return exportWorkflowJSON(w), nil
+}
+
+// ImportWorkflow saves a workflow from exported JSON as a new workflow.
+func (a *App) ImportWorkflow(raw string) (Workflow, error) {
+	w, err := parseWorkflowJSON(raw)
+	if err != nil {
+		return Workflow{}, err
+	}
+	return a.rpa().db.Put(w)
+}
+
+// SaveWorkflowFile writes the export JSON to a file the user picks ("" if cancelled).
+func (a *App) SaveWorkflowFile(id string) (string, error) {
+	js, err := a.ExportWorkflow(id)
+	if err != nil {
+		return "", err
+	}
+	w, _ := a.rpa().db.Get(id)
+	name := regexp.MustCompile(`[\\/:*?"<>|]+`).ReplaceAllString(w.Name, "_")
+	path, err := wruntime.SaveFileDialog(a.ctx, wruntime.SaveDialogOptions{Title: "导出流程", DefaultFilename: name + ".rpa.json",
+		Filters: []wruntime.FileFilter{{DisplayName: "流程 JSON (*.json)", Pattern: "*.json"}}})
+	if err != nil || path == "" {
+		return "", err
+	}
+	return path, os.WriteFile(path, []byte(js), 0o644)
+}
+
+// OpenWorkflowFile lets the user pick a JSON file and returns its text ("" if cancelled).
+func (a *App) OpenWorkflowFile() (string, error) {
+	path, err := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{Title: "导入流程",
+		Filters: []wruntime.FileFilter{{DisplayName: "流程 JSON (*.json)", Pattern: "*.json"}}})
+	if err != nil || path == "" {
+		return "", err
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	if len(b) > 4<<20 {
+		return "", fmt.Errorf("文件太大")
+	}
+	return string(b), nil
+}
