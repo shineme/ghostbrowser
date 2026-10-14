@@ -182,7 +182,7 @@ func kernelCompatFor(path, full string) KernelCompat {
 	case k.Major < chromiumMinMajor:
 		k.Level, k.Message = "unsupported", fmt.Sprintf("Chrome %d 版本过旧，不受支持：需要 %d 及以上，推荐 %d 以上", k.Major, chromiumMinMajor, chromiumRecommendedMajor)
 	case k.Major < chromiumRecommendedMajor:
-		k.Level, k.Message = "warn", fmt.Sprintf("Chrome %d 可以使用，但新标签页会多加载一次以注入指纹，建议升级到 %d 以上", k.Major, chromiumRecommendedMajor)
+		k.Level, k.Message = "warn", fmt.Sprintf("Chrome %d 可以使用，但新标签页会多加载一次以注入指纹，窗口同步可能无效，建议升级到 %d 以上", k.Major, chromiumRecommendedMajor)
 	}
 	if k.Level == "ok" && isBrandedChrome(path) && k.Major >= 137 {
 		k.Level, k.Message = "warn", fmt.Sprintf("品牌版 Google Chrome %d 不再支持命令行加载扩展：扩展中心分配的扩展不会生效（指纹不受影响）。需要扩展请改用 Chromium 或 Chrome for Testing", k.Major)
