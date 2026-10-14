@@ -387,16 +387,18 @@ func (s *Store) PushProfile(id string) error {
 }
 
 func (s *Store) pushProfile(id string) (sent int64, err error) {
+	t := s.newTransfer(id, "up")
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("sync crashed: %v", r)
 		}
+		t.finish(err)
 	}()
-	e := s.pushProfileInner(id, &sent)
-	return sent, e
+	err = s.pushProfileInner(id, &sent, t)
+	return sent, err
 }
 
-func (s *Store) pushProfileInner(id string, sent *int64) error {
+func (s *Store) pushProfileInner(id string, sent *int64, t *transfer) error {
 	s.launchMu.Lock()
 	defer s.launchMu.Unlock()
 	if _, ok := runReg.get(id); ok {
@@ -437,7 +439,7 @@ func (s *Store) pushProfileInner(id string, sent *int64) error {
 	var refs []string
 	var files []manifestFile
 	if si, err := s.ServerInfo(false); err == nil && si.has("chunks") {
-		enc, refs, *sent, files, e = s.buildChunked(dir, root, &archived, st.SyncPassword, nil)
+		enc, refs, *sent, files, e = s.buildChunked(dir, root, &archived, st.SyncPassword, t)
 		if e != nil {
 			return e
 		}
@@ -445,6 +447,7 @@ func (s *Store) pushProfileInner(id string, sent *int64) error {
 			refs = []string{}
 		}
 	} else {
+		t.phase("pack", 0)
 		raw, e := zipDir(dir, &archived)
 		if e != nil {
 			return e
@@ -492,7 +495,12 @@ func (s *Store) pushProfileInner(id string, sent *int64) error {
 			return e
 		}
 	}
-	resp, e := c.req("PUT", path+"/blob?version="+strconv.FormatInt(p.CloudVer, 10), bytes.NewReader(enc), "application/octet-stream")
+	var blobBody io.Reader = bytes.NewReader(enc)
+	if files == nil {
+		t.phase("upload", int64(len(enc)))
+		blobBody = &countingReader{r: blobBody, fn: t.add}
+	}
+	resp, e := c.req("PUT", path+"/blob?version="+strconv.FormatInt(p.CloudVer, 10), blobBody, "application/octet-stream")
 	if e != nil {
 		return e
 	}
@@ -507,6 +515,7 @@ func (s *Store) pushProfileInner(id string, sent *int64) error {
 		OK      bool  `json:"ok"`
 		Version int64 `json:"version"`
 	}
+	t.phase("commit", 0)
 	if e = c.jsonRequest("POST", path+"/commit", cm, &result); e != nil {
 		return fmt.Errorf("commit: %w", e)
 	}
@@ -537,16 +546,18 @@ func (s *Store) PullProfile(id string) error {
 // pullProfile restores the cloud copy (version 0 = current, else a kept older
 // version) and returns the bytes downloaded.
 func (s *Store) pullProfile(id string, want int64) (got int64, err error) {
+	t := s.newTransfer(id, "down")
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("sync crashed: %v", r)
 		}
+		t.finish(err)
 	}()
-	err = s.pullProfileInner(id, want, &got)
+	err = s.pullProfileInner(id, want, &got, t)
 	return got, err
 }
 
-func (s *Store) pullProfileInner(id string, want int64, got *int64) error {
+func (s *Store) pullProfileInner(id string, want int64, got *int64, t *transfer) error {
 	s.launchMu.Lock()
 	defer s.launchMu.Unlock()
 	if _, ok := runReg.get(id); ok {
@@ -586,7 +597,10 @@ func (s *Store) pullProfileInner(id string, want int64, got *int64) error {
 	if len(wantHash) != 64 {
 		return fmt.Errorf("sync server returned no valid blob digest")
 	}
-	enc, e := io.ReadAll(io.LimitReader(resp.Body, maxSyncBlob+1))
+	if resp.ContentLength > 0 {
+		t.phase("download", resp.ContentLength)
+	}
+	enc, e := io.ReadAll(io.LimitReader(&countingReader{r: resp.Body, fn: t.add}, maxSyncBlob+1))
 	if e != nil {
 		return e
 	}
@@ -613,7 +627,7 @@ func (s *Store) pullProfileInner(id string, want int64, got *int64) error {
 		return e
 	}
 	if chunked {
-		n, e := s.restoreChunked(man, dir, root, stage)
+		n, e := s.restoreChunked(man, dir, root, stage, t)
 		*got += n
 		if e != nil {
 			return e
@@ -621,6 +635,7 @@ func (s *Store) pullProfileInner(id string, want int64, got *int64) error {
 		p = man.Profile
 		p.ChunkKey = man.ChunkKey
 	} else {
+		t.phase("write", 0)
 		if e = unzipDir(raw, stage); e != nil {
 			return e
 		}

@@ -12,6 +12,7 @@ import { CloudView, syncState } from './CloudView';
 import { SyncPrompt } from './SyncPrompt';
 import { EnvSetup } from './EnvSetup';
 import { NativeTools } from './NativeTools';
+import { TransferDock, InlineTransfer } from './Transfers';
 
 type Tab = 'profiles' | 'proxies' | 'cloud' | 'settings';
 
@@ -267,7 +268,7 @@ const ProfilesView: React.FC<{
                 </td>
                 <td><div className="os" style={{ fontWeight: 550 }}><OsIcon os={p.fingerprint.os} s={13} />{osLabel(p.fingerprint.os)} <span className="sub" style={{ margin: 0 }}>Chrome {p.fingerprint.browserVersion}</span><span className={`devtag ${(p as any).kernel === 'chromium' || needsOpen(p.fingerprint.os, (p.fingerprint as any).deviceType) ? 'open' : ''}`} title={(p as any).kernel === 'chromium' || needsOpen(p.fingerprint.os, (p.fingerprint as any).deviceType) ? '开源内核' : '定制内核'}><DevIcon t={devType((p.fingerprint as any).deviceType)} s={11} />{(p.fingerprint as any).deviceName || devName((p.fingerprint as any).deviceType)}</span></div><div className="sub num">{p.fingerprint.screenWidth}×{p.fingerprint.screenHeight} · {p.fingerprint.hardwareConcurrency}C/{p.fingerprint.deviceMemory}G</div></td>
                 <td>{px ? <div><CC cc={px.country} /><span>{px.city || px.name}</span>{px.status === 'fail' && <span className="badge fail" style={{ marginLeft: 6 }}>失效</span>}<div className="sub num">{px.ip || px.host}{px.ip && ipShare[px.ip] > 1 && <span className="ip-dup" title="多个环境使用同一出口 IP，容易被平台关联"> ⚠ {ipShare[px.ip]} 个环境共用此 IP</span>}</div></div> : <span className="sub">直连</span>}</td>
-                <td>{(() => { const [txt, tone] = syncState(p, syncBusy); return <span className={`badge ${tone}`}>{tone === 'local' ? <Icon.laptop s={12} /> : <Icon.cloud s={12} />} {txt}{p.storage === 'cloud' && <span className="num" style={{ marginLeft: 3 }}>v{p.cloudVersion}</span>}</span>; })()}</td>
+                <td>{(() => { const [txt, tone] = syncState(p, syncBusy); return <InlineTransfer id={p.id} fallback={<span className={`badge ${tone}`}>{tone === 'local' ? <Icon.laptop s={12} /> : <Icon.cloud s={12} />} {txt}{p.storage === 'cloud' && <span className="num" style={{ marginLeft: 3 }}>v{p.cloudVersion}</span>}</span>} />; })()}</td>
                 <td><span className="sub">{ago(p.lastRun)}</span></td>
                 <td>
                   <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
@@ -433,4 +434,4 @@ const BulkModal: React.FC<{ proxies: Proxy[]; onClose: () => void; onDone: () =>
 
 const osLabel = (o: string) => osNameOf(o);
 
-export default function App() { return <ToastHost><Shell /><SyncPrompt /><EnvSetup onReady={() => {}} /><Splash /></ToastHost>; }
+export default function App() { return <ToastHost><Shell /><SyncPrompt /><TransferDock /><EnvSetup onReady={() => {}} /><Splash /></ToastHost>; }

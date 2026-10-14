@@ -145,6 +145,7 @@ curl -H "X-API-Key: gb_xxx" "http://127.0.0.1:25325/profile/start?profile=<环�
 - 防暴力破解：同一个 IP 15 分钟内输错令牌 10 次，封禁 15 分钟（`GHOST_MAX_FAILS`）
 - 版本保留：默认 3 个（`GHOST_KEEP_VERSIONS`，最多 50）；不再被引用的数据块 2 天后自动清理
 - 每次请求最大约 12 MB，PHP 默认的 `post_max_size = 8M` 也能用（客户端会自动按服务器上限缩小批次）
+- 上传/拉取有实时进度：右下角传输面板显示阶段（扫描、上传、提交、下载、还原）、已传/总量、实时速度与速度曲线、预计剩余时间，以及增量同步省下的流量；环境列表和云同步列表的状态列也会变成进度条（事件 `sync:progress`，绑定 `Transfers()`）
 - 前面有 nginx / CDN 时，它们的上传上限 PHP 看不到：收到 HTTP 413 后客户端会自动对半拆包重试，并记住更小的批次。单个分块约 4 MB，所以 nginx 至少要设 `client_max_body_size 8m;`，建议 `64m`（nginx 默认只有 1m）
 
 ## Sync server contract

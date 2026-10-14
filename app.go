@@ -36,6 +36,7 @@ func (a *App) startup(ctx context.Context) {
 		env.Ensure(false)
 		a.store.PutSettings(applyToSettings(a.store.GetSettings()))
 	}()
+	a.store.onTransfer = func(e TransferEvent) { wruntime.EventsEmit(a.ctx, "sync:progress", e) }
 	globalAuto = &autoSyncer{s: a.store, busy: map[string]bool{}, emit: func(e SyncEvent) { wruntime.EventsEmit(a.ctx, "sync:event", e) }}
 	runReg.onExit = func(id string) {
 		wruntime.EventsEmit(a.ctx, "profile:exit", id)
@@ -265,6 +266,9 @@ func (a *App) SyncHold() { a.auto.Hold() }
 
 // SyncDecide answers the prompt: listed profiles are pulled from the cloud,
 // the others keep the local copy (which is then uploaded over the cloud one).
+// Transfers lists uploads/downloads in progress.
+func (a *App) Transfers() []TransferEvent { return ActiveTransfers() }
+
 func (a *App) SyncDecide(pull []string) bool { return a.auto.Decide(pull) }
 
 func (a *App) StopProfile(id string) {

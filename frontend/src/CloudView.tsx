@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api, onEvent, Profile, Settings } from './api';
+import { InlineTransfer } from './Transfers';
 import { Icon, useToast, useConfirm, useExit, Avatar, ago, Segmented } from './ui';
 
 const size = (b?: number) => b == null || b < 0 ? '—' : b >= 1 << 30 ? `${(b / (1 << 30)).toFixed(1)} GB` : b >= 1 << 20 ? `${(b / (1 << 20)).toFixed(1)} MB` : b >= 1024 ? `${Math.round(b / 1024)} KB` : `${b} B`;
@@ -88,7 +89,7 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
               const [txt, tone] = syncState(p, busy);
               return <tr key={p.id} className="rise" style={{ ['--i' as any]: i }}>
                 <td><div className="cell-id"><Avatar seed={p.fingerprint.noiseSeed || p.id} os={p.fingerprint.os} /><div><div className="nm">{p.name}</div><div className="sub">{p.group || '未分组'}</div></div></div></td>
-                <td><span className={`badge ${tone}`}>{tone === 'local' ? <Icon.laptop s={12} /> : <i className="d" />} {txt}</span></td>
+                <td><InlineTransfer id={p.id} fallback={<span className={`badge ${tone}`}>{tone === 'local' ? <Icon.laptop s={12} /> : <i className="d" />} {txt}</span>} /></td>
                 <td className="sub num">{p.cloudVersion ? `v${p.cloudVersion}` : '—'}</td>
                 <td className="sub">{p.syncedAt ? new Date(p.syncedAt * 1000).toLocaleString() : '—'}</td>
                 <td><div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>

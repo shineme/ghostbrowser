@@ -356,8 +356,12 @@ func (c *syncClient) missingChunks(ids []string) ([]string, error) {
 	return miss, nil
 }
 
-func (c *syncClient) putChunks(frame []byte) error {
-	resp, e := c.req("PUT", "/api/chunks", bytes.NewReader(frame), "application/octet-stream")
+func (c *syncClient) putChunks(frame []byte, onRead func(int64)) error {
+	var body io.Reader = bytes.NewReader(frame)
+	if onRead != nil {
+		body = &countingReader{r: body, fn: onRead}
+	}
+	resp, e := c.req("PUT", "/api/chunks", body, "application/octet-stream")
 	if e != nil {
 		return e
 	}
@@ -366,7 +370,7 @@ func (c *syncClient) putChunks(frame []byte) error {
 }
 
 // getChunks downloads ids and hands each decrypted chunk to fn.
-func (c *syncClient) getChunks(key []byte, ids []string, fn func(id string, data []byte) error) error {
+func (c *syncClient) getChunks(key []byte, ids []string, fn func(id string, data []byte) error, onRead func(int64)) error {
 	b, _ := json.Marshal(map[string]any{"ids": ids})
 	resp, e := c.req("POST", "/api/chunks/get", bytes.NewReader(b), "application/json")
 	if e != nil {
@@ -376,7 +380,11 @@ func (c *syncClient) getChunks(key []byte, ids []string, fn func(id string, data
 	if e = syncStatus(resp); e != nil {
 		return e
 	}
-	r := bufio.NewReaderSize(resp.Body, 1<<20)
+	var body io.Reader = resp.Body
+	if onRead != nil {
+		body = &countingReader{r: body, fn: onRead}
+	}
+	r := bufio.NewReaderSize(body, 256<<10)
 	want := map[string]bool{}
 	for _, id := range ids {
 		want[id] = true
@@ -410,7 +418,7 @@ func (c *syncClient) getChunks(key []byte, ids []string, fn func(id string, data
 
 // buildChunked uploads the chunks the server is missing and returns the
 // encrypted manifest plus the chunk list for the server's garbage collector.
-func (s *Store) buildChunked(dir, root string, archived *Profile, password string, progress func(done, total int64)) ([]byte, []string, int64, []manifestFile, error) {
+func (s *Store) buildChunked(dir, root string, archived *Profile, password string, t *transfer) ([]byte, []string, int64, []manifestFile, error) {
 	key, e := profileChunkKey(archived)
 	if e != nil {
 		return nil, nil, 0, nil, e
@@ -429,6 +437,15 @@ func (s *Store) buildChunked(dir, root string, archived *Profile, password strin
 	if e != nil {
 		return nil, nil, 0, nil, e
 	}
+	var upPlain int64
+	for _, id := range miss {
+		if l, ok := locs[id]; ok {
+			upPlain += int64(l.n)
+		}
+	}
+	t.saved(total - upPlain)
+	t.phase("upload", upPlain)
+	var donePlain int64
 	limit := int64(chunkBatchBytes)
 	if si, err := s.ServerInfo(false); err == nil && si.MaxBody > 0 && si.MaxBody-(1<<20) < limit {
 		limit = si.MaxBody - (1 << 20)
@@ -441,22 +458,29 @@ func (s *Store) buildChunked(dir, root string, archived *Profile, password strin
 	}
 	var sent int64
 	type piece struct {
-		id   string
-		blob []byte
+		id    string
+		blob  []byte
+		plain int64
 	}
 	// send uploads a batch; on a 413 it halves the batch and remembers the
 	// smaller size, so a front-end limit we cannot query is found by itself.
 	var send func(ps []piece) error
 	send = func(ps []piece) error {
 		var frame []byte
+		var plain int64
 		for _, p := range ps {
+			plain += p.plain
 			var hdr [4]byte
 			binary.BigEndian.PutUint32(hdr[:], uint32(len(p.blob)))
 			frame = append(frame, p.id...)
 			frame = append(frame, hdr[:]...)
 			frame = append(frame, p.blob...)
 		}
-		e := c.putChunks(frame)
+		var read int64
+		e := c.putChunks(frame, func(n int64) {
+			read += n
+			t.set(donePlain + plain*read/int64(len(frame)))
+		})
 		if e != nil && isTooLarge(e) && len(ps) > 1 {
 			if l := int64(len(frame)) / 2; l < limit {
 				limit = l
@@ -472,9 +496,8 @@ func (s *Store) buildChunked(dir, root string, archived *Profile, password strin
 			return e
 		}
 		sent += int64(len(frame))
-		if progress != nil {
-			progress(sent, total)
-		}
+		donePlain += plain
+		t.set(donePlain)
 		return nil
 	}
 	var batch []piece
@@ -508,7 +531,7 @@ func (s *Store) buildChunked(dir, root string, archived *Profile, password strin
 				return nil, nil, 0, nil, e
 			}
 		}
-		batch = append(batch, piece{id, blob})
+		batch = append(batch, piece{id, blob, int64(len(data))})
 		batchLen += int64(68 + len(blob))
 	}
 	if e = flush(); e != nil {
@@ -553,7 +576,7 @@ func decodeManifest(raw []byte) (*syncManifest, bool, error) {
 
 // restoreChunked writes the manifest's files into stage, copying pieces that
 // already exist in the current local profile and downloading the rest.
-func (s *Store) restoreChunked(m *syncManifest, dir, root, stage string) (int64, error) {
+func (s *Store) restoreChunked(m *syncManifest, dir, root, stage string, t *transfer) (int64, error) {
 	key, e := base64.StdEncoding.DecodeString(m.ChunkKey)
 	if e != nil || len(key) != 32 {
 		return 0, fmt.Errorf("manifest has no valid chunk key")
@@ -568,6 +591,20 @@ func (s *Store) restoreChunked(m *syncManifest, dir, root, stage string) (int64,
 	}
 	var need []string
 	seen := map[string]bool{}
+	size := map[string]int64{}
+	var needPlain, writeTotal, savedPlain int64
+	for _, f := range m.Files {
+		writeTotal += f.Size
+		for i, id := range f.Chunks {
+			n := f.Size - int64(i)*chunkSize
+			if n > chunkSize {
+				n = chunkSize
+			}
+			if n > 0 {
+				size[id] = n
+			}
+		}
+	}
 	for _, f := range m.Files {
 		if !filepath.IsLocal(filepath.FromSlash(f.Path)) || strings.Contains(f.Path, "\\") || f.Path == "" {
 			return 0, fmt.Errorf("unsafe path in manifest: %q", f.Path)
@@ -576,9 +613,15 @@ func (s *Store) restoreChunked(m *syncManifest, dir, root, stage string) (int64,
 			if len(id) != 64 {
 				return 0, fmt.Errorf("bad chunk ID in manifest")
 			}
-			if _, ok := have[id]; !ok && !seen[id] {
-				seen[id] = true
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
+			if _, ok := have[id]; ok {
+				savedPlain += size[id]
+			} else {
 				need = append(need, id)
+				needPlain += size[id]
 			}
 		}
 	}
@@ -589,20 +632,32 @@ func (s *Store) restoreChunked(m *syncManifest, dir, root, stage string) (int64,
 	}
 	defer os.RemoveAll(scratch)
 	c := s.sync()
-	var got int64
+	t.saved(savedPlain)
+	t.phase("download", needPlain)
+	var got, plainDone, wire int64
 	for i := 0; i < len(need); i += chunkGetBatch {
 		j := i + chunkGetBatch
 		if j > len(need) {
 			j = len(need)
 		}
+		var cur int64 = chunkSize
 		e = c.getChunks(key, need[i:j], func(id string, data []byte) error {
 			got += int64(len(data))
+			plainDone += size[id]
+			wire = 0
+			t.set(plainDone)
 			return os.WriteFile(filepath.Join(scratch, id), data, 0o600)
+		}, func(n int64) {
+			wire += n
+			if wire < cur {
+				t.set(plainDone + wire)
+			}
 		})
 		if e != nil {
 			return got, e
 		}
 	}
+	t.phase("write", writeTotal)
 	for _, f := range m.Files {
 		dst := filepath.Join(stage, filepath.FromSlash(f.Path))
 		if e = os.MkdirAll(filepath.Dir(dst), 0o700); e != nil {
@@ -632,6 +687,7 @@ func (s *Store) restoreChunked(m *syncManifest, dir, root, stage string) (int64,
 				return got, e
 			}
 			written += int64(len(data))
+			t.add(int64(len(data)))
 		}
 		if e = out.Close(); e != nil {
 			return got, e

@@ -156,8 +156,9 @@ const M = {
   PickFolder: async () => mock.settings.profilesDir,
   KernelMajor: async () => '141',
   TestSync: async () => { await wait(700); if (!mock.settings.syncServer) throw '请先填写同步服务器地址'; },
-  PushProfile: async (id: string) => { await wait(900); const p = mock.profiles.find(x => x.id === id); p.storage = 'cloud'; p.cloudVersion++; p.syncedAt = Date.now() / 1000; },
-  PullProfile: async (_id: string) => { await wait(900); },
+  Transfers: async (): Promise<any[]> => [],
+  PushProfile: async (id: string) => { const q = mock.profiles.find(x => x.id === id); await simTransfer(id, q?.name || id, 'up', 38 << 20, 212 << 20, 6000); const p = mock.profiles.find(x => x.id === id); p.storage = 'cloud'; p.cloudVersion++; p.syncedAt = Date.now() / 1000; },
+  PullProfile: async (id: string) => { const q = mock.profiles.find(x => x.id === id); await simTransfer(id, q?.name || id, 'down', 64 << 20, 96 << 20, 7000); },
   ListCloud: async () => mock.profiles.filter(p => p.storage === 'cloud').map(p => ({ id: p.id, name: p.name, version: p.cloudVersion, sha256: 'e3b0c442…', meta: null, lockedBy: '' })),
   DataDir: async () => 'C:\\Users\\me\\AppData\\Roaming\\GhostBrowser',
   EnvStatus: async (): Promise<any> => ({ ready: true, kitDir: 'undetectable-kit', chromeExe: 'undetectable-kit\\runtime\\chrome\\chrome.exe', phase: 'ready', pct: 100, done: 0, total: 0, speedBps: 0, message: '环境就绪', updatedAt: Math.floor(Date.now() / 1000), manifestFromServer: false }),
@@ -181,8 +182,37 @@ const M = {
 
 export const api: typeof M = inWails ? (Go as any) : M;
 
+// In the browser preview, events come from a local bus so the mock can simulate them.
+const bus: Record<string, Set<(...a: any[]) => void>> = {};
+export const mockEmit = (name: string, ...a: any[]) => bus[name]?.forEach(f => f(...a));
 export const onEvent = (name: string, cb: (...a: any[]) => void) => {
   const rt = (window as any).runtime;
   if (rt && rt.EventsOn) return rt.EventsOn(name, cb);
-  return () => {};
+  (bus[name] ||= new Set()).add(cb);
+  return () => { bus[name].delete(cb); };
 };
+
+// Simulated transfer for the preview: phases, bytes and a wobbly speed.
+function simTransfer(id: string, name: string, dir: 'up' | 'down', total: number, saved: number, ms: number) {
+  const started = Date.now();
+  return new Promise<void>(res => {
+    const pre = dir === 'up' ? 'scan' : 'download';
+    mockEmit('sync:progress', { id, name, dir, phase: pre, done: 0, total: 0, speed: 0, eta: -1, saved, started, final: false });
+    let done = 0;
+    setTimeout(() => {
+      const ph = dir === 'up' ? 'upload' : 'download';
+      const iv = setInterval(() => {
+        const sp = (total / (ms / 1000)) * (0.7 + Math.random() * 0.6);
+        done = Math.min(total, done + sp * 0.2);
+        mockEmit('sync:progress', { id, name, dir, phase: ph, done, total, speed: sp, eta: Math.round((total - done) / sp), saved, started, final: false });
+        if (done >= total) {
+          clearInterval(iv);
+          mockEmit('sync:progress', { id, name, dir, phase: 'done', done: total, total, speed: total / (ms / 1000), eta: 0, saved, started, final: true });
+          res();
+        }
+      }, 200);
+    }, 700);
+  });
+}
+
+if (!inWails) (window as any).__mock = { api: M, emit: mockEmit };

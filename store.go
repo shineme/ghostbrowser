@@ -21,7 +21,8 @@ type Store struct {
 	Settings Settings
 	Global   GlobalSyncState
 
-	bodyCap atomic.Int64 // largest upload body the sync server accepted after a 413
+	onTransfer func(TransferEvent)
+	bodyCap    atomic.Int64 // largest upload body the sync server accepted after a 413
 }
 
 func newID() string {

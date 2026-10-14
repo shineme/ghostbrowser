@@ -61,7 +61,11 @@ func TestChunkUploadSplitsOn413(t *testing.T) {
 	_ = os.MkdirAll(dir, 0700)
 	_ = os.WriteFile(filepath.Join(dir, "big.bin"), big, 0600)
 	cp := *s.Profiles[p.ID]
-	_, ids, _, _, e := s.buildChunked(dir, s.Settings.ProfilesDir, &cp, "pw", nil)
+	var evs []TransferEvent
+	s.onTransfer = func(e TransferEvent) { evs = append(evs, e) }
+	tr := s.newTransfer(p.ID, "up")
+	_, ids, _, _, e := s.buildChunked(dir, s.Settings.ProfilesDir, &cp, "pw", tr)
+	tr.finish(e)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -72,6 +76,20 @@ func TestChunkUploadSplitsOn413(t *testing.T) {
 	}
 	if maxSeen > cap || s.bodyCap.Load() == 0 {
 		t.Fatalf("maxSeen=%d cap learned=%d", maxSeen, s.bodyCap.Load())
+	}
+	var prev int64
+	ups := 0
+	for _, ev := range evs {
+		if ev.Phase == "upload" {
+			ups++
+			if ev.Done < prev || ev.Total != 14<<20 {
+				t.Fatalf("bad progress %+v", ev)
+			}
+			prev = ev.Done
+		}
+	}
+	if last := evs[len(evs)-1]; ups < 1 || last.Phase != "done" || last.Done != 14<<20 || len(ActiveTransfers()) != 0 {
+		t.Fatalf("ups=%d last=%+v", ups, last)
 	}
 	if !isTooLarge(syncStatus(&http.Response{StatusCode: 413, Body: io.NopCloser(strings.NewReader("<html>nginx</html>"))})) {
 		t.Fatal("413 not classified")
