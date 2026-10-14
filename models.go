@@ -166,6 +166,8 @@ type Settings struct {
 	Syncer *SyncerPrefs `json:"syncer,omitempty"`
 	// cloud delete: last choice in the delete dialog ("local" | "cloud").
 	DeleteMode string `json:"deleteMode,omitempty"`
+	// terminal launcher: last choices on the 终端 page.
+	Terminal *TerminalPrefs `json:"terminal,omitempty"`
 }
 
 type RunState struct {
