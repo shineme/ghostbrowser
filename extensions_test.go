@@ -7,10 +7,14 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func pbBytes(field int, v []byte) []byte {
@@ -177,4 +181,49 @@ func TestExtNormalizeIDAndArgs(t *testing.T) {
 	if a := withExtensionArgs([]string{"--x"}, nil); len(a) != 1 {
 		t.Fatalf("args %v", a)
 	}
+}
+
+// GHOST_CHROME=/usr/bin/chromium go test -run TestExtLoadLive
+func TestExtLoadLive(t *testing.T) {
+	bin := os.Getenv("GHOST_CHROME")
+	if bin == "" {
+		t.Skip("set GHOST_CHROME to a Chromium binary")
+	}
+	old := extReg.root
+	extReg.root = t.TempDir()
+	defer func() { extReg.root = old }()
+	z := testZip(t, map[string]string{
+		"manifest.json": `{"manifest_version":3,"name":"Live","version":"1.0","background":{"service_worker":"bg.js"}}`,
+		"bg.js":         "self.addEventListener('install',()=>{})",
+	})
+	e, err := extReg.installPackage(testCRX3([]byte("live-key"), z), "", "file", "live.crx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := freePort()
+	args := withExtensionArgs([]string{"--headless=new", "--no-sandbox", "--user-data-dir=" + t.TempDir(), fmt.Sprintf("--remote-debugging-port=%d", port), "--disable-features=Translate"},
+		extensionDirs(&Profile{ExtensionIDs: []string{e.ID}}))
+	cmd := exec.Command(bin, append(args, "about:blank")...)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer cmd.Process.Kill()
+	if _, err := waitDebugger(port, 20*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	want := "chrome-extension://" + e.ID + "/"
+	var last string
+	for i := 0; i < 40; i++ {
+		resp, err := localHTTP.Get(fmt.Sprintf("http://127.0.0.1:%d/json/list", port))
+		if err == nil {
+			b, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			last = string(b)
+			if strings.Contains(last, want) {
+				return
+			}
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	t.Fatalf("extension %s not loaded; targets: %s", e.ID, last)
 }
