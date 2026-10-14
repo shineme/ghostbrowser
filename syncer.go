@@ -287,8 +287,8 @@ type syncer struct {
 	emitTimer  *time.Timer
 	ctl        chan cdpMsg // master Target.* events, handled in order by one goroutine
 	mws        string      // master CDP endpoint
-	fmu        sync.Mutex  // guards fr
-	fr         *frameReg   // master iframes (syncer_frames.go)
+	fr         *frameReg   // master iframes (syncer_frames.go), owned by poll
+	fops       chan func(*frameReg)
 }
 
 var groupSync = &syncerHolder{opts: defaultSyncOptions()}
@@ -378,7 +378,7 @@ func (h *syncerHolder) Start(master string, followers []string, wsOf func(string
 		return SyncerState{}, fmt.Errorf("主控环境没有在运行")
 	}
 	s := &syncer{master: master, mname: name(master), stop: make(chan struct{}), started: time.Now().UnixMilli(), followers: []*syncFollower{},
-		mtabs: map[string]*masterTab{}, mgone: map[string]bool{}, ctl: make(chan cdpMsg, 256), opts: h.Options()}
+		mtabs: map[string]*masterTab{}, mgone: map[string]bool{}, ctl: make(chan cdpMsg, 256), opts: h.Options(), fops: make(chan func(*frameReg), 1024)}
 	h.mu.Lock()
 	s.emit = func(st SyncerState) {
 		h.mu.Lock()
@@ -691,9 +691,7 @@ func (s *syncer) attachMaster(ws string) error {
 		return err
 	}
 	s.mconn, s.mws = c, ws
-	s.fmu.Lock()
 	s.initFrames()
-	s.fmu.Unlock()
 	tabs, err := pageTabs(c)
 	if err == nil && len(tabs) == 0 {
 		err = fmt.Errorf("浏览器没有打开的标签页")
@@ -834,6 +832,7 @@ func (s *syncer) poll() {
 			return
 		case <-tick.C:
 		}
+		s.runFrameOps()
 		for _, mt := range s.masterTabs() {
 			s.drain(mt)
 			s.drainFrames(mt)

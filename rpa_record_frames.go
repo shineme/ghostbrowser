@@ -49,7 +49,7 @@ func (r *recorder) setupFrameSession(parentSid, sid, targetID, parentFrame strin
 	o := r.core.opts
 	_, _ = r.call(sid, "Page.enable", nil)
 	_, _ = r.call(sid, "Page.addScriptToEvaluateOnNewDocument", map[string]any{"source": recCaptureScript(o.Overlay, o.Scroll), "worldName": recWorld, "runImmediately": true})
-	_, _ = r.call(sid, "Target.setAutoAttach", map[string]any{"autoAttach": true, "waitForDebuggerOnStart": true, "flatten": true})
+	autoAttachIframes(r.conn, sid, true)
 	guardUA(r.conn, r.ws, sid)
 	if waiting {
 		_, _ = r.call(sid, "Runtime.runIfWaitingForDebugger", nil)

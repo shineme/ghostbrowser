@@ -20,13 +20,40 @@ import (
 // input on the page session, which Chromium routes into the frame, OOPIFs
 // included. If the follower has no such frame, the top-level fraction is used.
 
-// masterFrames is the syncer's frame registry, guarded by s.fmu.
+// initFrames creates the master's frame registry. It is owned by the poll
+// goroutine: CDP event handlers hand it changes through frameOp, so they
+// never wait on a drain and master events keep their order.
 func (s *syncer) initFrames() {
 	s.fr = newFrameReg(s.mconn, syncWorld, s.tabIDOfSession)
 }
 
-// tabIDOfSession maps a master session (tab or iframe target) to its tab.
-// Called with s.fmu held.
+// frameOp queues a registry change for the poll goroutine.
+func (s *syncer) frameOp(fn func(fr *frameReg)) {
+	if s.fops == nil {
+		return
+	}
+	select {
+	case s.fops <- fn:
+	default: // registry falls behind; the next tree refresh catches up
+	}
+}
+
+// runFrameOps applies queued registry changes (poll goroutine).
+func (s *syncer) runFrameOps() {
+	for {
+		select {
+		case fn := <-s.fops:
+			if s.fr != nil {
+				fn(s.fr)
+			}
+		default:
+			return
+		}
+	}
+}
+
+// tabIDOfSession maps a master session (tab or iframe target) to its tab
+// (poll goroutine).
 func (s *syncer) tabIDOfSession(sid string) string {
 	if mt := s.tabOfSession(sid); mt != nil {
 		return mt.tid
@@ -37,24 +64,15 @@ func (s *syncer) tabIDOfSession(sid string) string {
 // prepareMasterSession makes a master session report its OOPIFs and keeps
 // the fingerprint's UA override intact while we are attached.
 func (s *syncer) prepareMasterSession(sid string) {
-	_, _ = s.mconn.call(sid, "Target.setAutoAttach", map[string]any{"autoAttach": true, "waitForDebuggerOnStart": false, "flatten": true})
+	autoAttachIframes(s.mconn, sid, false)
 	guardUA(s.mconn, s.mws, sid)
-	s.fmu.Lock()
-	if s.fr != nil {
-		s.fr.treeDirty[sid] = true
-	}
-	s.fmu.Unlock()
+	s.frameOp(func(fr *frameReg) { fr.treeDirty[sid] = true })
 }
 
-// onMasterFrameEvent handles the master's iframe-related CDP events. It
-// reports whether the event was one of them.
+// onMasterFrameEvent handles the master's iframe-related CDP events (on the
+// connection's event goroutine). It reports whether the event is fully
+// handled; a tab's own navigation is left to the main handler.
 func (s *syncer) onMasterFrameEvent(m cdpMsg) bool {
-	s.fmu.Lock()
-	ready := s.fr != nil
-	s.fmu.Unlock()
-	if !ready {
-		return false
-	}
 	switch m.Method {
 	case "Target.attachedToTarget":
 		var p struct {
@@ -76,28 +94,28 @@ func (s *syncer) onMasterFrameEvent(m cdpMsg) bool {
 		if p.Waiting {
 			_, _ = c.call(p.SessionID, "Runtime.runIfWaitingForDebugger", nil)
 		}
-		s.fmu.Lock()
-		if tab := s.tabIDOfSession(m.Session); tab != "" {
-			s.fr.fsess[p.SessionID] = tab
-			s.fr.frames[p.TargetInfo.TargetID] = &cdpFrame{id: p.TargetInfo.TargetID, sid: p.SessionID, parent: p.TargetInfo.Parent, parentSid: m.Session, tab: tab, oopif: true}
-		}
-		s.fmu.Unlock()
+		parentSid, ti := m.Session, p.TargetInfo
+		s.frameOp(func(fr *frameReg) {
+			if tab := s.tabIDOfSession(parentSid); tab != "" {
+				fr.fsess[p.SessionID] = tab
+				fr.frames[ti.TargetID] = &cdpFrame{id: ti.TargetID, sid: p.SessionID, parent: ti.Parent, parentSid: parentSid, tab: tab, oopif: true}
+			}
+		})
 		return true
 	case "Target.detachedFromTarget":
 		var p struct {
 			SessionID string `json:"sessionId"`
 		}
 		_ = json.Unmarshal(m.Params, &p)
-		s.fmu.Lock()
-		if s.fr.fsess[p.SessionID] != "" {
-			s.fr.sessionGone(p.SessionID)
-		}
-		s.fmu.Unlock()
+		s.frameOp(func(fr *frameReg) {
+			if fr.fsess[p.SessionID] != "" {
+				fr.sessionGone(p.SessionID)
+			}
+		})
 		return true
 	case "Page.frameAttached":
-		s.fmu.Lock()
-		s.fr.treeDirty[m.Session] = true
-		s.fmu.Unlock()
+		sid := m.Session
+		s.frameOp(func(fr *frameReg) { fr.treeDirty[sid] = true })
 		return true
 	case "Page.frameDetached":
 		var p struct {
@@ -105,12 +123,13 @@ func (s *syncer) onMasterFrameEvent(m cdpMsg) bool {
 			Reason  string `json:"reason"`
 		}
 		_ = json.Unmarshal(m.Params, &p)
-		s.fmu.Lock()
-		if f := s.fr.frames[p.FrameID]; f != nil && (p.Reason != "swap" || !f.oopif) {
-			s.fr.frameGone(p.FrameID)
-		}
-		s.fr.treeDirty[m.Session] = true
-		s.fmu.Unlock()
+		sid := m.Session
+		s.frameOp(func(fr *frameReg) {
+			if f := fr.frames[p.FrameID]; f != nil && (p.Reason != "swap" || !f.oopif) {
+				fr.frameGone(p.FrameID)
+			}
+			fr.treeDirty[sid] = true
+		})
 		return true
 	case "Page.frameNavigated":
 		var p struct {
@@ -120,25 +139,24 @@ func (s *syncer) onMasterFrameEvent(m cdpMsg) bool {
 			} `json:"frame"`
 		}
 		_ = json.Unmarshal(m.Params, &p)
-		s.fmu.Lock()
-		defer s.fmu.Unlock()
-		if p.Frame.ParentID == "" && s.fr.fsess[m.Session] == "" {
-			s.fr.treeDirty[m.Session] = true
-			return false // a tab's own navigation: the main handler mirrors it
-		}
-		if f := s.fr.frames[p.Frame.ID]; f != nil {
-			f.ctx = 0
-		}
-		s.fr.treeDirty[m.Session] = true
-		return true
+		sid := m.Session
+		s.frameOp(func(fr *frameReg) {
+			if f := fr.frames[p.Frame.ID]; f != nil {
+				f.ctx = 0
+			}
+			fr.treeDirty[sid] = true
+		})
+		// A master tab's own navigation goes on to the main handler.
+		return p.Frame.ParentID != "" || s.tabOfSession(sid) == nil
 	}
 	return false
 }
 
 // drainFrames drains the capture queues of a master tab's iframes.
 func (s *syncer) drainFrames(mt *masterTab) {
-	s.fmu.Lock()
-	defer s.fmu.Unlock()
+	if s.fr == nil {
+		return
+	}
 	for sid := range s.fr.treeDirty {
 		if s.tabIDOfSession(sid) == mt.tid {
 			delete(s.fr.treeDirty, sid)

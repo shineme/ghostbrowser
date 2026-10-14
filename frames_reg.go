@@ -21,6 +21,18 @@ type frameReg struct {
 	treeDirty map[string]bool         // sessions whose frame tree changed
 }
 
+// autoAttachIframes makes a page or iframe session auto-attach its
+// out-of-process iframes, and only those: without the filter a page
+// session also auto-attaches related page targets (a popup it opens), which
+// then shows up twice next to the browser-level tab handling.
+func autoAttachIframes(c *cdpConn, sid string, wait bool) {
+	p := map[string]any{"autoAttach": true, "waitForDebuggerOnStart": wait, "flatten": true, "filter": []map[string]any{{"type": "iframe"}}}
+	if _, err := c.call(sid, "Target.setAutoAttach", p); err != nil {
+		delete(p, "filter") // kernels without TargetFilter support
+		_, _ = c.call(sid, "Target.setAutoAttach", p)
+	}
+}
+
 func newFrameReg(c *cdpConn, world string, tabOf func(string) string) *frameReg {
 	return &frameReg{conn: c, world: world, tabOf: tabOf, frames: map[string]*cdpFrame{}, fsess: map[string]string{}, treeDirty: map[string]bool{}}
 }

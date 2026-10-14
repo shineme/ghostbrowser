@@ -765,7 +765,7 @@ func (r *recorder) handle(m cdpMsg) {
 		_, _ = r.call(p.SessionID, "Page.enable", nil)
 		_, _ = r.call(p.SessionID, "Page.addScriptToEvaluateOnNewDocument", map[string]any{"source": recCaptureScript(o.Overlay, o.Scroll), "worldName": recWorld, "runImmediately": true})
 		// Out-of-process iframes of this tab attach to us as "iframe" targets.
-		_, _ = r.call(p.SessionID, "Target.setAutoAttach", map[string]any{"autoAttach": true, "waitForDebuggerOnStart": true, "flatten": true})
+		autoAttachIframes(r.conn, p.SessionID, true)
 		guardUA(r.conn, r.ws, p.SessionID)
 		if p.Waiting {
 			_, _ = r.call(p.SessionID, "Runtime.runIfWaitingForDebugger", nil)
