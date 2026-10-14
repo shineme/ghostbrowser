@@ -1024,3 +1024,47 @@ func (a *App) KernelDelete(dir string) error {
 	}
 	return nil
 }
+
+// ---- syncer2 ----
+
+// syncerWS returns a running profile's CDP websocket.
+func syncerWS(id string) (string, bool) {
+	if rs, ok := runReg.get(id); ok && strings.HasPrefix(rs.WSURL, "ws") {
+		return rs.WSURL, true
+	}
+	return "", false
+}
+
+// GetSyncerPrefs returns the 多窗口同步器 dialog's last options and selections.
+func (a *App) GetSyncerPrefs() SyncerPrefs {
+	p := loadSyncerPrefs(a.store)
+	if groupSync.running() == nil {
+		groupSync.SetOptions(p.SyncOptions)
+	}
+	return p
+}
+
+// SaveSyncerPrefs stores the dialog's options and selections; the options
+// also apply at once to a running syncer.
+func (a *App) SaveSyncerPrefs(p SyncerPrefs) SyncerPrefs {
+	a.arrangeHooks()
+	p = saveSyncerPrefs(a.store, p)
+	groupSync.SetOptions(p.SyncOptions)
+	return p
+}
+
+// SetSyncOptions changes the per-type switches and delay range, also while running.
+func (a *App) SetSyncOptions(o SyncOptions) SyncerState {
+	a.arrangeHooks()
+	return groupSync.SetOptions(o)
+}
+
+// SyncTabAction runs a window/tab action of the dialog on master + followers
+// (open|closeCurrent|closeOthers|closeBlank|show|unify|size). Sync need not be running.
+func (a *App) SyncTabAction(master string, followers []string, action, url string, newTab bool) (TabActionResult, error) {
+	a.arrangeHooks()
+	return syncTabAction(master, followers, action, url, newTab, syncerWS, a.profileName)
+}
+
+// NormalizeSyncURL validates an address for 批量访问网址 (adds https://).
+func (a *App) NormalizeSyncURL(u string) (string, error) { return normalizeURL(u) }

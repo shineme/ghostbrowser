@@ -157,6 +157,8 @@ type Settings struct {
 	// One-click open-source kernel install: download source (mirror|official|custom) and custom URL.
 	KernelSource string `json:"kernelSource,omitempty"`
 	KernelURL    string `json:"kernelUrl,omitempty"`
+	// 多窗口同步器: last options and selections of the dialog.
+	Syncer *SyncerPrefs `json:"syncer,omitempty"`
 }
 
 type RunState struct {
