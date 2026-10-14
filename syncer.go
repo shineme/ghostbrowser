@@ -609,11 +609,18 @@ func activeOf(c *cdpConn, tabs []pageTab) string {
 }
 
 // mapTabs (re)builds a follower's tab mapping: the master's active tab goes
-// to the follower's active tab, the remaining tabs pair up in creation order.
+// to the follower's active tab, then tabs showing the same URL pair up, then
+// the rest in the order CDP lists them.
 func (s *syncer) mapTabs(f *syncFollower) {
 	tabs, err := pageTabs(f.conn)
 	if err != nil {
 		return
+	}
+	murl := map[string]string{}
+	if mts, err := pageTabs(s.mconn); err == nil {
+		for _, t := range mts {
+			murl[t.TargetID] = t.URL
+		}
 	}
 	s.mu.Lock()
 	order := append([]string(nil), s.order...)
@@ -624,6 +631,17 @@ func (s *syncer) mapTabs(f *syncFollower) {
 	used := map[string]bool{}
 	if active != "" && fact != "" {
 		m[active], used[fact] = fact, true
+	}
+	for _, mt := range order {
+		if _, ok := m[mt]; ok || murl[mt] == "" {
+			continue
+		}
+		for _, ft := range tabs {
+			if !used[ft.TargetID] && ft.URL == murl[mt] {
+				m[mt], used[ft.TargetID] = ft.TargetID, true
+				break
+			}
+		}
 	}
 	i := 0
 	for _, mt := range order {

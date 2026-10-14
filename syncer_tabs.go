@@ -234,34 +234,41 @@ func (b *browserTabs) openURL(u string, newTab bool) error {
 }
 
 // unifyTo makes this browser's tabs the given URLs in order and activates
-// the tab at index act. Existing tabs are reused in creation order, extras
-// are closed and missing ones appended.
+// the tab at index act. CDP has no tab-strip order, so the tabs are opened
+// fresh in order (Target.createTarget appends to the strip) and the old ones
+// closed afterwards; that is the only way the order is guaranteed.
 func (b *browserTabs) unifyTo(urls []string, act int) error {
+	if len(urls) == 0 {
+		return fmt.Errorf("主控窗口没有标签页")
+	}
 	ids := []string{}
 	var first error
-	note := func(err error) {
-		if err != nil && first == nil {
+	for _, u := range urls {
+		if isBlankURL(u) && !strings.HasPrefix(u, "about:") {
+			u = "about:blank" // the new tab page can't always be opened over CDP
+		}
+		id, err := b.newTab(u)
+		if err != nil {
+			if first == nil {
+				first = err
+			}
+			continue
+		}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return first
+	}
+	for _, t := range b.tabs {
+		if err := b.closeTab(t.TargetID); err != nil && first == nil {
 			first = err
 		}
 	}
-	for i, u := range urls {
-		if i < len(b.tabs) {
-			t := b.tabs[i]
-			if t.URL != u && !(isBlankURL(t.URL) && isBlankURL(u)) {
-				note(b.navigate(t.TargetID, u))
-			}
-			ids = append(ids, t.TargetID)
-			continue
-		}
-		id, err := b.newTab(u)
-		note(err)
-		ids = append(ids, id)
+	if act < 0 || act >= len(ids) {
+		act = 0
 	}
-	for i := len(urls); i < len(b.tabs); i++ {
-		note(b.closeTab(b.tabs[i].TargetID))
-	}
-	if act >= 0 && act < len(ids) && ids[act] != "" {
-		note(b.activate(ids[act]))
+	if err := b.activate(ids[act]); err != nil && first == nil {
+		first = err
 	}
 	return first
 }
