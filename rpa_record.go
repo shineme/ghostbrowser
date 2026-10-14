@@ -505,6 +505,7 @@ type recorder struct {
 	emit      func(RecordState)
 	release   func()
 	dirty     bool
+	pick      string // pick mode to hand to the current tab: extract | assert | none
 }
 
 // recHolder owns the single active recording (one browser at a time).
@@ -873,9 +874,13 @@ func (r *recorder) drain(tc *recTabConn) {
 	r.mu.Lock()
 	n := countSteps(r.core.steps)
 	paused, o := r.paused, r.core.opts
+	mode := ""
+	if r.pick != "" && tc.id == r.core.cur {
+		mode, r.pick = r.pick, ""
+	}
 	r.mu.Unlock()
 	t0 := time.Now()
-	raw, err := r.call(tc.sid, "Runtime.evaluate", map[string]any{"expression": recDrainExpr(n, paused, o.Overlay, o.Scroll), "contextId": tc.ctx, "returnByValue": true})
+	raw, err := r.call(tc.sid, "Runtime.evaluate", map[string]any{"expression": recDrainExpr(n, paused, o.Overlay, o.Scroll, mode), "contextId": tc.ctx, "returnByValue": true})
 	if err != nil {
 		tc.ctx = 0
 		if time.Since(t0) > 5*time.Second {
@@ -991,6 +996,17 @@ func (r *recorder) Pause(p bool) RecordState {
 	st := r.state()
 	r.emit(st)
 	return st
+}
+
+// Pick arms the current tab's click-to-pick mode: "extract" adds 提取文本,
+// "assert" adds 等待元素 for the next element clicked; "none" cancels.
+func (r *recorder) Pick(mode string) RecordState {
+	r.mu.Lock()
+	if r.active && (mode == "extract" || mode == "assert" || mode == "none") {
+		r.pick = mode
+	}
+	r.mu.Unlock()
+	return r.state()
 }
 
 func (r *recorder) state() RecordState {

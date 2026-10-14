@@ -441,6 +441,11 @@ const M = {
   RecordRemoveStep: async (id: string): Promise<any> => { recSim.st.steps = recSim.st.steps.filter((s: any) => s.id !== id); return recSim.emit(); },
   RecordUpdateStep: async (step: any): Promise<any> => { recSim.st.steps = recSim.st.steps.map((s: any) => (s.id === step.id ? { ...step, params: { ...step.params, _rec: s.params._rec || step.params._rec || '' } } : s)); return recSim.emit(); },
   FinalizeRecording: async (steps: any[], o: any): Promise<any> => recFinalize(steps, o),
+  RecordPickMode: async (mode: string): Promise<any> => {
+    const S = recSim.st; if (!S?.active || mode === 'none') return recSim.pub();
+    setTimeout(() => { if (!recSim.st?.active) return; S.steps.push(mode === 'extract' ? rs('extract_text', { selector: '.order-total', var: `text${S.steps.filter((x: any) => x.type === 'extract_text').length + 1}` }) : rs('wait_for', { selector: '.toast-success', state: 'visible', timeout: '10000' })); recSim.emit(); }, 1400);
+    return recSim.pub();
+  },
 };
 
 export const api: typeof M = inWails ? (Go as any) : M;

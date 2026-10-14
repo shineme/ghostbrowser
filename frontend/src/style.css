@@ -1500,6 +1500,13 @@ input.mono, textarea.mono { font-family: "JBMono", Consolas, monospace; }
 @keyframes rec-bump { from { transform: translateY(-5px) scale(1.18); color: #ff8a98; } }
 .rec-hint { display: flex; align-items: center; gap: 8px; padding: 10px 24px; font-size: 12px; color: var(--txt-2); border-bottom: 1px solid var(--hair); background: rgba(0,0,0,.12); }
 .rec-hint svg { color: var(--warn); flex: none; }
+.rec-hint .grow { flex: 1; min-width: 0; }
+.rec-pick-l { font-size: 11px; color: var(--txt-4); flex: none; }
+.rec-pick { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 7px; font-size: 11.5px; color: var(--txt-2); background: rgba(255,255,255,.04); border: 1px solid var(--hair); flex: none; transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast); }
+.rec-pick svg { color: var(--a2); }
+.rec-pick:hover:not(:disabled) { background: rgba(176,124,255,.12); border-color: rgba(176,124,255,.3); color: var(--txt); }
+.rec-pick:focus-visible { outline: 2px solid var(--a1); outline-offset: 2px; }
+.rec-pick:disabled { opacity: .4; cursor: default; }
 .rec-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); flex: none; animation: breathe 2s ease-in-out infinite; }
 .rec-list { flex: 1; min-height: 260px; max-height: 420px; overflow: auto; padding: 10px 14px 14px; }
 .rec-list.review { max-height: none; min-height: 200px; }
@@ -1536,6 +1543,8 @@ input.mono, textarea.mono { font-family: "JBMono", Consolas, monospace; }
 .btn.rec-stop:hover { background: rgba(255,77,99,.22); border-color: rgba(255,77,99,.5); color: #fff; }
 .rec-stop-ic { width: 10px; height: 10px; border-radius: 2.5px; background: currentColor; flex: none; }
 .rec-pause-ic { width: 10px; height: 11px; flex: none; border-left: 3px solid currentColor; border-right: 3px solid currentColor; box-sizing: border-box; }
+
+.re-addwrap:has(.rec-btn) { display: flex; gap: 6px; align-items: center; }
 
 /* review */
 .rec-review { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }

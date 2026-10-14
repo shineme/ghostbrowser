@@ -366,6 +366,10 @@ export function PushProfiles(arg1) {
   return window['go']['main']['App']['PushProfiles'](arg1);
 }
 
+export function RecordPickMode(arg1) {
+  return window['go']['main']['App']['RecordPickMode'](arg1);
+}
+
 export function RecordRemoveStep(arg1) {
   return window['go']['main']['App']['RecordRemoveStep'](arg1);
 }

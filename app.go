@@ -1088,6 +1088,15 @@ func (a *App) ResumeRecording() RecordState {
 	return recordings.State()
 }
 
+// RecordPickMode makes the next click in the recorded tab add a step instead
+// of acting: "extract" (提取文本), "assert" (等待元素) or "none" to cancel.
+func (a *App) RecordPickMode(mode string) RecordState {
+	if r := recordings.active(); r != nil {
+		return r.Pick(mode)
+	}
+	return recordings.State()
+}
+
 // RecordingState returns the active (or last finished) recording.
 func (a *App) RecordingState() RecordState { return recordings.State() }
 

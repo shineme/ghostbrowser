@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -247,6 +248,8 @@ func recSteps(steps []RpaStep) []string {
 			v += " " + s.Params["selector"] + " = " + s.Params["text"]
 		case stUpload:
 			v += " " + s.Params["selector"] + " ← " + s.Params["files"]
+		case stExtractText:
+			v += " " + s.Params["selector"] + " → " + s.Params["var"]
 		case stSelectTab, stCloseTab:
 			v += " " + s.Params["index"]
 		case stExecuteJS:
@@ -303,6 +306,14 @@ func TestRecordReplayLive(t *testing.T) {
 	if !overlay {
 		t.Fatal("overlay host missing, or its shadow root / recorder state leaks to the page")
 	}
+	if dir := os.Getenv("GHOST_SHOT_DIR"); dir != "" {
+		if raw, err := u.c.call(u.sid, "Page.captureScreenshot", map[string]any{"format": "png"}); err == nil {
+			var r struct{ Data string }
+			_ = json.Unmarshal(raw, &r)
+			b, _ := base64.StdEncoding.DecodeString(r.Data)
+			_ = os.WriteFile(filepath.Join(dir, "rpa-record-overlay.png"), b, 0o644)
+		}
+	}
 	u.mouse("#user", 1)
 	u.typeText("alice")
 	u.mouse(`input[name=pw]`, 1)
@@ -333,6 +344,16 @@ func TestRecordReplayLive(t *testing.T) {
 	// ---- page 3: new tab, work there, close it, double click ----
 	u.waitFor("#open")
 	time.Sleep(200 * time.Millisecond)
+	// pick modes: the click adds a step and does not reach the page
+	a.RecordPickMode("extract")
+	time.Sleep(250 * time.Millisecond)
+	u.mouse("#open", 1)
+	if n := len(u.pageTargets()); n != 1 {
+		t.Fatalf("a click in pick mode reached the page (%d tabs)", n)
+	}
+	a.RecordPickMode("assert")
+	time.Sleep(250 * time.Millisecond)
+	u.mouse("#dbl", 1)
 	u.mouse("#open", 1)
 	main := *u
 	u.use("/tab")
@@ -385,6 +406,8 @@ func TestRecordReplayLive(t *testing.T) {
 		"click text:登录",
 		"fill #q = 幽灵",
 		"execute_js 按回车键",
+		"extract_text #open → text1",
+		"wait_for #dbl",
 		"click #open",
 		"select_tab 2",
 		"click #hello",

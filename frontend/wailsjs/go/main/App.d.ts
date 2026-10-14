@@ -184,6 +184,8 @@ export function PushProfile(arg1:string):Promise<void>;
 
 export function PushProfiles(arg1:Array<string>):Promise<main.BulkResult>;
 
+export function RecordPickMode(arg1:string):Promise<main.RecordState>;
+
 export function RecordRemoveStep(arg1:string):Promise<main.RecordState>;
 
 export function RecordUpdateStep(arg1:main.RpaStep):Promise<main.RecordState>;

@@ -219,7 +219,8 @@ const mount = () => {
 };
 const unmount = () => { if (host) host.remove(); };
 R.unmount = unmount;
-R.drain = (n, paused, overlay, scroll) => {
+R.drain = (n, paused, overlay, scroll, mode) => {
+  if (mode) { R.mode = mode === 'none' ? '' : mode; paint(); }
   if (R.n !== n || R.paused !== paused) { R.n = n; R.paused = paused; paint(); }
   R.scroll = scroll;
   if (overlay !== R.overlay) { R.overlay = overlay; if (!overlay) { R.mode = ''; unmount(); } }
@@ -232,8 +233,8 @@ R.destroy = () => { R.dead = true; R.mode = ''; R.q = []; unmount(); };
 }
 
 // recDrainExpr installs the script when this world lacks it and drains the queue.
-func recDrainExpr(n int, paused, overlay, scroll bool) string {
-	return fmt.Sprintf(`(() => { %s const R = window.__gbRec; if (!R || R.dead || R.doc !== document) return ''; return R.drain(%d, %t, %t, %t); })()`, recCaptureScript(overlay, scroll), n, paused, overlay, scroll)
+func recDrainExpr(n int, paused, overlay, scroll bool, mode string) string {
+	return fmt.Sprintf(`(() => { %s const R = window.__gbRec; if (!R || R.dead || R.doc !== document) return ''; return R.drain(%d, %t, %t, %t, %s); })()`, recCaptureScript(overlay, scroll), n, paused, overlay, scroll, jsq(mode))
 }
 
 // recDestroyExpr removes the overlay and silences capture in a page.

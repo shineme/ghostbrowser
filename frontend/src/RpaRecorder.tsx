@@ -164,6 +164,7 @@ const Live: React.FC<{ st: RecState; setSt: (s: RecState) => void; onStop: () =>
 
   const pause = async () => { try { setSt((await (st.paused ? api.ResumeRecording() : api.PauseRecording())) as any); } catch (x) { toast(err(x), 'bad'); } };
   const stop = async () => { setStopping(true); try { await onStop(); } catch (x) { toast(err(x), 'bad'); setStopping(false); } };
+  const pick = async (m: 'extract' | 'assert') => { try { await api.RecordPickMode(m); toast(m === 'extract' ? '请到浏览器里点击要提取文字的元素' : '请到浏览器里点击要等待出现的元素'); } catch (x) { toast(err(x), 'bad'); } };
   const del = async (id: string) => { try { setSt((await api.RecordRemoveStep(id)) as any); } catch (x) { toast(err(x), 'bad'); } };
   const save = async (s: RStep) => { try { setSt((await api.RecordUpdateStep(s as any)) as any); setEditing(''); } catch (x) { toast(err(x), 'bad'); } };
   let n = 0;
@@ -180,7 +181,10 @@ const Live: React.FC<{ st: RecState; setSt: (s: RecState) => void; onStop: () =>
       </div>
     </div>
     <div className="rec-hint">
-      {st.paused ? <><Icon.alert s={14} /> 已暂停：现在浏览器里的操作不会被录制</> : <><span className="rec-live-dot" /> 切到浏览器窗口正常操作，点击、输入、选择、上传、切换标签页都会自动记录</>}
+      {st.paused ? <><Icon.alert s={14} /> <span className="grow">已暂停：现在浏览器里的操作不会被录制</span></> : <><span className="rec-live-dot" /> <span className="grow ell" title="点击、输入、选择、上传、切换标签页都会自动记录">切到浏览器窗口正常操作，每个动作都会自动记录</span></>}
+      <span className="rec-pick-l">点选元素</span>
+      <button className="rec-pick" disabled={st.paused} onClick={() => pick('extract')} title="在浏览器里点一个元素，把它的文字保存到变量"><StepIcon type="extract_text" s={12} /> 提取文本</button>
+      <button className="rec-pick" disabled={st.paused} onClick={() => pick('assert')} title="在浏览器里点一个元素，回放时等它出现再继续"><StepIcon type="wait_for" s={12} /> 等待元素</button>
     </div>
     <div className="rec-list" ref={listRef}>
       {st.steps.length === 0 && <div className="rec-empty"><ThinkingOrb state="listening" size={32} theme="dark" /><b>等待你的第一个操作…</b><span>在浏览器里打开网页、点击或输入，步骤会实时出现在这里</span></div>}
