@@ -313,7 +313,7 @@ const ProfilesView: React.FC<{
                 <td><span className="sub">{ago(p.lastRun)}</span></td>
                 <td>
                   <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
-                    {needRestart && !isBusy && <button className="btn sm restart-btn" onClick={() => restart(p)} title="代理、指纹或启动参数已修改，重启后生效"><Icon.refresh s={12} /> 重启</button>}
+                    {needRestart && !isBusy && <button className="btn sm icon restart-btn" onClick={() => restart(p)} title="重启：代理、指纹或启动参数已修改，重启后生效" aria-label="重启"><Icon.refresh s={13} /></button>}
                     {isBusy ? <span style={{ width: 98, display: 'grid', placeItems: 'center' }}><ThinkingOrb state={isRun ? 'breathing' : 'connecting'} size={20} theme="dark" /></span>
                       : <span className="split-btn">{isRun ? <button className="btn sm stop" style={{ width: 70 }} onClick={() => stop(p)}><Icon.stop s={12} /> 停止</button>
                         : <button className="btn sm go" style={{ width: 70 }} onClick={() => start(p)}><Icon.play s={12} /> 启动</button>}

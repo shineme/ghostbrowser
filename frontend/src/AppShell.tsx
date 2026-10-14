@@ -307,6 +307,7 @@ export const SiteLaunch: React.FC<{ profile: Profile; running: boolean; onLaunch
   const [q, setQ] = useState('');
   const [custom, setCustom] = useState('');
   const [busy, setBusy] = useState('');
+  const [up, setUp] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
   useOutside(ref, open, close);
@@ -328,17 +329,17 @@ export const SiteLaunch: React.FC<{ profile: Profile; running: boolean; onLaunch
   };
   return (
     <div className="ash-pop-wrap" ref={ref}>
-      <button className={`btn sm ${running ? '' : 'go'} site-caret ${open ? 'on' : ''}`} title={running ? '在此环境打开网站' : '启动并打开网站'} onClick={() => { setOpen(o => !o); if (!state?.fetchedAt && !loading) refresh(); }}>
+      <button className={`btn sm ${running ? '' : 'go'} site-caret ${open ? 'on' : ''}`} title={running ? '在此环境打开网站' : '启动并打开网站'} onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setUp(r.bottom + 470 > window.innerHeight && r.top > 470); setOpen(o => !o); if (!state?.fetchedAt && !loading) refresh(); }}>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="m6 9 6 6 6-6" /></svg>
       </button>
-      {open && <div className="ash-pop site-pop">
+      {open && <div className={`ash-pop site-pop ${up ? 'up' : ''}`}>
         <div className="ash-pop-head">
           <b>网站快捷入口</b><span className="sub ellip">{running ? `在「${profile.name}」中新标签页打开` : `启动「${profile.name}」并直接打开`}</span>
           <span className="spacer" />
           {state?.offline && state.fetchedAt > 0 && <span className="ash-off" title={state.error || ''}><span className="d" />离线缓存</span>}
           <button className="btn ghost icon sm" title="刷新快捷入口" disabled={loading} onClick={refresh}>{loading ? <ThinkingOrb state="connecting" size={20} theme="dark" /> : <Icon.refresh s={14} />}</button>
         </div>
-        <div className="site-search"><Icon.search s={14} /><input autoFocus type="text" placeholder="搜索网站" value={q} onChange={e => setQ(e.target.value)} /></div>
+        {groups.length > 0 && <div className="site-search"><Icon.search s={14} /><input autoFocus type="text" placeholder="搜索网站" value={q} onChange={e => setQ(e.target.value)} /></div>}
         {!q && groups.length > 1 && <div className="site-tabs">{groups.map(x => <button key={x.id} className={x.id === cur?.id ? 'on' : ''} onClick={() => setG(x.id)}>{x.name}<span className="num">{x.sites.length}</span></button>)}</div>}
         <div className="site-grid">
           {!state && <div className="ash-empty"><ThinkingOrb state="connecting" size={32} theme="dark" /><span>正在加载快捷入口…</span></div>}

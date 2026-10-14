@@ -1930,3 +1930,9 @@ input.mono, textarea.mono { font-family: "JBMono", Consolas, monospace; }
 .site-t small { font-size: 11px; color: var(--txt-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .site-custom { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--hair); background: rgba(0,0,0,.16); color: var(--txt-3); }
 .site-custom .btn { flex: none; min-width: 54px; justify-content: center; }
+.site-pop.up { top: auto; bottom: calc(100% + 8px); }
+.panel.list th { white-space: nowrap; }
+.btn.sm.icon.restart-btn { width: 30px; padding: 0; justify-content: center; }
+.ann-h { padding-left: 16px; }
+.ann.unread .ann-h::before { left: 5px; }
+.upd-prog .env-bar i { transition: none; }
