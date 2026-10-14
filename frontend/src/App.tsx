@@ -218,7 +218,7 @@ const ProfilesView: React.FC<{
   const [delT, setDelT] = useState<DelTarget[] | null>(null);
   const [trashOpen, setTrashOpen] = useState(false); // 最近删除
   const [trashN, refreshTrash] = useTrashCount(profiles.length);
-  const trashBtn = <button className={`btn trash-btn ${trashN ? '' : 'none'}`} onClick={() => setTrashOpen(true)} title="最近删除"><Icon.trash s={15} /> 最近删除{trashN > 0 && <span className="trash-n num">{trashN}</span>}</button>;
+  const trashBtn = <button className={`btn icon trash-btn ${trashN ? '' : 'none'}`} onClick={() => setTrashOpen(true)} title={trashN ? `最近删除 · ${trashN} 个` : '最近删除'} aria-label="最近删除"><Icon.trash s={15} />{trashN > 0 && <span className="trash-n num">{trashN > 99 ? '99+' : trashN}</span>}</button>;
   const trashModal = trashOpen && <TrashModal onClose={() => { setTrashOpen(false); refreshTrash(); }} onChanged={() => { reload(); refreshTrash(); }} />;
   const del = (ids: string[]) => setDelT(ids.map(id => profiles.find(p => p.id === id)).filter(Boolean).map(p => ({ id: p!.id, name: p!.name, inCloud: p!.storage === 'cloud' || p!.cloudVersion > 0, running: running.has(p!.id) })));
 
@@ -239,7 +239,7 @@ const ProfilesView: React.FC<{
         </BorderBeam>
         <button className="btn" onClick={() => setBulk(true)}><Icon.layers s={15} /> 批量创建</button>
         <button className="btn" onClick={() => setNativeTools(true)}><Icon.shield s={15} /> 指纹库 / JSON</button>
-        {trashN > 0 && trashBtn}
+        {trashN > 0 && <button className="btn" onClick={() => setTrashOpen(true)}><Icon.trash s={15} /> 最近删除 <span className="trash-n inline num">{trashN}</span></button>}
       </div>
       {trashModal}
       {drawer && <ProfileDrawer profile={editing} proxies={Object.values(proxyName)} onClose={() => setDrawer(false)} onSaved={reload} />}

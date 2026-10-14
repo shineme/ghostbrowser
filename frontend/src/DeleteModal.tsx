@@ -78,7 +78,7 @@ export const DeleteModal: React.FC<{ targets: DelTarget[]; cloudOnly?: boolean; 
 
   const title = cloudOnly ? (one ? `从云端删除「${one.name}」？` : `从云端删除 ${n} 个环境？`) : (one ? `删除环境「${one.name}」？` : `删除 ${n} 个环境？`);
   const opts: [Mode, string, React.ReactNode, React.ReactNode][] = [
-    ['local', '只删本地', <Icon.laptop s={17} />, <>本机的环境和数据目录移到<b>「最近删除」</b>，保留 {days} 天可恢复。云端副本保留，<b>不会再被自动下载回来</b>，可随时在「云端同步 → 仅云端」中恢复到本机。其他设备不受影响。</>],
+    ['local', '只删本地', <Icon.laptop s={17} />, <>本机的环境和数据目录移到<b>「最近删除」</b>（保留 {days} 天）。云端副本保留，<b>不会再被自动下载回来</b>，也可在「云端同步 → 仅云端」中重新下载。其他设备不受影响。</>],
     ['cloud', '同时删云端', <Icon.cloud s={17} />, <>同时从你的同步服务器删除数据和全部历史版本。其他设备下次同步时会<b>自动删除各自的副本</b>，旧副本也无法再上传回来。服务器只留一条删除记录（名称、时间、设备，不含数据），90 天后清除。本机副本仍先放进「最近删除」。</>],
   ];
 
@@ -87,7 +87,7 @@ export const DeleteModal: React.FC<{ targets: DelTarget[]; cloudOnly?: boolean; 
       <div className="modal cdel">
         <div className="dhead">
           <div className="glyph bad"><Icon.trash s={18} /></div>
-          <div className="cdel-h"><h3 title={title}>{title}</h3><div className="sub">{cloudOnly ? '本机没有这个环境的副本' : `环境和数据目录（Cookie、缓存、扩展状态）先移到「最近删除」，保留 ${days} 天`}</div></div>
+          <div className="cdel-h"><h3 title={title}>{title}</h3><div className="sub">{cloudOnly ? '本机没有这个环境的副本' : `环境和数据目录会先移到「最近删除」，保留 ${days} 天可恢复`}</div></div>
           <div style={{ marginLeft: 'auto' }}><button className="btn ghost icon" disabled={busy} onClick={() => close()}><Icon.x /></button></div>
         </div>
         <div className="dbody">
