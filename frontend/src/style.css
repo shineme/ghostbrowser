@@ -1813,7 +1813,8 @@ input.mono, textarea.mono { font-family: "JBMono", Consolas, monospace; }
 /* ---- 环境自检 / 一键修复 ---- */
 .modal.envchk { width: 780px; height: min(720px, 88vh); }
 .ec-tabs { padding: 12px 24px 0; }
-.ec-tabs .seg { margin-bottom: 0; width: 300px; }
+.ec-tabs .seg { margin-bottom: 0; width: fit-content; }
+.ec-tabs .seg button { flex: none; padding: 0 16px; }
 .ec-body { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; }
 .ec-body > .notice { margin-bottom: 0; }
 .ec-sum { display: flex; align-items: center; gap: 10px; min-height: 52px; }
@@ -1880,7 +1881,11 @@ input.mono, textarea.mono { font-family: "JBMono", Consolas, monospace; }
 .ec-items { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
 .ec-chip { font-size: 11px; padding: 2px 8px; border-radius: 8px; background: rgba(255,255,255,.05); color: var(--txt-2); white-space: nowrap; }
 .ec-changes { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--hair); }
-.ec-chg { display: grid; grid-template-columns: 110px minmax(0, 1fr) 18px minmax(0, 1fr); gap: 8px; align-items: center; font-size: 12px; }
+.ec-chg { display: flex; gap: 10px; align-items: center; font-size: 12px; min-width: 0; }
+.ec-chg .ec-f { width: 110px; flex: none; }
+.ec-chg .ec-old { max-width: 44%; flex: 0 1 auto; min-width: 0; }
+.ec-chg .ec-new { flex: 1 1 0; min-width: 0; }
+.ec-chg .ec-arrow { flex: none; width: 14px; }
 .ec-f { color: var(--txt-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ec-old, .ec-new { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono, inherit); }
 .ec-old { color: var(--txt-3); text-decoration: line-through; text-decoration-color: rgba(255,255,255,.2); }
