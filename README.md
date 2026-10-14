@@ -113,6 +113,7 @@ go test -run TestEnsureAgainstRealShop -v .
   - 新标签页、iframe 和 worker 自动接管；需要保持 GhostBrowser 运行
   - 不支持 iPhone / iPad：iOS 上的浏览器都是 WebKit，Chromium 无法可信地伪装
   - 已知限制：Worker 里的部分属性、真实系统字体测量、电视浏览器的老内核特性无法完全对应
+  - **一键安装开源内核**：设置 → 开源内核 →「一键安装」，自动下载 Chromium 官方 Windows x64 快照（`chrome-win.zip`）到 `%APPDATA%\GhostBrowser\kernels\chromium-<版本>\` 并设为默认开源内核。下载源可选「国内镜像」（npmmirror，默认）、「官方源」（Google 快照服务器）或「自定义地址」（快照目录或 .zip 直链，如 ungoogled-chromium 便携版）。支持断点续传、取消、自动/手动重试、磁盘空间检查、防 zip-slip 解压、校验 chrome.exe 并读取版本；进度条显示 解析版本/下载/解压/校验/完成、速度和剩余时间。已安装的内核可切换使用或删除。启动开源内核环境时若找不到内核，会直接弹出安装窗口，环境抽屉里也有提示
 - 批量创建也可以选择设备类型
 
 ### 自动化
@@ -142,6 +143,9 @@ go test -run TestEnsureAgainstRealShop -v .
 - 显示服务器信息：已用空间、磁盘剩余、单次上传上限、保留的版本数
 - 同步地址使用 http 时会提示：令牌会明文传输，建议改用 https
 - 旧版服务端（不支持增量）会自动改用整包同步
+
+### 界面
+- 左侧边栏可收起为图标栏（侧栏底部按钮或 Ctrl+B），悬停显示名称和快捷键，数量变为圆点；状态会记住，下次启动保持；系统开启「减少动态效果」时不播放动画
 
 ### 本地自动化 API
 - 地址 `127.0.0.1:25325`：`/list`、`/profile/start?profile=ID`（返回 CDP 端口和 websocket 地址）、`/profile/stop?profile=ID`、`/status`

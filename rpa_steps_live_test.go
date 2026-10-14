@@ -108,7 +108,10 @@ func TestRpaStepsLive(t *testing.T) {
 			if e.Status == "failed" {
 				failed = append(failed, e.Type+": "+e.Log)
 			}
-		}, func(_ int, b []byte) (string, error) { shots = append(shots, b); return fmt.Sprintf("s%d.png", len(shots)), nil })
+		}, func(_ int, b []byte) (string, error) {
+			shots = append(shots, b)
+			return fmt.Sprintf("s%d.png", len(shots)), nil
+		})
 		if err != nil {
 			t.Fatalf("run: %v %v", err, failed)
 		}
@@ -344,7 +347,10 @@ func TestRpaInterruptLive(t *testing.T) {
 	t0 = time.Now()
 	var last RpaStepEvent
 	_, err = runRpa(context.Background(), Workflow{Name: "k", Steps: []RpaStep{st(stGoto, "url", srv.URL), st(stWaitFor, "selector", "#never", "timeout", "30000")}}, d2,
-		func(e RpaStepEvent) { last = e; t.Logf("%v %s %s %s", time.Since(t0).Round(time.Millisecond), e.Type, e.Status, e.Log) }, nil)
+		func(e RpaStepEvent) {
+			last = e
+			t.Logf("%v %s %s %s", time.Since(t0).Round(time.Millisecond), e.Type, e.Status, e.Log)
+		}, nil)
 	if err == nil || time.Since(t0) > 4*time.Second {
 		t.Fatalf("browser closed: err=%v after %v", err, time.Since(t0))
 	}

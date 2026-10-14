@@ -109,7 +109,9 @@ func mArgStrs(a map[string]any, k string) ([]string, error) {
 	return nil, fmt.Errorf("%s must be an array of strings", k)
 }
 
-func schemaStr(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
+func schemaStr(desc string) map[string]any {
+	return map[string]any{"type": "string", "description": desc}
+}
 func jsStrArr(desc string) map[string]any {
 	return map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": desc}
 }

@@ -191,7 +191,7 @@ func TestKernelCompatLive(t *testing.T) {
 	var got map[string]any
 	for i := 0; i < 20; i++ { // legacy kernels reload once; wait for the script
 		time.Sleep(250 * time.Millisecond)
-		r, _ := c.call(sid, "Runtime.evaluate", map[string]any{"returnByValue": true, "expression": `JSON.stringify({gb: window.__gb === 1, ua: navigator.userAgent,
+		r, _ := c.call(sid, "Runtime.evaluate", map[string]any{"returnByValue": true, "expression": `JSON.stringify({gb: speechSynthesis.getVoices().some(v => /^Microsoft /.test(v.name)), ua: navigator.userAgent,
 		  brands: navigator.userAgentData ? navigator.userAgentData.brands.map(b => b.brand + "/" + b.version).join(",") : "",
 		  voices: speechSynthesis.getVoices().length, voice0: String((speechSynthesis.getVoices()[0] || {}).name)})`})
 		var ev struct{ Result struct{ Value string } }

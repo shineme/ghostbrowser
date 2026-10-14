@@ -46,7 +46,7 @@ func (f *fakeDriver) Eval(code string, vars map[string]string) (string, error) {
 	}
 	return "null", nil
 }
-func (f *fakeDriver) Screenshot(bool) ([]byte, error)    { return []byte("png"), f.rec("shot") }
+func (f *fakeDriver) Screenshot(bool) ([]byte, error)     { return []byte("png"), f.rec("shot") }
 func (f *fakeDriver) Upload(sel string, _ []string) error { return f.rec("upload " + sel) }
 func (f *fakeDriver) SelectTab(i int) error               { return f.rec("selecttab") }
 func (f *fakeDriver) CloseTab(i int) error                { return f.rec("closetab") }

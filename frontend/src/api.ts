@@ -196,7 +196,7 @@ const M = {
     const devs = MOCK_DEV.filter(d => d.os === os);
     return { osVersions: os === 'android' ? ['15', '14', '13', '12'] : ['16093.68.0'], browserMajors: ['141'], userAgents: [ua], platforms: [os === 'android' ? 'Linux armv81' : 'Linux x86_64'], vendors: [...new Set(devs.map(d => d.webglVendor))], gpus: devs.map(d => ({ vendor: d.webglVendor, renderer: d.webglRenderer })), screens: devs.map(d => `${d.screenWidth}x${d.screenHeight}@${d.pixelRatio}`), cores: ['4', '8', '10'], memory: ['2', '4', '8'], custom: {}, fonts: ['Roboto', 'Noto Sans', 'Noto Serif', 'Noto Color Emoji', 'Droid Sans Mono'] };
   },
-  ChromiumPath: async () => mock.settings.chromiumPath || 'C:\\Program Files\\Chromium\\Application\\chrome.exe',
+  ChromiumPath: async () => mock.settings.chromiumPath || (!inWails && location.hash.includes('nokernel') ? '' : 'C:\\Program Files\\Chromium\\Application\\chrome.exe'),
   ChromiumMajor: async () => '141',
   PickChromium: async () => 'C:\\Program Files\\Chromium\\Application\\chrome.exe',
   LibraryAdd: async (_os: string, _f: string, _v: string) => {},
@@ -230,7 +230,7 @@ const M = {
     ? [{ vendor: 'Google Inc. (Apple)', renderer: 'ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)' }, { vendor: 'Google Inc. (Apple)', renderer: 'ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)' }]
     : [{ vendor: 'Google Inc. (NVIDIA)', renderer: 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002504) Direct3D11 vs_5_0 ps_5_0, D3D11)' }, { vendor: 'Google Inc. (Intel)', renderer: 'ANGLE (Intel, Intel(R) Iris(R) Xe Graphics (0x00009A49) Direct3D11 vs_5_0 ps_5_0, D3D11)' }],
   ScreenOptions: async (os: string) => os === 'macos' ? ['1440x900@2', '1512x982@2', '1728x1117@2'] : ['1920x1080@1', '1366x768@1', '1536x864@1.25', '2560x1440@1'],
-  StartProfile: async (id: string) => { await wait(600); const r = { profileId: id, pid: 1234, debugPort: 9222, wsUrl: 'ws://127.0.0.1:9222/devtools/browser/x', startedAt: Date.now() / 1000 }; mock.running.push(r); return r; },
+  StartProfile: async (id: string) => { await wait(600); if (!inWails && location.hash.includes('nokernel') && !mock.settings.chromiumPath) throw '没有找到开源内核：请在「设置 → 开源内核」选择 chrome.exe（Chromium、Chrome 或你自己编译的内核）'; const r = { profileId: id, pid: 1234, debugPort: 9222, wsUrl: 'ws://127.0.0.1:9222/devtools/browser/x', startedAt: Date.now() / 1000 }; mock.running.push(r); return r; },
   StopProfile: async (id: string) => { mock.running = mock.running.filter(r => r.profileId !== id); },
   Running: async () => [...mock.running],
   ExportCookies: async (_id: string, format: string) => {
@@ -427,6 +427,12 @@ const M = {
     if (/old|10\d\./i.test(p)) return { path: p, version: '104.0.5112.79', major: 104, level: 'unsupported', message: 'Chrome 104 版本过旧，不受支持：需要 110 及以上，推荐 120 以上' };
     return { path: p, version: '141.0.7390.122', major: 141, level: 'ok', message: '' };
   },
+  // ---- kernel install ----
+  KernelInstallStatus: async (): Promise<any> => ({ ...kernelMock.p }),
+  KernelInstallStart: async (source: string, url: string): Promise<any> => { if (kernelMock.p.running) throw '已有内核正在安装'; Object.assign(mock.settings, { kernelSource: source, kernelUrl: url }); simKernel(source); return { ...kernelMock.p }; },
+  KernelInstallCancel: async () => { kernelMock.cancel = true; },
+  KernelList: async (): Promise<any[]> => kernelMock.list.map(k => ({ ...k, active: k.path === mock.settings.chromiumPath })),
+  KernelDelete: async (dir: string) => { await wait(300); kernelMock.list = kernelMock.list.filter(k => k.dir !== dir); },
 };
 
 export const api: typeof M = inWails ? (Go as any) : M;
@@ -661,3 +667,55 @@ const mihomoMock = {
   ].map(([name, type, delay]) => ({ name, type, delay, alive: delay !== 0 || name === '🇬🇧 英国 伦敦 01', udp: type !== 'Trojan', isGroup: false, now: '', all: [] })) as any[],
 };
 if (!inWails && location.hash.includes('mihomo')) mihomoMock.status = { ...mihomoMock.status, configured: true, connected: true, controller: 'http://127.0.0.1:9090', hasSecret: true };
+
+// ---- kernel install mock ----
+const KDIR = 'C:\\Users\\me\\AppData\\Roaming\\GhostBrowser\\kernels\\';
+const kernelMock = {
+  p: { phase: 'idle', running: false, source: 'mirror', done: 0, total: 0, pct: 0, speed: 0, eta: -1, message: '' } as any,
+  cancel: false,
+  list: (!inWails && location.hash.includes('nokernel') ? [] : [{ name: 'chromium-155.0.7980.0', version: '155.0.7980.0', path: KDIR + 'chromium-155.0.7980.0\\chrome.exe', dir: KDIR + 'chromium-155.0.7980.0', size: 861_204_480, installed: Date.now() - 86400e3 * 9, active: false }]) as any[],
+};
+// Simulated install: resolve → download (wobbly speed) → extract → verify → done.
+// ?#kfail makes the download fail at ~40%; the "official" source fails with HTTP 403.
+function simKernel(source: string) {
+  const K = kernelMock; K.cancel = false;
+  const E = (patch: any) => { K.p = { ...K.p, ...patch }; mockEmit('kernel:install', { ...K.p }); };
+  const total = 360_101_018, unpacked = 855_087_658, rev = '1710741', ver = '157.0.8086.0';
+  const failAt = location.hash.includes('kfail') ? 0.4 : 2;
+  const slow = location.hash.includes('kslow') ? 8 : 1;
+  E({ phase: 'resolve', running: true, source, revision: '', version: '', path: '', done: 0, total: 0, pct: 0, speed: 0, eta: -1, resumed: false, message: '正在解析最新版本…', hint: '', error: '' });
+  const stop = (msg: string, hint: string, err: string) => E({ phase: 'error', running: false, speed: 0, eta: -1, message: msg, hint, error: err });
+  setTimeout(() => {
+    if (K.cancel) return E({ phase: 'cancelled', running: false, message: '已取消安装', hint: '已下载的部分会保留，重新安装时从断点继续' });
+    if (source === 'official') return stop('下载版本列表失败: HTTP 403', '该下载源无法访问此文件，请切换到「国内镜像」或填写自定义下载地址', '下载版本列表失败: HTTP 403');
+    let done = K.p.phase === 'cancelled' ? 0 : 0;
+    E({ phase: 'download', revision: rev, total, message: '正在下载 Chromium 内核…', url: 'https://cdn.npmmirror.com/binaries/chromium-browser-snapshots/Win_x64/1710741/chrome-win.zip' });
+    let sp = 9.6 * 1048576 / slow;
+    const iv = setInterval(() => {
+      if (K.cancel) { clearInterval(iv); return E({ phase: 'cancelled', running: false, speed: 0, eta: -1, message: '已取消安装', hint: '已下载的部分会保留，重新安装时从断点继续' }); }
+      sp = sp * 0.75 + (7 + Math.random() * 6) * 1048576 / slow * 0.25;
+      done = Math.min(total, done + sp * 0.25 * 4);
+      if (done / total >= failAt) { clearInterval(iv); return stop('网络连接失败或被中断', source === 'mirror' ? '可能无法访问该下载源，请检查网络或代理设置，也可以切换到「自定义地址」使用其他镜像；点击「重试」会从断点继续' : '可能无法访问该下载源，请切换到「国内镜像」或填写自定义下载地址；点击「重试」会从断点继续', '网络错误: read tcp 192.168.1.8:52114->101.37.183.5:443: wsarecv: An existing connection was forcibly closed by the remote host.'); }
+      E({ done, pct: done * 100 / total, speed: sp, eta: Math.round((total - done) / sp) });
+      if (done >= total) {
+        clearInterval(iv);
+        let x = 0;
+        E({ phase: 'extract', done: 0, total: unpacked, pct: 0, speed: 0, eta: -1, message: '正在解压…' });
+        const iv2 = setInterval(() => {
+          x = Math.min(unpacked, x + unpacked / 12);
+          E({ done: x, pct: x * 100 / unpacked });
+          if (x >= unpacked) {
+            clearInterval(iv2);
+            E({ phase: 'verify', done: 0, total: 0, pct: 0, message: '正在校验内核…' });
+            setTimeout(() => {
+              const dir = KDIR + 'chromium-' + ver, path = dir + '\\chrome.exe';
+              K.list = [{ name: 'chromium-' + ver, version: ver, path, dir, size: 861_204_480 + 2_113_536, installed: Date.now(), active: true }, ...K.list.filter(k => k.dir !== dir)];
+              mock.settings.chromiumPath = path;
+              E({ phase: 'done', running: false, version: ver, path, pct: 100, speed: 0, eta: 0, message: '安装完成，已设为默认开源内核', hint: '' });
+            }, 700);
+          }
+        }, 160);
+      }
+    }, 250);
+  }, 900);
+}

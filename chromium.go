@@ -370,9 +370,9 @@ type emulator struct {
 	starts      []string
 	startMu     sync.Mutex
 	startTarget string
-	net         *fpNet // port-scan protection / video blocking (nil = off)
+	net         *fpNet   // port-scan protection / video blocking (nil = off)
 	workerPause sync.Map // worker session → chan signalled on Debugger.paused
-	major       int    // kernel's Chrome major from Browser.getVersion (0 = unknown)
+	major       int      // kernel's Chrome major from Browser.getVersion (0 = unknown)
 }
 
 func (e *emulator) Close() {

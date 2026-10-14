@@ -5,6 +5,7 @@ import { Field, Toggle, Icon, flag, useToast, useExit, Segmented, Avatar, DevIco
 import { CookieModal } from './CookieModal';
 import { ExtIcon, Ext } from './ExtensionsView';
 import { GuardPane, LaunchPane } from './FpControls';
+import { KernelMissingNotice } from './KernelInstall';
 import { DEVICE_TYPES, TRUST, devType, osName, osVerLabel, needsOpen, uaOSOf } from './devices';
 
 type FPCatalog = { osVersions: string[]; browserMajors: string[]; userAgents: string[]; platforms: string[]; vendors: string[]; gpus: { vendor: string; renderer: string; custom?: string }[]; fonts: string[]; screens: string[]; cores: string[]; memory: string[]; custom: Record<string, string[]> };
@@ -232,6 +233,7 @@ export const ProfileDrawer: React.FC<{
                 : <Segmented className="compact" value={openKernel ? 'chromium' : ''} onChange={setKernel} items={[['', '定制内核'], ['chromium', '开源内核']]} />}
             </div>
             {openKernel && <div className="sub" style={{ margin: '-4px 0 12px' }}>{dt === 'desktop' || dt === 'laptop' || dt === 'chromebook' ? '用 CDP 设置 UA、UA-CH、时区和语言，页面脚本补上显卡、屏幕、噪声和字体。' : '用 Chrome 开发者工具同款的设备模拟：UA 与 UA-CH、视口、DPR、触控、屏幕方向，页面脚本补上显卡、噪声和字体。'}{dt === 'tv' ? ' 电视浏览器的内核版本较老，和当前内核的特性不一致。' : ''}</div>}
+            {openKernel && <KernelMissingNotice />}
             {native && <div className="sub" style={{ marginBottom: 12 }}>原生模板 {p.native?.templateKey} · 配置 {p.native?.sourceConfigId}。以下项目会写入 startInfo，高级参数通过启动 JSON 管理。</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
               <button className="btn sm" onClick={regen}><Icon.dice s={14} /> {native ? '加载默认模板值' : '重新随机'}</button>

@@ -131,7 +131,9 @@ func pickGPUs(osName string) []gpu {
 	}
 }
 
-func mobileOS(o string) bool { return o == "android" || o == "chromeos" || o == "tizen" || o == "webos" }
+func mobileOS(o string) bool {
+	return o == "android" || o == "chromeos" || o == "tizen" || o == "webos"
+}
 
 func pickScreens(osName string) []screen {
 	if mobileOS(osName) {
@@ -329,8 +331,8 @@ type FPCatalog struct {
 }
 
 var osVersionsByOS = map[string][]string{
-	"windows": {"11", "10"},
-	"macos":   {"15.5", "15.3", "14.7", "13.7"},
+	"windows":  {"11", "10"},
+	"macos":    {"15.5", "15.3", "14.7", "13.7"},
 	"linux":    {"x86_64"},
 	"android":  {"15", "14", "13", "12"},
 	"chromeos": {"16093.68.0", "16063.45.0"},

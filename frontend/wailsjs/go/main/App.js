@@ -46,6 +46,10 @@ export function CheckProxyDraft(arg1) {
   return window['go']['main']['App']['CheckProxyDraft'](arg1);
 }
 
+export function ChromiumCompat(arg1) {
+  return window['go']['main']['App']['ChromiumCompat'](arg1);
+}
+
 export function ChromiumMajor() {
   return window['go']['main']['App']['ChromiumMajor']();
 }
@@ -200,6 +204,26 @@ export function ImportProxyList(arg1, arg2) {
 
 export function ImportWorkflow(arg1) {
   return window['go']['main']['App']['ImportWorkflow'](arg1);
+}
+
+export function KernelDelete(arg1) {
+  return window['go']['main']['App']['KernelDelete'](arg1);
+}
+
+export function KernelInstallCancel() {
+  return window['go']['main']['App']['KernelInstallCancel']();
+}
+
+export function KernelInstallStart(arg1, arg2) {
+  return window['go']['main']['App']['KernelInstallStart'](arg1, arg2);
+}
+
+export function KernelInstallStatus() {
+  return window['go']['main']['App']['KernelInstallStatus']();
+}
+
+export function KernelList() {
+  return window['go']['main']['App']['KernelList']();
 }
 
 export function KernelMajor() {

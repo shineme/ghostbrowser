@@ -24,6 +24,8 @@ export function CheckProxy(arg1:string):Promise<main.Proxy>;
 
 export function CheckProxyDraft(arg1:main.Proxy):Promise<main.Proxy>;
 
+export function ChromiumCompat(arg1:string):Promise<main.KernelCompat>;
+
 export function ChromiumMajor():Promise<string>;
 
 export function ChromiumPath():Promise<string>;
@@ -101,6 +103,16 @@ export function ImportProxies(arg1:string):Promise<Array<main.Proxy>>;
 export function ImportProxyList(arg1:Array<main.Proxy>,arg2:string):Promise<Array<main.Proxy>>;
 
 export function ImportWorkflow(arg1:string):Promise<main.Workflow>;
+
+export function KernelDelete(arg1:string):Promise<void>;
+
+export function KernelInstallCancel():Promise<void>;
+
+export function KernelInstallStart(arg1:string,arg2:string):Promise<main.KernelProgress>;
+
+export function KernelInstallStatus():Promise<main.KernelProgress>;
+
+export function KernelList():Promise<Array<main.InstalledKernel>>;
 
 export function KernelMajor():Promise<string>;
 

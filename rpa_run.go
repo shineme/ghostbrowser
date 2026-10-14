@@ -660,7 +660,7 @@ const rpaFind = `const __gbq = (sel) => {
   }
   return document.querySelector(sel);
 };
-`+rpaSettle+`const __gbvis = (el) => { if (!el) return false; const st = getComputedStyle(el); if (st.visibility === 'hidden' || st.display === 'none') return false; const r = el.getBoundingClientRect(); return r.width > 0 || r.height > 0; };
+` + rpaSettle + `const __gbvis = (el) => { if (!el) return false; const st = getComputedStyle(el); if (st.visibility === 'hidden' || st.display === 'none') return false; const r = el.getBoundingClientRect(); return r.width > 0 || r.height > 0; };
 `
 
 // onEl runs body with `el` bound to the selector's element (error if missing).

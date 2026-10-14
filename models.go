@@ -154,6 +154,9 @@ type Settings struct {
 	DeviceID         string `json:"deviceId"`
 	Theme            string `json:"theme"`
 	ProxyCheckMins   int    `json:"proxyCheckMins"` // background re-check of every proxy; 0 = off
+	// One-click open-source kernel install: download source (mirror|official|custom) and custom URL.
+	KernelSource string `json:"kernelSource,omitempty"`
+	KernelURL    string `json:"kernelUrl,omitempty"`
 }
 
 type RunState struct {

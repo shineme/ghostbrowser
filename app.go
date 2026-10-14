@@ -737,7 +737,9 @@ func (a *App) SetProfileExtensions(profileID string, ids []string) error {
 
 // ExportCookies: format "json" | "netscape". Running profile = live over CDP,
 // stopped = last session snapshot merged with staged cookies.
-func (a *App) ExportCookies(id, format string) (string, error) { return a.store.ExportCookies(id, format) }
+func (a *App) ExportCookies(id, format string) (string, error) {
+	return a.store.ExportCookies(id, format)
+}
 
 // ImportCookies: format "json" | "netscape" | "auto".
 func (a *App) ImportCookies(id, format, data string) (CookieImportResult, error) {
@@ -789,7 +791,7 @@ func (a *App) rpa() *rpaService {
 				}
 				return rs.WSURL, nil
 			},
-			stop:      a.StopProfile,
+			stop: a.StopProfile,
 			emit: func(e RpaEvent) {
 				// Without a Wails context (tests, headless) EventsEmit would log.Fatal.
 				if a.ctx != nil && a.ctx.Value("events") != nil {
@@ -830,7 +832,7 @@ func (a *App) RunWorkflowWith(workflowID string, profileIDs []string, opt RpaRun
 	return a.rpa().Run(workflowID, profileIDs, opt)
 }
 
-func (a *App) CancelWorkflowRun(runID string) bool    { return a.rpa().Cancel(runID) }
+func (a *App) CancelWorkflowRun(runID string) bool     { return a.rpa().Cancel(runID) }
 func (a *App) WorkflowRuns(workflowID string) []RpaRun { return a.rpa().db.Runs(workflowID) }
 func (a *App) WorkflowRun(runID string) (RpaRun, error) {
 	r, ok := a.rpa().db.Run(runID)
@@ -971,4 +973,54 @@ func (a *App) ChromiumCompat(path string) KernelCompat {
 		return KernelCompat{Path: p, Level: "missing", Message: "找不到这个文件，将改用自动检测到的内核"}
 	}
 	return kernelCompatFor(k, kernelVersion(k))
+}
+
+// ---- kernel install ----
+
+// KernelInstallStatus returns the current one-click kernel install state.
+func (a *App) KernelInstallStatus() KernelProgress { return kernelInst.snapshot() }
+
+// KernelInstallStart downloads and installs Chromium for Windows x64 from
+// source (mirror|official|custom) and makes it the open-source kernel.
+// Progress arrives as "kernel:install" events.
+func (a *App) KernelInstallStart(source, customURL string) (KernelProgress, error) {
+	if kernelInst.emit == nil {
+		kernelInst.emit = func(p KernelProgress) {
+			if a.ctx != nil {
+				wruntime.EventsEmit(a.ctx, "kernel:install", p)
+			}
+		}
+	}
+	st := a.store.GetSettings()
+	st.KernelSource, st.KernelURL = source, strings.TrimSpace(customURL)
+	a.store.PutSettings(st)
+	return kernelInst.Start(kernelsDir(), source, customURL, func(path string) {
+		s := a.store.GetSettings()
+		s.ChromiumPath = path
+		a.store.PutSettings(s)
+		if a.ctx != nil {
+			wruntime.EventsEmit(a.ctx, "settings:changed", s)
+		}
+	})
+}
+
+// KernelInstallCancel stops the running install; the partial download is kept for resume.
+func (a *App) KernelInstallCancel() { kernelInst.Cancel() }
+
+// KernelList returns kernels installed by one-click install.
+func (a *App) KernelList() []InstalledKernel {
+	return listKernels(kernelsDir(), chromiumKernel(a.store.GetSettings()))
+}
+
+// KernelDelete removes an installed kernel; clears chromiumPath when it pointed there.
+func (a *App) KernelDelete(dir string) error {
+	if err := deleteKernel(kernelsDir(), dir); err != nil {
+		return err
+	}
+	st := a.store.GetSettings()
+	if p := st.ChromiumPath; p != "" && strings.HasPrefix(strings.ToLower(filepath.Clean(p)), strings.ToLower(filepath.Clean(dir))+string(filepath.Separator)) {
+		st.ChromiumPath = ""
+		a.store.PutSettings(st)
+	}
+	return nil
 }

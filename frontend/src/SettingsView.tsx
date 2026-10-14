@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api, Settings } from './api';
 import { Icon, Field, Toggle, useToast } from './ui';
 import type { EnvStatus } from './EnvSetup';
+import { KernelInstaller } from './KernelInstall';
 
 const mb = (b: number) => b ? `${(b / 1048576).toFixed(b > 1e8 ? 0 : 1)} MB` : '';
 
@@ -83,7 +84,8 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
           <div className="row"><input type="text" value={s.chromiumPath || ''} onChange={e => set({ chromiumPath: e.target.value } as any)} placeholder="Chromium、Chrome for Testing、ungoogled-chromium 或你自己编译的内核" /><button className="btn" style={{ flex: 'none' }} onClick={async () => { const f = await api.PickChromium(); if (f) set({ chromiumPath: f } as any); }}><Icon.folder s={15} /> 浏览</button>{s.chromiumPath && <button className="btn ghost" style={{ flex: 'none' }} onClick={() => set({ chromiumPath: '' } as any)}><Icon.refresh s={14} /> 自动检测</button>}</div>
         </Field>
         {compat && compat.level !== 'ok' && compat.message && <div className={`notice ${compat.level === 'unsupported' ? 'bad' : 'warn'} kc-notice`}><Icon.alert /><span className="grow">{compat.message}</span></div>}
-        <div className="sub">指纹通过 CDP 注入，不依赖扩展，Chrome 137 以后的正式版也能用。支持 Chrome 110 及以上，推荐 120 以上的 Chromium 或 Chrome for Testing。UA 里的大版本自动跟随内核。需要保持 GhostBrowser 运行。</div>
+        <KernelInstaller source={(s as any).kernelSource} url={(s as any).kernelUrl} onInstalled={async path => { const out = await api.SaveSettings({ ...s, chromiumPath: path } as any); setS(out); onSaved(out); }} />
+        <div className="sub" style={{ marginTop: 12 }}>指纹通过 CDP 注入，不依赖扩展，Chrome 137 以后的正式版也能用。支持 Chrome 110 及以上，推荐 120 以上的 Chromium 或 Chrome for Testing。UA 里的大版本自动跟随内核。需要保持 GhostBrowser 运行。</div>
       </div>
 
       <div className="panel pad setting-card spot rise" style={{ ['--i' as any]: 2 }}>

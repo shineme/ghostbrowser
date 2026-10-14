@@ -498,4 +498,4 @@ func runMcpStdio() int {
 	return 0
 }
 
-func mcpAppVersion() string { return "0.6.0" }
+func mcpAppVersion() string { return "0.6.1" }
