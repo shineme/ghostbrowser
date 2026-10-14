@@ -315,6 +315,8 @@ func (s *Store) launchUndetectable(p *Profile, st Settings) (*RunState, error) {
 		}
 		return nil, err
 	}
+	// Extension Center folders: added at launch only, never stored in the spec export.
+	spec.ExtraArgs = withExtensionArgs(append([]string(nil), spec.ExtraArgs...), extensionDirs(p))
 	session, err := spec.Start(0)
 	if err != nil {
 		return nil, err

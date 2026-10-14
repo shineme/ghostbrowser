@@ -645,3 +645,34 @@ func extensionDirs(p *Profile) []string {
 	}
 	return dirs
 }
+
+// withExtensionArgs adds --load-extension=<dirs> and turns off Chrome 137+'s
+// DisableLoadExtensionCommandLineSwitch, merging it into an existing
+// --disable-features value instead of adding a second flag (Chromium only
+// honours the last one). args is not modified in place.
+func withExtensionArgs(args []string, dirs []string) []string {
+	if len(dirs) == 0 {
+		return args
+	}
+	out := make([]string, 0, len(args)+2)
+	merged := false
+	for _, a := range args {
+		if strings.HasPrefix(a, "--load-extension=") {
+			continue
+		}
+		if v, ok := strings.CutPrefix(a, "--disable-features="); ok && !merged {
+			if !strings.Contains(","+v+",", ",DisableLoadExtensionCommandLineSwitch,") {
+				if v != "" {
+					v += ","
+				}
+				v += "DisableLoadExtensionCommandLineSwitch"
+			}
+			a, merged = "--disable-features="+v, true
+		}
+		out = append(out, a)
+	}
+	if !merged {
+		out = append(out, "--disable-features=DisableLoadExtensionCommandLineSwitch")
+	}
+	return append(out, "--load-extension="+strings.Join(dirs, ","))
+}

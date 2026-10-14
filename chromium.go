@@ -24,8 +24,10 @@ import (
 // CDP session GhostBrowser keeps open for the life of the browser: device
 // emulation (UA + UA-CH, viewport, DPR, touch, orientation, timezone, locale,
 // geolocation) plus a document-start script for GPU, noise, fonts and battery.
-// No extension is used, so it also works on Chrome 137+ where --load-extension
-// is disabled.
+// The fingerprint itself needs no extension. Extensions the user assigns in the
+// Extension Center are passed with --load-extension; on Chrome 137+ that switch
+// only works with DisableLoadExtensionCommandLineSwitch added to the single
+// --disable-features flag (branded Google Chrome may still ignore it).
 
 func findChrome() string {
 	var cands []string
@@ -112,6 +114,7 @@ func (s *Store) launchChromium(p *Profile, st Settings) (*RunState, error) {
 	if fp.WebRTC == "disabled" || (fp.WebRTC == "proxy" && px != nil) {
 		args = append(args, "--force-webrtc-ip-handling-policy=disable_non_proxied_udp")
 	}
+	args = withExtensionArgs(args, extensionDirs(p))
 	var relay *undetectable.Relay
 	if px != nil && px.Type != "none" && px.Host != "" {
 		pu := px.URL()
