@@ -3,7 +3,10 @@ package main
 // Fingerprint is the full per-profile fingerprint config. It is written to the
 // native startInfo blob that the bundled custom Chromium reads at launch.
 type Fingerprint struct {
-	OS              string   `json:"os"` // windows | macos | linux
+	OS              string   `json:"os"`         // windows | macos | linux | android | chromeos | tizen | webos
+	DeviceType      string   `json:"deviceType"` // desktop | laptop | phone | tablet | foldable | chromebook | tv ("" = desktop)
+	DeviceModel     string   `json:"deviceModel,omitempty"` // UA-CH model, e.g. SM-S928B (phones / tablets)
+	DeviceName      string   `json:"deviceName,omitempty"`  // marketing name shown in the UI
 	OSVersion       string   `json:"osVersion"`
 	BrowserVersion  string   `json:"browserVersion"`
 	UserAgent       string   `json:"userAgent"`
@@ -85,12 +88,25 @@ type Profile struct {
 	SyncedAt    int64          `json:"syncedAt"`
 	KeepLocal   int64          `json:"keepLocalVersion,omitempty"` // user kept local over this cloud version
 	ChunkKey    string         `json:"chunkKey,omitempty"`         // incremental sync: per-profile chunk key (base64)
+	// Kernel: "" = custom kernel (Undetectable) when the device allows it,
+	// "chromium" = open-source Chromium / Chrome. Phones, tablets, Macs, Linux,
+	// Chromebooks and TVs always run on the open-source kernel.
+	Kernel string `json:"kernel,omitempty"`
 }
+
+// needsOpenKernel: the custom kernel only carries Windows desktop templates.
+func needsOpenKernel(fp Fingerprint) bool {
+	t := fp.DeviceType
+	return fp.OS != "windows" || !(t == "" || t == "desktop" || t == "laptop")
+}
+
+func (p *Profile) useChromium() bool { return p.Kernel == "chromium" || needsOpenKernel(p.Fingerprint) }
 
 type Settings struct {
 	UndetectableKit string `json:"undetectableKit"`
 	KernelPath      string `json:"kernelPath"`
-	KernelMode      string `json:"kernelMode"` // always undetectable
+	KernelMode      string `json:"kernelMode"`   // always undetectable
+	ChromiumPath    string `json:"chromiumPath"` // open-source kernel: Chromium / Chrome / your own build ("" = auto-detect)
 	ProfilesDir     string `json:"profilesDir"`
 	APIPort         int    `json:"apiPort"`
 	APIEnabled      bool   `json:"apiEnabled"`

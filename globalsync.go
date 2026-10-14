@@ -216,6 +216,9 @@ func (s *Store) PullGlobal() (err error) {
 	if !exists(ns.KernelPath) {
 		ns.KernelPath = st.KernelPath
 	}
+	if !exists(ns.ChromiumPath) {
+		ns.ChromiumPath = st.ChromiumPath
+	}
 	if !exists(ns.UndetectableKit) {
 		ns.UndetectableKit = st.UndetectableKit
 	}

@@ -22,6 +22,14 @@ export function CheckProxyDraft(arg1) {
   return window['go']['main']['App']['CheckProxyDraft'](arg1);
 }
 
+export function ChromiumMajor() {
+  return window['go']['main']['App']['ChromiumMajor']();
+}
+
+export function ChromiumPath() {
+  return window['go']['main']['App']['ChromiumPath']();
+}
+
 export function ClearSyncLog() {
   return window['go']['main']['App']['ClearSyncLog']();
 }
@@ -40,6 +48,10 @@ export function CreateNativeProfile(arg1, arg2) {
 
 export function CreateProfiles(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['CreateProfiles'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function CreateTypedProfiles(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['CreateTypedProfiles'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function DataDir() {
@@ -70,6 +82,14 @@ export function DevicePresets(arg1) {
   return window['go']['main']['App']['DevicePresets'](arg1);
 }
 
+export function DevicePresetsByType(arg1, arg2) {
+  return window['go']['main']['App']['DevicePresetsByType'](arg1, arg2);
+}
+
+export function DeviceTypes() {
+  return window['go']['main']['App']['DeviceTypes']();
+}
+
 export function EnvCancel() {
   return window['go']['main']['App']['EnvCancel']();
 }
@@ -92,6 +112,10 @@ export function ExportNativeJSON(arg1) {
 
 export function FingerprintCatalog(arg1) {
   return window['go']['main']['App']['FingerprintCatalog'](arg1);
+}
+
+export function FingerprintCatalogFor(arg1, arg2) {
+  return window['go']['main']['App']['FingerprintCatalogFor'](arg1, arg2);
 }
 
 export function FocusProfile(arg1) {
@@ -154,6 +178,10 @@ export function NativeSnapshot(arg1) {
   return window['go']['main']['App']['NativeSnapshot'](arg1);
 }
 
+export function NewDeviceFingerprint(arg1, arg2) {
+  return window['go']['main']['App']['NewDeviceFingerprint'](arg1, arg2);
+}
+
 export function NewFingerprint(arg1) {
   return window['go']['main']['App']['NewFingerprint'](arg1);
 }
@@ -164,6 +192,10 @@ export function ParseProxy(arg1) {
 
 export function PendingSyncPrompt() {
   return window['go']['main']['App']['PendingSyncPrompt']();
+}
+
+export function PickChromium() {
+  return window['go']['main']['App']['PickChromium']();
 }
 
 export function PickFolder() {

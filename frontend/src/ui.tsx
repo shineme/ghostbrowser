@@ -26,6 +26,14 @@ export const Icon = {
   shield: (p: IP) => <svg {...S(p)}><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1Z" /></svg>,
   cpu: (p: IP) => <svg {...S(p)}><rect x="4" y="4" width="16" height="16" rx="2" /><rect x="9" y="9" width="6" height="6" /><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2" /></svg>,
   terminal: (p: IP) => <svg {...S(p)}><path d="m4 17 6-6-6-6" /><path d="M12 19h8" /></svg>,
+  android: (p: IP) => <svg {...S(p)}><path d="M5 16V10a7 7 0 0 1 14 0v6Z" /><path d="M5 13h14M8 3.5l1.5 2.5M16 3.5 14.5 6" /><path d="M9.5 9h.01M14.5 9h.01" /></svg>,
+  chromeos: (p: IP) => <svg {...S(p)}><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /><path d="M12 8h9M8.5 14 4 6.3M15.5 14 11 21.8" /></svg>,
+  monitor: (p: IP) => <svg {...S(p)}><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /></svg>,
+  phone: (p: IP) => <svg {...S(p)}><rect x="6.5" y="2" width="11" height="20" rx="2.5" /><path d="M11 18.5h2" /></svg>,
+  tablet: (p: IP) => <svg {...S(p)}><rect x="4" y="2" width="16" height="20" rx="2.5" /><path d="M11 18.5h2" /></svg>,
+  fold: (p: IP) => <svg {...S(p)}><rect x="3" y="4" width="18" height="16" rx="2.5" /><path d="M12 4v16" strokeDasharray="2 2" /></svg>,
+  chromebook: (p: IP) => <svg {...S(p)}><rect x="4" y="4" width="16" height="11" rx="1.5" /><path d="M2 19h20l-2-4H4Z" /><circle cx="12" cy="9.5" r="2.5" /></svg>,
+  tv: (p: IP) => <svg {...S(p)}><rect x="2" y="5" width="20" height="13" rx="2" /><path d="M7 21h10M9 2l3 3 3-3" /></svg>,
   windows: (p: IP) => <svg {...S(p)} fill="currentColor" stroke="none"><path d="M3 5.5 10.5 4.4v7.1H3ZM11.5 4.3 21 3v8.5h-9.5ZM3 12.5h7.5v7.1L3 18.5ZM11.5 12.5H21V21l-9.5-1.3Z" /></svg>,
   apple: (p: IP) => <svg {...S(p)} fill="currentColor" stroke="none"><path d="M16.4 12.6c0-2.4 2-3.6 2.1-3.6-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6 0-3.2 1-4 2.4-1.7 3-.4 7.4 1.2 9.8.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8 1.5 0 1.9.8 3.2.8 1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8-.1 0-2.5-1-2.5-4ZM14 5.4c.7-.8 1.1-1.9 1-3-1 0-2.1.7-2.8 1.5-.6.7-1.2 1.8-1 2.9 1 .1 2.1-.6 2.8-1.4Z" /></svg>,
   linux: (p: IP) => <svg {...S(p)}><path d="M12 3c-2 0-3 1.7-3 4 0 1.6-.5 2.6-1.6 4.2C6 13.3 5 15 5.5 17c.4 1.6 2 2 3.5 2.6.9.4 1.8 1.4 3 1.4s2.1-1 3-1.4c1.5-.6 3.1-1 3.5-2.6.5-2-.5-3.7-1.9-5.8C15.5 9.6 15 8.6 15 7c0-2.3-1-4-3-4Z" /><path d="M10.5 8h.01M13.5 8h.01" /></svg>,
@@ -191,7 +199,11 @@ export const avatarStyle = (seed: number | string): React.CSSProperties => {
   return { ['--av' as any]: `linear-gradient(135deg, ${a}, ${b})`, ['--av-glow' as any]: a };
 };
 export const OsIcon: React.FC<{ os: string; s?: number }> = ({ os, s = 16 }) =>
-  os === 'macos' ? <Icon.apple s={s} /> : os === 'linux' ? <Icon.linux s={s} /> : <Icon.windows s={s} />;
+  os === 'macos' ? <Icon.apple s={s} /> : os === 'linux' ? <Icon.linux s={s} /> : os === 'android' ? <Icon.android s={s} /> : os === 'chromeos' ? <Icon.chromeos s={s} /> : os === 'tizen' || os === 'webos' ? <Icon.tv s={s} /> : <Icon.windows s={s} />;
+export const DevIcon: React.FC<{ t?: string; s?: number }> = ({ t, s = 16 }) => {
+  const I = ({ laptop: Icon.laptop, phone: Icon.phone, tablet: Icon.tablet, foldable: Icon.fold, chromebook: Icon.chromebook, tv: Icon.tv } as any)[t || 'desktop'] || Icon.monitor;
+  return <I s={s} />;
+};
 export const Avatar: React.FC<{ seed: number | string; os: string; running?: boolean }> = ({ seed, os, running }) => (
   <span className="avatar" style={avatarStyle(seed)}><OsIcon os={os} />{running !== undefined && <i className={`st ${running ? 'on' : ''}`} />}</span>
 );

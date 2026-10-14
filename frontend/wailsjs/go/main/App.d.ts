@@ -12,6 +12,10 @@ export function CheckProxy(arg1:string):Promise<main.Proxy>;
 
 export function CheckProxyDraft(arg1:main.Proxy):Promise<main.Proxy>;
 
+export function ChromiumMajor():Promise<string>;
+
+export function ChromiumPath():Promise<string>;
+
 export function ClearSyncLog():Promise<void>;
 
 export function CloneProfile(arg1:string):Promise<main.Profile>;
@@ -21,6 +25,8 @@ export function CloudHistory(arg1:string):Promise<Array<main.CloudVersion>>;
 export function CreateNativeProfile(arg1:string,arg2:string):Promise<main.Profile>;
 
 export function CreateProfiles(arg1:string,arg2:string,arg3:number,arg4:string,arg5:string):Promise<Array<main.Profile>>;
+
+export function CreateTypedProfiles(arg1:string,arg2:string,arg3:string,arg4:number,arg5:string,arg6:string):Promise<Array<main.Profile>>;
 
 export function DataDir():Promise<string>;
 
@@ -36,6 +42,10 @@ export function DeleteProxy(arg1:string):Promise<void>;
 
 export function DevicePresets(arg1:string):Promise<Array<main.DevicePreset>>;
 
+export function DevicePresetsByType(arg1:string,arg2:string):Promise<Array<main.DevicePreset>>;
+
+export function DeviceTypes():Promise<Array<main.DeviceTypeInfo>>;
+
 export function EnvCancel():Promise<void>;
 
 export function EnvRecheck(arg1:boolean):Promise<main.EnvStatus>;
@@ -47,6 +57,8 @@ export function ExportCookies(arg1:string):Promise<string>;
 export function ExportNativeJSON(arg1:string):Promise<string>;
 
 export function FingerprintCatalog(arg1:string):Promise<main.FPCatalog>;
+
+export function FingerprintCatalogFor(arg1:string,arg2:string):Promise<main.FPCatalog>;
 
 export function FocusProfile(arg1:string):Promise<void>;
 
@@ -78,11 +90,15 @@ export function NativePresets():Promise<Array<main.NativePreset>>;
 
 export function NativeSnapshot(arg1:string):Promise<string>;
 
+export function NewDeviceFingerprint(arg1:string,arg2:string):Promise<main.Fingerprint>;
+
 export function NewFingerprint(arg1:string):Promise<main.Fingerprint>;
 
 export function ParseProxy(arg1:string):Promise<main.Proxy>;
 
 export function PendingSyncPrompt():Promise<main.SyncPrompt>;
+
+export function PickChromium():Promise<string>;
 
 export function PickFolder():Promise<string>;
 

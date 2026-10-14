@@ -111,6 +111,16 @@ var linuxScreensExt = []screen{
 
 // pickGPU / pickScreen / pickFonts return the expanded pools for an OS.
 func pickGPUs(osName string) []gpu {
+	if mobileOS(osName) {
+		seen, out := map[string]bool{}, []gpu{}
+		for _, d := range mobileDevices {
+			if d.os == osName && !seen[d.renderer] {
+				seen[d.renderer] = true
+				out = append(out, gpu{d.vendor, d.renderer})
+			}
+		}
+		return out
+	}
 	switch osName {
 	case "macos":
 		return macGPUsExt
@@ -121,7 +131,20 @@ func pickGPUs(osName string) []gpu {
 	}
 }
 
+func mobileOS(o string) bool { return o == "android" || o == "chromeos" || o == "tizen" || o == "webos" }
+
 func pickScreens(osName string) []screen {
+	if mobileOS(osName) {
+		seen, out := map[screen]bool{}, []screen{}
+		for _, d := range mobileDevices {
+			sc := screen{d.w, d.h, d.dpr}
+			if d.os == osName && !seen[sc] {
+				seen[sc] = true
+				out = append(out, sc)
+			}
+		}
+		return out
+	}
 	switch osName {
 	case "macos":
 		return macScreensExt
@@ -158,6 +181,12 @@ type DevicePreset struct {
 	Memory    int     `json:"deviceMemory"`
 	Touch     int     `json:"maxTouchPoints"`
 	Custom    bool    `json:"custom,omitempty"`
+	// desktop | laptop | phone | tablet | foldable | chromebook | tv
+	DeviceType string `json:"deviceType"`
+	Model      string `json:"model,omitempty"`      // UA-CH model (phones / tablets)
+	DeviceName string `json:"deviceName,omitempty"` // marketing name
+	UA         string `json:"userAgent,omitempty"`  // fixed UA for devices with their own browser build (TVs); %s = major
+	Platform   string `json:"platform,omitempty"`
 }
 
 var laptopScreens = []screen{{1920, 1080, 1.25}, {1536, 864, 1.25}, {1366, 768, 1}, {1920, 1200, 1.25}, {2560, 1600, 1.5}, {1600, 900, 1}, {1920, 1080, 1.5}}
@@ -201,11 +230,22 @@ var devicePresets = func() []DevicePreset {
 	out := []DevicePreset{}
 	add := func(osName, osVer string, g gpu, sc screen, cores, mem, touch int) {
 		osLabel := map[string]string{"windows": "Win" + osVer, "macos": "macOS " + osVer, "linux": "Linux"}[osName]
+		typ := "desktop"
+		switch osName {
+		case "windows", "linux":
+			if isLaptopGPU(g.renderer) {
+				typ = "laptop"
+			}
+		case "macos":
+			if sc.w <= 1728 { // MacBook Air / Pro default scaled resolutions
+				typ = "laptop"
+			}
+		}
 		out = append(out, DevicePreset{
 			ID:   fmt.Sprintf("%s-%03d", osName[:3], len(out)+1),
 			Name: fmt.Sprintf("%s · %s · %dx%d", osLabel, gpuShort(g.renderer), sc.w, sc.h),
 			OS:   osName, OSVersion: osVer, Vendor: g.vendor, Renderer: g.renderer,
-			Width: sc.w, Height: sc.h, DPR: sc.dpr, Cores: cores, Memory: capMem(mem), Touch: touch,
+			Width: sc.w, Height: sc.h, DPR: sc.dpr, Cores: cores, Memory: capMem(mem), Touch: touch, DeviceType: typ,
 		})
 	}
 	// Windows: every GPU twice (Win10 + Win11) with a screen/CPU class that fits the machine type.
@@ -248,7 +288,8 @@ var devicePresets = func() []DevicePreset {
 // DevicePresetsFor lists presets for one OS ("" = all).
 func DevicePresetsFor(osName string) []DevicePreset {
 	out := []DevicePreset{}
-	for _, p := range append(userLib.presets(), devicePresets...) {
+	all := append(userLib.presets(), devicePresets...)
+	for _, p := range append(all, mobilePresets...) {
 		if osName == "" || p.OS == osName {
 			out = append(out, p)
 		}
@@ -290,10 +331,19 @@ type FPCatalog struct {
 var osVersionsByOS = map[string][]string{
 	"windows": {"11", "10"},
 	"macos":   {"15.5", "15.3", "14.7", "13.7"},
-	"linux":   {"x86_64"},
+	"linux":    {"x86_64"},
+	"android":  {"15", "14", "13", "12"},
+	"chromeos": {"16093.68.0", "16063.45.0"},
+	"tizen":    {"8.0", "7.0"},
+	"webos":    {"24", "23"},
 }
 
 func FingerprintCatalog(osName, kernelMajor string) FPCatalog {
+	return FingerprintCatalogFor(osName, "", kernelMajor)
+}
+
+// FingerprintCatalogFor is the catalog for one OS and device type (phone vs tablet UAs differ).
+func FingerprintCatalogFor(osName, devType, kernelMajor string) FPCatalog {
 	if _, ok := osVersionsByOS[osName]; !ok {
 		osName = "windows"
 	}
@@ -312,7 +362,7 @@ func FingerprintCatalog(osName, kernelMajor string) FPCatalog {
 	})
 	c := FPCatalog{OSVersions: osVersionsByOS[osName], BrowserMajors: majors}
 	for _, m := range majors {
-		ua, pf := buildUA(osName, "", m)
+		ua, pf := buildUAFor(osName, devType, "", m)
 		c.UserAgents = append(c.UserAgents, ua)
 		c.Platforms = []string{pf}
 	}
@@ -324,13 +374,12 @@ func FingerprintCatalog(osName, kernelMajor string) FPCatalog {
 		}
 		c.GPUs = append(c.GPUs, map[string]string{"vendor": g.vendor, "renderer": g.renderer})
 	}
-	switch osName {
-	case "macos":
-		c.Fonts = macFonts
-	case "linux":
-		c.Fonts = linuxFonts
-	default:
-		c.Fonts = winFonts
+	c.Fonts = fontsFor(osName)
+	if devType == "tv" && (osName == "tizen" || osName == "webos") {
+		c.UserAgents = c.UserAgents[:1] // TV browsers have one fixed build
+	}
+	if osName == "android" || osName == "chromeos" || osName == "linux" {
+		c.Platforms = append(c.Platforms, map[string][]string{"android": {"Linux aarch64", "Linux armv8l"}, "chromeos": {"Linux aarch64"}, "linux": {"Linux aarch64"}}[osName]...)
 	}
 	c.Screens = ScreenOptions(osName)
 	c.Cores = []string{"2", "4", "6", "8", "10", "12", "14", "16", "20", "24", "32"}

@@ -93,6 +93,18 @@ go test -run TestEnsureAgainstRealShop -v .
 - 时区、语言、地理位置可以跟随代理出口 IP；启动前会重新检测出口
 - 内置设备库 + 自定义指纹库（`library.json`），下拉框联动并支持保存自定义值
 
+### 设备类型与双内核
+- 设备类型：台式机、笔记本、安卓手机、安卓平板、折叠屏、Chromebook、电视。设备库里有对应的真实机型（Galaxy S24/S23/A 系列、Pixel 6a~9 Pro、小米/Redmi/POCO、OnePlus、OPPO、vivo、Motorola、Sony；Galaxy Tab、Pixel Tablet、小米平板、联想、OnePlus Pad；Z Fold6 折叠/展开、Z Flip6、Pixel 9 Pro Fold；Acer/HP/ASUS/三星/联想 Chromebook；Chromecast、BRAVIA、Tizen、webOS 电视）
+- 选择设备类型后，系统、机型、UA（手机带 Mobile，平板不带）、平台、分辨率与 DPR、GPU、CPU、内存、触控点、字体全部联动
+- **两个内核**：Windows 台式机和笔记本可选「定制内核」（Undetectable）或「开源内核」；手机、平板、折叠屏、Chromebook、电视、macOS、Linux 只能用开源内核
+- **开源内核**（设置 → 开源内核）：Chromium、Chrome for Testing、ungoogled-chromium、Chrome、Edge 或自己编译的 Chromium，留空自动检测
+  - 指纹通过 CDP 注入，不用扩展（Chrome 137 起正式版禁用了 `--load-extension`）：Chrome 开发者工具同款的设备模拟（UA 与 UA-CH 含 model/mobile/platformVersion、视口、DPR、触控、屏幕方向）、时区、语言、地理位置、CPU 核数；页面脚本在文档开始前补上 WebGL、内存、屏幕（桌面）、噪声、字体、电池、WebRTC
+  - UA-CH 的品牌列表直接读内核自身，UA 大版本自动跟随内核版本（电视除外）
+  - 新标签页、iframe 和 worker 自动接管；需要保持 GhostBrowser 运行
+  - 不支持 iPhone / iPad：iOS 上的浏览器都是 WebKit，Chromium 无法可信地伪装
+  - 已知限制：Worker 里的部分属性、真实系统字体测量、电视浏览器的老内核特性无法完全对应
+- 批量创建也可以选择设备类型
+
 ### 代理
 - 批量导入：粘贴或拖入 txt/csv/json，支持常见格式、协议前缀、换 IP 链接、`# 名称` 备注，自动去重
 - 检测出口 IP、国家/地区、ISP、IP 类型（住宅/机房/移动）和延迟，支持测速

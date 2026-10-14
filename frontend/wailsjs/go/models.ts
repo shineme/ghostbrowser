@@ -50,6 +50,11 @@ export namespace main {
 	    deviceMemory: number;
 	    maxTouchPoints: number;
 	    custom?: boolean;
+	    deviceType: string;
+	    model?: string;
+	    deviceName?: string;
+	    userAgent?: string;
+	    platform?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new DevicePreset(source);
@@ -70,6 +75,29 @@ export namespace main {
 	        this.deviceMemory = source["deviceMemory"];
 	        this.maxTouchPoints = source["maxTouchPoints"];
 	        this.custom = source["custom"];
+	        this.deviceType = source["deviceType"];
+	        this.model = source["model"];
+	        this.deviceName = source["deviceName"];
+	        this.userAgent = source["userAgent"];
+	        this.platform = source["platform"];
+	    }
+	}
+	export class DeviceTypeInfo {
+	    id: string;
+	    name: string;
+	    oses: string[];
+	    trust: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DeviceTypeInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.oses = source["oses"];
+	        this.trust = source["trust"];
 	    }
 	}
 	export class EnvStatus {
@@ -142,6 +170,9 @@ export namespace main {
 	}
 	export class Fingerprint {
 	    os: string;
+	    deviceType: string;
+	    deviceModel?: string;
+	    deviceName?: string;
 	    osVersion: string;
 	    browserVersion: string;
 	    userAgent: string;
@@ -179,6 +210,9 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.os = source["os"];
+	        this.deviceType = source["deviceType"];
+	        this.deviceModel = source["deviceModel"];
+	        this.deviceName = source["deviceName"];
 	        this.osVersion = source["osVersion"];
 	        this.browserVersion = source["browserVersion"];
 	        this.userAgent = source["userAgent"];
@@ -371,6 +405,7 @@ export namespace main {
 	    syncedAt: number;
 	    keepLocalVersion?: number;
 	    chunkKey?: string;
+	    kernel?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Profile(source);
@@ -396,6 +431,7 @@ export namespace main {
 	        this.syncedAt = source["syncedAt"];
 	        this.keepLocalVersion = source["keepLocalVersion"];
 	        this.chunkKey = source["chunkKey"];
+	        this.kernel = source["kernel"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -481,6 +517,7 @@ export namespace main {
 	    undetectableKit: string;
 	    kernelPath: string;
 	    kernelMode: string;
+	    chromiumPath: string;
 	    profilesDir: string;
 	    apiPort: number;
 	    apiEnabled: boolean;
@@ -507,6 +544,7 @@ export namespace main {
 	        this.undetectableKit = source["undetectableKit"];
 	        this.kernelPath = source["kernelPath"];
 	        this.kernelMode = source["kernelMode"];
+	        this.chromiumPath = source["chromiumPath"];
 	        this.profilesDir = source["profilesDir"];
 	        this.apiPort = source["apiPort"];
 	        this.apiEnabled = source["apiEnabled"];

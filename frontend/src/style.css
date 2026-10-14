@@ -618,3 +618,19 @@ a { color: #aab6ff; }
 .has-bulk .panel.list { margin-bottom: 70px; }
 .btn.rot { position: relative; }
 .rot-dot { position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: #3ee6a8; box-shadow: 0 0 6px #3ee6a8; }
+
+/* ---- device types (v0.5) ---- */
+.devgrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.devtile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 10px 4px 8px; border-radius: 12px; border: 1px solid var(--line, rgba(255,255,255,.08)); background: rgba(255,255,255,.025); color: var(--txt-2, #b9bfd6); cursor: pointer; transition: border-color .2s, background .2s, color .2s, transform .2s; }
+.devtile b { font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.devtile:hover { color: var(--txt, #fff); border-color: rgba(124,140,255,.35); transform: translateY(-1px); }
+.devtile.on { color: var(--txt, #fff); border-color: rgba(124,140,255,.7); background: linear-gradient(180deg, rgba(124,140,255,.18), rgba(124,140,255,.05)); box-shadow: 0 0 0 1px rgba(124,140,255,.25) inset, 0 6px 18px -8px rgba(124,140,255,.6); }
+.devtile .trust { position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; }
+.trust.high { background: #3ee6a8; } .trust.mid { background: #ffc454; } .trust.low { background: #ff6b7a; }
+.kernel-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.kchip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; background: rgba(79,224,208,.08); border: 1px solid rgba(79,224,208,.25); color: #9ff3e8; }
+.kchip small { font-weight: 450; color: var(--txt-3, #8a90a8); margin-left: 4px; }
+.devchip { display: inline-flex; align-items: center; gap: 4px; }
+.devtag { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--txt-3, #8a90a8); margin-left: 6px; }
+.devtag.open { color: #9ff3e8; }
+@media (max-width: 900px) { .devgrid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }

@@ -1,14 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Combo, SearchSelect, FontPicker, CountrySelect, LanguagePicker, TimezoneSelect, countryOfTz } from './locales';
 import { api, Profile, Proxy, Fingerprint } from './api';
-import { Field, Toggle, Icon, flag, useToast, useExit, Segmented, Avatar } from './ui';
+import { Field, Toggle, Icon, flag, useToast, useExit, Segmented, Avatar, DevIcon } from './ui';
+import { DEVICE_TYPES, TRUST, devType, osName, osVerLabel, needsOpen, uaOSOf } from './devices';
 
 type FPCatalog = { osVersions: string[]; browserMajors: string[]; userAgents: string[]; platforms: string[]; vendors: string[]; gpus: { vendor: string; renderer: string; custom?: string }[]; fonts: string[]; screens: string[]; cores: string[]; memory: string[]; custom: Record<string, string[]> };
 const EMPTY_CAT: FPCatalog = { osVersions: [], browserMajors: [], userAgents: [], platforms: [], vendors: [], gpus: [], fonts: [], screens: [], cores: [], memory: [], custom: {} };
 // Keep the current value visible even when it is outside the catalog (e.g. an imported profile).
 const opt = <T,>(list: T[], cur: T): T[] => (cur === '' || cur === undefined || cur === null || list.includes(cur)) ? list : [cur, ...list];
-const osVerLabel = (os: string, v: string) => os === 'windows' ? `Windows ${v}` : os === 'macos' ? `macOS ${v}` : `Linux ${v}`;
-const OSES = [['windows', 'Windows'], ['macos', 'macOS'], ['linux', 'Linux']];
 
 
 export const ProfileDrawer: React.FC<{
@@ -84,21 +83,35 @@ export const ProfileDrawer: React.FC<{
     </div>
   );
 
+  const dt = devType(fp.deviceType);
+  const dtInfo = DEVICE_TYPES.find(d => d.id === dt)!;
+  const forcedOpen = needsOpen(fp.os, dt);
+  const openKernel = forcedOpen || (p as any).kernel === 'chromium';
+  const loadPresets = () => api.DevicePresetsByType(dt, fp.os).then(d => setDevices(d || [])).catch(() => setDevices([]));
   useEffect(() => {
     api.GPUOptions(fp.os).then(setGpus);
     loadCat();
-    api.DevicePresets(fp.os).then(d => setDevices(d || [])).catch(() => setDevices([]));
+    loadPresets();
     api.ScreenOptions(fp.os).then(setScreens);
-  }, [fp.os]);
+  }, [fp.os, dt]);
 
-  const native = !!(p as any).native;
+  const native = !!(p as any).native && !openKernel;
+  const setKernel = (k: string) => setP(s => ({ ...s, kernel: k } as any));
+  const changeType = async (t: string) => {
+    const info = DEVICE_TYPES.find(d => d.id === t)!;
+    const os = info.oses.includes(fp.os) ? fp.os : info.oses[0];
+    const f: any = await api.NewDeviceFingerprint(t, os);
+    setDevice('');
+    setP(s => ({ ...s, fingerprint: { ...f, deviceType: t }, kernel: needsOpen(os, t) ? 'chromium' : (s as any).kernel } as any));
+    setFlash(x => x + 1);
+  };
   const applyDevice = (id: string) => {
     const d = devices.find(x => x.id === id); if (!d) return;
     setDevice(id);
-    setFP({ osVersion: d.osVersion, webglVendor: d.webglVendor, webglRenderer: d.webglRenderer, screenWidth: d.screenWidth, screenHeight: d.screenHeight, pixelRatio: d.pixelRatio, hardwareConcurrency: d.hardwareConcurrency, deviceMemory: d.deviceMemory, maxTouchPoints: d.maxTouchPoints });
+    setFP({ ...(d.userAgent ? { userAgent: d.userAgent.replace('%s', fp.browserVersion) } : {}), ...(d.platform ? { platform: d.platform } : {}), deviceModel: d.model || '', deviceName: d.deviceName || '', osVersion: d.osVersion, webglVendor: d.webglVendor, webglRenderer: d.webglRenderer, screenWidth: d.screenWidth, screenHeight: d.screenHeight, pixelRatio: d.pixelRatio, hardwareConcurrency: d.hardwareConcurrency, deviceMemory: d.deviceMemory, maxTouchPoints: d.maxTouchPoints });
     setFlash(x => x + 1);
   };
-  const loadCat = () => api.FingerprintCatalog(fp.os).then(c => setCat({ ...EMPTY_CAT, ...(c as any) })).catch(() => setCat(EMPTY_CAT));
+  const loadCat = () => api.FingerprintCatalogFor(fp.os, dt).then(c => setCat({ ...EMPTY_CAT, ...(c as any) })).catch(() => setCat(EMPTY_CAT));
   const libAdd = async (field: string, v: string) => { try { await api.LibraryAdd(fp.os, field, v); toast('已存入我的指纹库'); loadCat(); } catch (e: any) { toast(String(e?.message || e), 'bad'); } };
   const libRemove = async (field: string, v: string) => { try { await api.LibraryRemove(fp.os, field, v); toast('已从指纹库删除'); loadCat(); } catch (e: any) { toast(String(e?.message || e), 'bad'); } };
   const lib = (field: string, options: string[]) => ({ options, custom: cat.custom?.[field] || [], onSave: (v: string) => libAdd(field, v), onRemove: (v: string) => libRemove(field, v) });
@@ -106,22 +119,25 @@ export const ProfileDrawer: React.FC<{
   const [scrText, setScrText] = useState('');
   useEffect(() => { setScrText(`${fp.screenWidth}x${fp.screenHeight}@${fp.pixelRatio}`); }, [fp.screenWidth, fp.screenHeight, fp.pixelRatio]);
   // A typed UA that belongs to another OS is allowed, but flagged.
-  const uaOS = /Windows NT/.test(fp.userAgent) ? 'windows' : /Macintosh|Mac OS X/.test(fp.userAgent) ? 'macos' : /Linux|X11/.test(fp.userAgent) ? 'linux' : '';
-  const uaWarn = uaOS && uaOS !== fp.os ? `这个 UA 属于 ${OSES.find(o => o[0] === uaOS)?.[1]}，与所选系统不一致，容易被识别` : '';
+  const uaOS = uaOSOf(fp.userAgent);
+  const mobileUA = /Mobile Safari/.test(fp.userAgent);
+  const uaWarn = uaOS && uaOS !== fp.os ? `这个 UA 属于 ${osName(uaOS)}，与所选系统不一致，容易被识别`
+    : fp.os === 'android' && mobileUA !== (dt === 'phone' || dt === 'foldable') ? (mobileUA ? '平板/电视的 UA 不应带 Mobile' : '手机的 UA 应带 Mobile') : '';
   const savePreset = async () => {
     try {
-      const d: any = await api.SaveDevicePreset({ id: device.startsWith('my-') ? device : '', name: '', os: fp.os, osVersion: fp.osVersion, webglVendor: fp.webglVendor, webglRenderer: fp.webglRenderer, screenWidth: fp.screenWidth, screenHeight: fp.screenHeight, pixelRatio: fp.pixelRatio, hardwareConcurrency: fp.hardwareConcurrency, deviceMemory: fp.deviceMemory, maxTouchPoints: fp.maxTouchPoints } as any);
+      const d: any = await api.SaveDevicePreset({ id: device.startsWith('my-') ? device : '', name: '', os: fp.os, deviceType: dt, model: fp.deviceModel || '', deviceName: fp.deviceName || '', osVersion: fp.osVersion, webglVendor: fp.webglVendor, webglRenderer: fp.webglRenderer, screenWidth: fp.screenWidth, screenHeight: fp.screenHeight, pixelRatio: fp.pixelRatio, hardwareConcurrency: fp.hardwareConcurrency, deviceMemory: fp.deviceMemory, maxTouchPoints: fp.maxTouchPoints } as any);
       setDevice(d.id); toast(`已保存设备预设：${d.name}`);
-      api.DevicePresets(fp.os).then(x => setDevices(x || []));
+      loadPresets();
     } catch (e: any) { toast(String(e?.message || e), 'bad'); }
   };
-  const delPreset = async () => { try { await api.DeleteDevicePreset(device); setDevice(''); toast('已删除设备预设'); api.DevicePresets(fp.os).then(x => setDevices(x || [])); } catch (e: any) { toast(String(e?.message || e), 'bad'); } };
+  const delPreset = async () => { try { await api.DeleteDevicePreset(device); setDevice(''); toast('已删除设备预设'); loadPresets(); } catch (e: any) { toast(String(e?.message || e), 'bad'); } };
   // Linked edits: UA and browser major always move together; renderer always belongs to the vendor.
   const setMajor = (m: string) => setFP({ browserVersion: m, userAgent: cat.userAgents.find(u => u.includes(`Chrome/${m}.`)) || fp.userAgent });
   const setUA = (ua: string) => { const m = /Chrome\/(\d+)\./.exec(ua); setFP({ userAgent: ua, ...(m ? { browserVersion: m[1] } : {}) }); };
   const setVendor = (v: string) => { const g = cat.gpus.find(x => x.vendor === v); setFP({ webglVendor: v, webglRenderer: g ? g.renderer : fp.webglRenderer }); };
-  const regen = async () => { const f = await api.NewFingerprint(fp.os); setFP(f as any); setFlash(x => x + 1); toast('已生成新指纹'); };
-  const changeOS = async (os: string) => { const f = await api.NewFingerprint(os); setFP(f as any); setFlash(x => x + 1); };
+  const regen = async () => { const f: any = native ? await api.NewFingerprint('windows') : await api.NewDeviceFingerprint(dt, fp.os); setDevice(''); setFP({ ...f, deviceType: dt }); setFlash(x => x + 1); toast('已生成新指纹'); };
+  const changeOS = async (os: string) => { const f: any = await api.NewDeviceFingerprint(dt, os); setDevice(''); setP(s => ({ ...s, fingerprint: { ...f, deviceType: dt }, kernel: needsOpen(os, dt) ? 'chromium' : (s as any).kernel } as any)); setFlash(x => x + 1); };
+  const touchOpts = dt === 'phone' || dt === 'tablet' || dt === 'foldable' ? [5, 10] : (dt === 'laptop' && fp.os === 'windows') || dt === 'chromebook' ? [0, 10] : [0];
 
   const save = async () => {
     if (!p.name.trim()) { toast('请填写环境名称', 'bad'); setTab('basic'); return; }
@@ -150,9 +166,9 @@ export const ProfileDrawer: React.FC<{
             <div style={{ minWidth: 0 }}>
               <div className="ua">{fp.userAgent || '保存时按所选系统自动生成 User-Agent'}</div>
               <div className="chips">
-                <span>{fp.platform}</span><span className="num">{fp.screenWidth}×{fp.screenHeight} @{fp.pixelRatio}x</span>
+                <span className="devchip"><DevIcon t={dt} s={12} />{fp.deviceName || dtInfo.name}</span><span>{fp.platform}</span><span className="num">{fp.screenWidth}×{fp.screenHeight} @{fp.pixelRatio}x</span>
                 <span className="num">{fp.hardwareConcurrency} 核 · {fp.deviceMemory} GB</span>
-                <span>{(fp.webglRenderer || 'WebGL 自动').replace(/^ANGLE \(([^,]+),\s*/, '').split(' (')[0].split(',')[0]}</span>
+                <span>{(fp.webglRenderer || 'WebGL 自动').replace(' (TM)', '').replace(/^ANGLE \(([^,]+),\s*/, '').split(' (')[0].split(',')[0]}</span>
               </div>
             </div>
             <i className="scan" />
@@ -188,17 +204,31 @@ export const ProfileDrawer: React.FC<{
           </div>}
 
           {tab === 'fp' && <div className="tabpane">
+            <div className="section-title" style={{ marginTop: 0 }}>设备类型</div>
+            <div className="devgrid">
+              {DEVICE_TYPES.map(d => <button type="button" key={d.id} className={`devtile ${d.id === dt ? 'on' : ''}`} onClick={() => d.id !== dt && changeType(d.id)} title={d.tip}>
+                <DevIcon t={d.id} s={20} /><b>{d.name}</b><i className={`trust ${d.trust}`} />
+              </button>)}
+            </div>
+            <div className="sub" style={{ margin: '6px 0 12px' }}><span className={`badge ${TRUST[dtInfo.trust][1]}`}><span className="d" />{TRUST[dtInfo.trust][0]}</span> {dtInfo.tip}</div>
+            <div className="kernel-row">
+              <span className="sub" style={{ margin: 0 }}>内核</span>
+              {forcedOpen
+                ? <span className="kchip"><Icon.cpu s={13} /> 开源内核（Chromium）<small>{dtInfo.id === 'desktop' || dtInfo.id === 'laptop' ? `${osName(fp.os)} 只能用开源内核` : `${dtInfo.name}只能用开源内核`}</small></span>
+                : <Segmented className="compact" value={openKernel ? 'chromium' : ''} onChange={setKernel} items={[['', '定制内核'], ['chromium', '开源内核']]} />}
+            </div>
+            {openKernel && <div className="sub" style={{ margin: '-4px 0 12px' }}>{dt === 'desktop' || dt === 'laptop' || dt === 'chromebook' ? '用 CDP 设置 UA、UA-CH、时区和语言，页面脚本补上显卡、屏幕、噪声和字体。' : '用 Chrome 开发者工具同款的设备模拟：UA 与 UA-CH、视口、DPR、触控、屏幕方向，页面脚本补上显卡、噪声和字体。'}{dt === 'tv' ? ' 电视浏览器的内核版本较老，和当前内核的特性不一致。' : ''}</div>}
             {native && <div className="sub" style={{ marginBottom: 12 }}>原生模板 {p.native?.templateKey} · 配置 {p.native?.sourceConfigId}。以下项目会写入 startInfo，高级参数通过启动 JSON 管理。</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
               <button className="btn sm" onClick={regen}><Icon.dice s={14} /> {native ? '加载默认模板值' : '重新随机'}</button>
             </div>
-            {!native && devices.length > 0 && <Field label={`设备预设（${devices.length} 台 ${OSES.find(o => o[0] === fp.os)?.[1] || ''} 整机）`} hint="选择一台真实机型，显卡、分辨率、CPU、内存一次填好"><SearchSelect value={device} options={devices.map(d => [d.id, (d.custom ? '★ ' : '') + d.name])} onChange={applyDevice} placeholder="搜索机型，如 4060 / M3 / Iris" /></Field>}
+            {!native && devices.length > 0 && <Field label={`设备预设（${devices.length} 台 ${osName(fp.os)} ${dtInfo.name}）`} hint="选择一台真实机型，显卡、分辨率、CPU、内存一次填好"><SearchSelect value={device} options={devices.map(d => [d.id, (d.custom ? '★ ' : '') + d.name])} onChange={applyDevice} placeholder={dt === 'phone' || dt === 'foldable' ? '搜索机型，如 S24 / Pixel / 小米' : dt === 'tablet' ? '搜索机型，如 Tab S9 / Pad' : '搜索机型，如 4060 / M3 / Iris'} /></Field>}
             <div className="grid3">
-              <Field label="操作系统"><select value={fp.os} onChange={e => changeOS(e.target.value)}>{OSES.filter(([v]) => !native || v === 'windows').map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+              <Field label="操作系统"><select value={fp.os} onChange={e => changeOS(e.target.value)}>{dtInfo.oses.filter(v => !native || v === 'windows').map(v => <option key={v} value={v}>{osName(v)}</option>)}</select></Field>
               <Field label="系统版本"><Combo value={fp.osVersion} {...lib('osVersions', cat.osVersions)} onChange={v => setFP({ osVersion: v })} render={v => osVerLabel(fp.os, v)} /></Field>
               <Field label="浏览器大版本"><Combo value={fp.browserVersion} {...lib('browserMajors', cat.browserMajors)} onChange={setMajor} render={v => `Chrome ${v}`} /></Field>
             </div>
-            <Field label="User-Agent" hint={`可手动输入或粘贴；列表只含 ${OSES.find(o => o[0] === fp.os)?.[1]} 的 UA，★ 为你存入库的。大版本会按 UA 自动同步`}>
+            <Field label="User-Agent" hint={`可手动输入或粘贴；列表只含 ${osName(fp.os)} ${dtInfo.name}的 UA，★ 为你存入库的。大版本会按 UA 自动同步`}>
               <Combo multiline value={fp.userAgent} {...lib('userAgents', cat.userAgents)} onChange={setUA} placeholder="粘贴 User-Agent，或点 ▾ 选择" />
               {uaWarn && <div className="sub" style={{ color: 'var(--warn, #f5c451)', marginTop: 4 }}>⚠ {uaWarn}</div>}
             </Field>
@@ -206,10 +236,14 @@ export const ProfileDrawer: React.FC<{
               <Field label="平台 (navigator.platform)"><Combo value={fp.platform} {...lib('platforms', cat.platforms)} onChange={v => setFP({ platform: v })} /></Field>
               <Field label="分辨率" hint="格式 宽x高@缩放，如 1920x1080@1.25"><Combo value={scrText} {...lib('screens', cat.screens.length ? cat.screens : screens)} onChange={v => { setScrText(v); setScr(v); }} /></Field>
             </div>
+            {fp.os === 'android' && <div className="grid2">
+              <Field label="机型名称"><input type="text" value={fp.deviceName || ''} onChange={e => setFP({ deviceName: e.target.value })} placeholder="如 Samsung Galaxy S24 Ultra" /></Field>
+              <Field label="型号 (UA-CH model)" hint="网站通过 Client Hints 读到的型号"><input type="text" value={fp.deviceModel || ''} onChange={e => setFP({ deviceModel: e.target.value })} placeholder="如 SM-S928B" /></Field>
+            </div>}
             <div className="grid3">
               <Field label="CPU 核心数"><Combo value={String(fp.hardwareConcurrency ?? '')} {...lib('cores', cat.cores)} onChange={v => /^\d*$/.test(v) && setFP({ hardwareConcurrency: +v })} /></Field>
               <Field label="内存 (GB)" hint="Chrome 上报最高 8"><Combo value={String(fp.deviceMemory ?? '')} {...lib('memory', cat.memory)} onChange={v => /^\d*$/.test(v) && setFP({ deviceMemory: +v })} /></Field>
-              <Field label={native ? '触控点（继承模板）' : '触控点'}><select disabled={native} value={fp.maxTouchPoints} onChange={e => setFP({ maxTouchPoints: +e.target.value })}>{opt(fp.os === 'windows' ? [0, 10] : [0], fp.maxTouchPoints).map(n => <option key={n} value={n}>{n === 0 ? '0（无触屏）' : `${n}（触屏）`}</option>)}</select></Field>
+              <Field label={native ? '触控点（继承模板）' : '触控点'}><select disabled={native} value={fp.maxTouchPoints} onChange={e => setFP({ maxTouchPoints: +e.target.value })}>{opt(touchOpts, fp.maxTouchPoints).map(n => <option key={n} value={n}>{n === 0 ? '0（无触屏）' : `${n}（触屏）`}</option>)}</select></Field>
             </div>
             <div className="grid2">
               <Field label="WebGL Vendor"><Combo value={fp.webglVendor} {...lib('vendors', cat.vendors)} onChange={setVendor} /></Field>
@@ -255,7 +289,7 @@ export const ProfileDrawer: React.FC<{
             <Field label="WebRTC"><select value={fp.webrtc} onChange={e => setFP({ webrtc: e.target.value })}><option value="proxy">替换为代理 IP（推荐）</option><option value="disabled">完全禁用</option><option value="real">真实（不推荐）</option></select></Field>
             <Toggle on={fp.hideMediaDevices} onChange={v => setFP({ hideMediaDevices: v })} label="隐藏媒体设备" />
             <Toggle on={fp.doNotTrack} onChange={v => setFP({ doNotTrack: v })} label="Do Not Track" />
-            <Field label={`字体（${(fp.fonts || []).length} / ${cat.fonts.length} 种 ${OSES.find(o => o[0] === fp.os)?.[1]} 字体）`} hint="只列出该系统自带字体">
+            <Field label={`字体（${(fp.fonts || []).length} / ${cat.fonts.length} 种 ${osName(fp.os)} 字体）`} hint="只列出该系统自带字体">
               <FontPicker value={fp.fonts || []} all={cat.fonts} onChange={v => setFP({ fonts: v })} onSave={f => libAdd('fonts', f)} />
             </Field>
           </div>}
@@ -274,5 +308,5 @@ export const ProfileDrawer: React.FC<{
 
 function blank(): Profile {
   return { id: '', name: '', group: '', tags: [], notes: '', storage: 'local', proxyId: '', inlineProxy: undefined, startUrls: [], cookies: '', createdAt: 0, lastRun: 0, cloudVersion: 0, syncedAt: 0,
-    fingerprint: { os: 'windows', osVersion: '11', browserVersion: '141', userAgent: '', platform: 'Win32', screenWidth: 1920, screenHeight: 1080, pixelRatio: 1, colorDepth: 24, hardwareConcurrency: 8, deviceMemory: 8, maxTouchPoints: 0, webglVendor: '', webglRenderer: '', languages: ['en-US', 'en'], languageFromIP: true, timezone: 'America/New_York', timezoneFromIP: true, geoFromIP: true, latitude: 0, longitude: 0, canvasNoise: true, audioNoise: true, webglNoise: true, clientRectNoise: true, noiseSeed: Math.floor(Math.random() * 1e12), webrtc: 'proxy', fonts: [], doNotTrack: false, hideMediaDevices: false } as Fingerprint };
+    fingerprint: { deviceType: 'desktop', os: 'windows', osVersion: '11', browserVersion: '141', userAgent: '', platform: 'Win32', screenWidth: 1920, screenHeight: 1080, pixelRatio: 1, colorDepth: 24, hardwareConcurrency: 8, deviceMemory: 8, maxTouchPoints: 0, webglVendor: '', webglRenderer: '', languages: ['en-US', 'en'], languageFromIP: true, timezone: 'America/New_York', timezoneFromIP: true, geoFromIP: true, latitude: 0, longitude: 0, canvasNoise: true, audioNoise: true, webglNoise: true, clientRectNoise: true, noiseSeed: Math.floor(Math.random() * 1e12), webrtc: 'proxy', fonts: [], doNotTrack: false, hideMediaDevices: false } as Fingerprint };
 }

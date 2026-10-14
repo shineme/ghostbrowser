@@ -54,6 +54,16 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) ListProfiles() []Profile { return a.store.ListProfiles() }
 
 func (a *App) SaveProfile(p Profile) (Profile, error) {
+	if p.Fingerprint.UserAgent == "" && needsOpenKernel(p.Fingerprint) {
+		p.Fingerprint = GenerateTyped(p.Fingerprint.DeviceType, p.Fingerprint.OS, a.ChromiumMajor())
+	}
+	chromium := p.useChromium()
+	if chromium {
+		if needsOpenKernel(p.Fingerprint) {
+			p.Kernel = "chromium"
+		}
+		return a.store.PutProfile(p), nil
+	}
 	if a.store.GetSettings().KernelMode == "undetectable" && p.Native == nil {
 		if n, fp, err := a.store.nativePreset(""); err == nil {
 			p.Native = n
@@ -84,8 +94,13 @@ func (a *App) DeleteProfiles(ids []string) {
 	}
 }
 
-// CreateProfiles creates count profiles named prefix-N with fresh fingerprints.
+// CreateProfiles creates count desktop profiles named prefix-N with fresh fingerprints.
 func (a *App) CreateProfiles(prefix, osName string, count int, proxyID, group string) []Profile {
+	return a.CreateTypedProfiles(prefix, "desktop", osName, count, proxyID, group)
+}
+
+// CreateTypedProfiles creates count profiles of one device type (desktop, phone, tablet, ...).
+func (a *App) CreateTypedProfiles(prefix, devType, osName string, count int, proxyID, group string) []Profile {
 	out := []Profile{}
 	if count < 1 {
 		count = 1
@@ -95,9 +110,11 @@ func (a *App) CreateProfiles(prefix, osName string, count int, proxyID, group st
 		if count > 1 {
 			name = prefix + "-" + itoa(i)
 		}
-		p := Profile{Name: name, Group: group, ProxyID: proxyID, Storage: "local",
-			Fingerprint: GenerateFingerprint(osName, a.KernelMajor())}
-		if a.store.GetSettings().KernelMode == "undetectable" && osName == "windows" {
+		p := Profile{Name: name, Group: group, ProxyID: proxyID, Storage: "local"}
+		p.Fingerprint = a.NewDeviceFingerprint(devType, osName)
+		if needsOpenKernel(p.Fingerprint) {
+			p.Kernel = "chromium"
+		} else if a.store.GetSettings().KernelMode == "undetectable" {
 			if n, fp, e := a.store.nativePreset(""); e == nil {
 				p.Native = n
 				p.Fingerprint = fp
@@ -118,7 +135,7 @@ func (a *App) CloneProfile(id string) (Profile, error) {
 	if cp.Native != nil {
 		cp.Native = copyNative(cp.Native)
 	} else {
-		cp.Fingerprint = GenerateFingerprint(p.Fingerprint.OS, a.KernelMajor())
+		cp.Fingerprint = a.NewDeviceFingerprint(p.Fingerprint.DeviceType, p.Fingerprint.OS)
 	}
 	return a.store.PutProfile(cp), nil
 }
@@ -130,6 +147,71 @@ func (a *App) NewFingerprint(osName string) Fingerprint {
 		}
 	}
 	return GenerateFingerprint(osName, a.KernelMajor())
+}
+
+// NewDeviceFingerprint generates a fingerprint for one device type and OS.
+// Windows desktops/laptops on the custom kernel start from its template.
+func (a *App) NewDeviceFingerprint(devType, osName string) Fingerprint {
+	devType = normDevType(devType)
+	if devType == "desktop" || devType == "laptop" {
+		if osName == "" {
+			osName = "windows"
+		}
+		if osName == "windows" && a.store.GetSettings().KernelMode == "undetectable" && devType == "desktop" {
+			if _, fp, e := a.store.nativePreset(""); e == nil {
+				fp.DeviceType = devType
+				return fp
+			}
+		}
+		major := a.KernelMajor()
+		if osName != "windows" {
+			major = a.ChromiumMajor()
+		}
+		return GenerateTyped(devType, osName, major)
+	}
+	return GenerateTyped(devType, osName, a.ChromiumMajor())
+}
+
+// DeviceTypes lists the device categories with the OSes each one allows.
+func (a *App) DeviceTypes() []DeviceTypeInfo { return DeviceTypes }
+
+// DevicePresetsByType lists presets of one device type ("" os = every OS).
+func (a *App) DevicePresetsByType(devType, osName string) []DevicePreset {
+	return PresetsByType(devType, osName)
+}
+
+// FingerprintCatalogFor feeds the editor's dropdowns for one OS + device type.
+// UA versions follow whichever kernel that combination launches on.
+func (a *App) FingerprintCatalogFor(osName, devType string) FPCatalog {
+	major := a.KernelMajor()
+	if needsOpenKernel(Fingerprint{OS: osName, DeviceType: devType}) {
+		major = a.ChromiumMajor()
+	}
+	return FingerprintCatalogFor(osName, devType, major)
+}
+
+// ChromiumPath is the open-source kernel that will be used (setting or auto-detected).
+func (a *App) ChromiumPath() string { return chromiumKernel(a.store.GetSettings()) }
+
+// ChromiumMajor is the open-source kernel's Chrome major version (141 when unknown).
+func (a *App) ChromiumMajor() string {
+	if k := chromiumKernel(a.store.GetSettings()); k != "" {
+		if m := chromeMajorFrom(filepath.Dir(k)); m != "" {
+			return m
+		}
+	}
+	return "141"
+}
+
+// PickChromium opens a file dialog for the open-source kernel's executable.
+func (a *App) PickChromium() string {
+	dir := filepath.Dir(chromiumKernel(a.store.GetSettings()))
+	f, _ := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{
+		Title:            "选择开源内核 (chrome.exe：Chromium / Chrome / 自己编译的内核)",
+		DefaultDirectory: dir,
+		Filters:          []wruntime.FileFilter{{DisplayName: "浏览器程序 (*.exe)", Pattern: "*.exe"}},
+	})
+	return f
 }
 
 func (a *App) GPUOptions(osName string) []map[string]string {

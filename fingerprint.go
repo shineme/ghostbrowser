@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"regexp"
 	"time"
 )
 
@@ -73,48 +74,65 @@ func buildUA(osName, osVer, major string) (ua, platform string) {
 	}
 }
 
-// GenerateFingerprint creates a new, internally consistent fingerprint.
+// GenerateFingerprint creates a new, internally consistent desktop/laptop fingerprint.
 func GenerateFingerprint(osName, browserMajor string) Fingerprint {
+	return GenerateTyped("", osName, browserMajor)
+}
+
+// GenerateTyped picks one coherent device of a type (desktop, phone, tablet, ...)
+// from the device library and builds a fingerprint around it.
+func GenerateTyped(devType, osName, browserMajor string) Fingerprint {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	if osName == "" {
-		osName = "windows"
-	}
 	if browserMajor == "" {
 		browserMajor = "141"
 	}
-	// Pick one coherent machine from the device library.
-	pool := DevicePresetsFor(osName)
+	devType = normDevType(devType)
+	if osName == "" {
+		for _, t := range DeviceTypes {
+			if t.ID == devType {
+				osName = t.OSes[0]
+			}
+		}
+	}
+	pool := PresetsByType(devType, osName)
+	if len(pool) == 0 { // e.g. a user preset type with no built-ins for this OS
+		pool = DevicePresetsFor(osName)
+	}
 	if len(pool) == 0 {
-		osName, pool = "windows", DevicePresetsFor("windows")
+		devType, osName, pool = "desktop", "windows", PresetsByType("desktop", "windows")
 	}
 	d := pick(r, pool)
-	g := gpu{d.Vendor, d.Renderer}
-	sc := screen{d.Width, d.Height, d.DPR}
-	cores, mem, osVer := d.Cores, d.Memory, d.OSVersion
-	var fonts []string
-	switch osName {
-	case "macos":
-		fonts = subsetFonts(r, macFonts)
-	case "linux":
-		fonts = subsetFonts(r, linuxFonts)
-	default:
-		fonts = subsetFonts(r, winFonts)
+	if d.DeviceType != "" {
+		devType = d.DeviceType
 	}
-	ua, platform := buildUA(osName, osVer, browserMajor)
+	ua, platform := presetUA(d, browserMajor)
+	if m := uaMajor(ua); m != "" {
+		browserMajor = m
+	}
 	return Fingerprint{
-		OS: osName, OSVersion: osVer, BrowserVersion: browserMajor,
+		OS: d.OS, DeviceType: devType, DeviceModel: d.Model, DeviceName: d.DeviceName,
+		OSVersion: d.OSVersion, BrowserVersion: browserMajor,
 		UserAgent: ua, Platform: platform,
-		ScreenWidth: sc.w, ScreenHeight: sc.h, PixelRatio: sc.dpr, ColorDepth: 24,
-		HardwareConc: cores, DeviceMemory: mem, MaxTouchPoints: d.Touch,
-		WebGLVendor: g.vendor, WebGLRenderer: g.renderer,
+		ScreenWidth: d.Width, ScreenHeight: d.Height, PixelRatio: d.DPR, ColorDepth: 24,
+		HardwareConc: d.Cores, DeviceMemory: d.Memory, MaxTouchPoints: d.Touch,
+		WebGLVendor: d.Vendor, WebGLRenderer: d.Renderer,
 		Languages: []string{"en-US", "en"}, LanguageFromIP: true,
 		Timezone: "America/New_York", TimezoneFromIP: true, GeoFromIP: true,
 		CanvasNoise: true, AudioNoise: true, WebGLNoise: true, ClientRectNoise: true,
 		NoiseSeed: r.Int63n(1 << 40),
 		WebRTC:    "proxy",
-		Fonts:     fonts,
+		Fonts:     subsetFonts(r, fontsFor(d.OS)),
 	}
 }
+
+func uaMajor(ua string) string {
+	if m := uaMajorRe.FindStringSubmatch(ua); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
+var uaMajorRe = regexp.MustCompile(`(?:Chrome/|\) )(\d{2,3})\.\d+\.\d+\.\d+`)
 
 // GPU / screen pools exposed to the UI's dropdowns.
 func GPUOptions(osName string) []map[string]string {

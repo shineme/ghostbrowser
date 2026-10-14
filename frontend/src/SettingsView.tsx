@@ -12,6 +12,9 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
   const set = (patch: Partial<Settings>) => setS(v => ({ ...v, ...patch }));
 
   const [defaultKernel, setDefaultKernel] = useState('');
+  const [autoChromium, setAutoChromium] = useState('');
+  const [chromiumMajor, setChromiumMajor] = useState('');
+  useEffect(() => { api.ChromiumPath().then(setAutoChromium).catch(() => {}); api.ChromiumMajor().then(setChromiumMajor).catch(() => {}); }, [(s as any)?.chromiumPath]);
   const refreshDefault = () => api.DefaultKernelPath().then(setDefaultKernel).catch(() => setDefaultKernel(''));
   useEffect(() => { refreshDefault(); }, []);
   const save = async () => { const out = await api.SaveSettings(s); onSaved(out); refreshDefault(); };
@@ -70,6 +73,14 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
       </div>
 
       <div className="panel pad setting-card spot rise" style={{ ['--i' as any]: 1 }}>
+        <div className="head"><span className="ic"><Icon.phone /></span><div><h4>开源内核</h4><span>手机、平板、折叠屏、Chromebook、电视、Mac 和 Linux 环境用它启动</span></div></div>
+        <Field label="chrome.exe 路径" hint={`留空自动检测：${autoChromium || '没找到已安装的 Chromium / Chrome / Edge'}${chromiumMajor ? ` · Chrome ${chromiumMajor}` : ''}`}>
+          <div className="row"><input type="text" value={s.chromiumPath || ''} onChange={e => set({ chromiumPath: e.target.value } as any)} placeholder="Chromium、Chrome for Testing、ungoogled-chromium 或你自己编译的内核" /><button className="btn" style={{ flex: 'none' }} onClick={async () => { const f = await api.PickChromium(); if (f) set({ chromiumPath: f } as any); }}><Icon.folder s={15} /> 浏览</button>{s.chromiumPath && <button className="btn ghost" style={{ flex: 'none' }} onClick={() => set({ chromiumPath: '' } as any)}><Icon.refresh s={14} /> 自动检测</button>}</div>
+        </Field>
+        <div className="sub">指纹通过 CDP 注入，不依赖扩展，Chrome 137 以后的正式版也能用。推荐 Chromium 或 Chrome for Testing。UA 里的大版本自动跟随内核。需要保持 GhostBrowser 运行。</div>
+      </div>
+
+      <div className="panel pad setting-card spot rise" style={{ ['--i' as any]: 2 }}>
         <div className="head"><span className="ic"><Icon.terminal /></span><div><h4>数据与本地 API</h4><span>供 Puppeteer / Playwright / Selenium 接管</span></div></div>
         <Field label="环境数据目录">
           <div className="row"><input type="text" value={s.profilesDir} onChange={e => set({ profilesDir: e.target.value })} /><button className="btn" style={{ flex: 'none' }} onClick={pickFolder}><Icon.folder s={15} /> 浏览</button></div>
@@ -88,7 +99,7 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
         <div className="kv" style={{ alignItems: 'center', borderBottom: 0 }}><span className="k">默认操作系统</span><span className="v"><select style={{ width: 160 }} value={s.defaultOS} onChange={e => set({ defaultOS: e.target.value })}><option value="windows">Windows</option><option value="macos">macOS</option><option value="linux">Linux</option></select></span></div>
       </div>
 
-      <div className="panel pad setting-card spot rise" style={{ ['--i' as any]: 2 }}>
+      <div className="panel pad setting-card spot rise" style={{ ['--i' as any]: 3 }}>
         <div className="head"><span className="ic"><Icon.cloud /></span><div><h4>云端同步</h4><span>你的 VPS + PHP，端到端加密</span></div></div>
         <Field label="同步服务器地址" hint="填 ghostsync.php 的完整网址（单文件 PHP，无需伪静态）"><input type="text" value={s.syncServer} onChange={e => set({ syncServer: e.target.value })} placeholder="https://你的域名/ghostsync.php" />
           {/^http:\/\//i.test(s.syncServer || '') && !/^http:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/i.test(s.syncServer) && <div className="sub" style={{ color: '#ffcf8a', marginTop: 4 }}>⚠ 正在使用 http：同步包本身是加密的，但访问令牌会明文传输，可能被窃取。建议给域名配置 SSL 后改用 https。</div>}</Field>

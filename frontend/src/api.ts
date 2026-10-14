@@ -30,6 +30,26 @@ const mockFP = (os = 'windows'): any => ({
   latitude: 0, longitude: 0, canvasNoise: true, audioNoise: true, webglNoise: true, clientRectNoise: true,
   noiseSeed: Math.floor(Math.random() * 1e12), webrtc: 'proxy', fonts: ['Arial', 'Calibri', 'Segoe UI', 'Tahoma', 'Verdana'], doNotTrack: false, hideMediaDevices: false,
 });
+const MOCK_DEV: any[] = [
+  { id: 'phone-001', deviceType: 'phone', name: 'Samsung Galaxy S24 Ultra · 412x915', deviceName: 'Samsung Galaxy S24 Ultra', model: 'SM-S928B', os: 'android', osVersion: '14', webglVendor: 'Qualcomm', webglRenderer: 'Adreno (TM) 750', screenWidth: 412, screenHeight: 915, pixelRatio: 2.625, hardwareConcurrency: 8, deviceMemory: 8, maxTouchPoints: 10 },
+  { id: 'phone-009', deviceType: 'phone', name: 'Google Pixel 9 Pro · 410x914', deviceName: 'Google Pixel 9 Pro', model: 'Pixel 9 Pro', os: 'android', osVersion: '15', webglVendor: 'ARM', webglRenderer: 'Mali-G715', screenWidth: 410, screenHeight: 914, pixelRatio: 3.125, hardwareConcurrency: 8, deviceMemory: 8, maxTouchPoints: 10 },
+  { id: 'tablet-026', deviceType: 'tablet', name: 'Samsung Galaxy Tab S9 · 800x1280', deviceName: 'Samsung Galaxy Tab S9', model: 'SM-X710', os: 'android', osVersion: '14', webglVendor: 'Qualcomm', webglRenderer: 'Adreno (TM) 740', screenWidth: 800, screenHeight: 1280, pixelRatio: 2, hardwareConcurrency: 8, deviceMemory: 8, maxTouchPoints: 10 },
+  { id: 'foldable-034', deviceType: 'foldable', name: 'Samsung Galaxy Z Fold6 · 展开 · 707x823', deviceName: 'Samsung Galaxy Z Fold6 · 展开', model: 'SM-F956B', os: 'android', osVersion: '14', webglVendor: 'Qualcomm', webglRenderer: 'Adreno (TM) 750', screenWidth: 707, screenHeight: 823, pixelRatio: 2.625, hardwareConcurrency: 8, deviceMemory: 8, maxTouchPoints: 10 },
+  { id: 'chromebook-039', deviceType: 'chromebook', name: 'Acer Chromebook Plus 515 · 1536x864', deviceName: 'Acer Chromebook Plus 515', os: 'chromeos', osVersion: '16093.68.0', webglVendor: 'Google Inc. (Intel)', webglRenderer: 'ANGLE (Intel, Mesa Intel(R) UHD Graphics (ADL GT2), OpenGL ES 3.2)', screenWidth: 1536, screenHeight: 864, pixelRatio: 1.25, hardwareConcurrency: 8, deviceMemory: 8, maxTouchPoints: 0 },
+  { id: 'tv-044', deviceType: 'tv', name: 'Chromecast with Google TV · 960x540', deviceName: 'Chromecast with Google TV', model: 'Chromecast', os: 'android', osVersion: '12', webglVendor: 'ARM', webglRenderer: 'Mali-G31', screenWidth: 960, screenHeight: 540, pixelRatio: 2, hardwareConcurrency: 4, deviceMemory: 2, maxTouchPoints: 0 },
+  { id: 'win-001', deviceType: 'desktop', name: 'Win11 · RTX 4060 · 1920x1080', os: 'windows', osVersion: '11', webglVendor: 'Google Inc. (NVIDIA)', webglRenderer: 'ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 (0x00002882) Direct3D11 vs_5_0 ps_5_0, D3D11)', screenWidth: 1920, screenHeight: 1080, pixelRatio: 1, hardwareConcurrency: 12, deviceMemory: 8, maxTouchPoints: 0 },
+  { id: 'win-050', deviceType: 'laptop', name: 'Win11 · Iris Xe · 1920x1080', os: 'windows', osVersion: '11', webglVendor: 'Google Inc. (Intel)', webglRenderer: 'ANGLE (Intel, Intel(R) Iris(R) Xe Graphics (0x00009A49) Direct3D11 vs_5_0 ps_5_0, D3D11)', screenWidth: 1920, screenHeight: 1080, pixelRatio: 1.25, hardwareConcurrency: 8, deviceMemory: 8, maxTouchPoints: 10 },
+  { id: 'mac-001', deviceType: 'laptop', name: 'macOS 15.3 · Apple M3 Pro · 1512x982', os: 'macos', osVersion: '15.3', webglVendor: 'Google Inc. (Apple)', webglRenderer: 'ANGLE (Apple, ANGLE Metal Renderer: Apple M3 Pro, Unspecified Version)', screenWidth: 1512, screenHeight: 982, pixelRatio: 2, hardwareConcurrency: 12, deviceMemory: 8, maxTouchPoints: 0 },
+];
+const mockDevFP = (t: string, os: string): any => {
+  t = t || 'desktop';
+  const d = MOCK_DEV.find(x => x.deviceType === t && (!os || x.os === os)) || MOCK_DEV.find(x => x.deviceType === t);
+  const base = mockFP(['windows', 'macos', 'linux'].includes(os) ? os : 'windows');
+  if (!d) return { ...base, deviceType: t };
+  const mobileTok = t === 'phone' || t === 'foldable' ? 'Mobile ' : '';
+  const ua = d.os === 'android' ? `Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 ${mobileTok}Safari/537.36` : d.os === 'chromeos' ? 'Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36' : base.userAgent;
+  return { ...base, ...d, id: undefined, name: undefined, model: undefined, os: d.os, deviceType: t, deviceModel: d.model || '', deviceName: d.deviceName || '', userAgent: ua, platform: d.os === 'android' ? 'Linux armv81' : d.os === 'chromeos' ? 'Linux x86_64' : base.platform, fonts: d.os === 'android' ? ['Roboto', 'Noto Sans', 'Noto Serif'] : base.fonts };
+};
 const mock = {
   profiles: [] as any[],
   proxies: [
@@ -60,6 +80,21 @@ const M = {
   },
   CloneProfile: async (id: string) => { const p = mock.profiles.find(x => x.id === id); const c = { ...p, id: rid(), name: p.name + ' (copy)', fingerprint: mockFP(p.fingerprint.os) }; mock.profiles.unshift(c); return c; },
   NewFingerprint: async (os: string) => mockFP(os),
+  NewDeviceFingerprint: async (t: string, os: string) => mockDevFP(t, os),
+  CreateTypedProfiles: async (prefix: string, t: string, os: string, n: number, proxyId: string, group: string) => {
+    const out = []; for (let i = 1; i <= n; i++) { const fp = mockDevFP(t, os); const p = { id: rid(), name: n > 1 ? `${prefix}-${i}` : prefix, group, tags: [], notes: '', storage: 'local', proxyId, startUrls: [], cookies: '', fingerprint: fp, kernel: (fp.os !== 'windows' || !['desktop', 'laptop'].includes(t)) ? 'chromium' : '', createdAt: Date.now() / 1000, lastRun: 0, cloudVersion: 0, syncedAt: 0 }; mock.profiles.unshift(p); out.push(p); } return out;
+  },
+  DeviceTypes: async (): Promise<any[]> => [],
+  DevicePresetsByType: async (t: string, os: string): Promise<any[]> => MOCK_DEV.filter(d => d.deviceType === (t || 'desktop') && (!os || d.os === os)),
+  FingerprintCatalogFor: async (os: string, t: string): Promise<any> => {
+    if (['windows', 'macos', 'linux'].includes(os)) return (M as any).FingerprintCatalog(os);
+    const ua = os === 'android' ? `Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 ${t === 'tablet' || t === 'tv' ? '' : 'Mobile '}Safari/537.36` : 'Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36';
+    const devs = MOCK_DEV.filter(d => d.os === os);
+    return { osVersions: os === 'android' ? ['15', '14', '13', '12'] : ['16093.68.0'], browserMajors: ['141'], userAgents: [ua], platforms: [os === 'android' ? 'Linux armv81' : 'Linux x86_64'], vendors: [...new Set(devs.map(d => d.webglVendor))], gpus: devs.map(d => ({ vendor: d.webglVendor, renderer: d.webglRenderer })), screens: devs.map(d => `${d.screenWidth}x${d.screenHeight}@${d.pixelRatio}`), cores: ['4', '8', '10'], memory: ['2', '4', '8'], custom: {}, fonts: ['Roboto', 'Noto Sans', 'Noto Serif', 'Noto Color Emoji', 'Droid Sans Mono'] };
+  },
+  ChromiumPath: async () => mock.settings.chromiumPath || 'C:\\Program Files\\Chromium\\Application\\chrome.exe',
+  ChromiumMajor: async () => '141',
+  PickChromium: async () => 'C:\\Program Files\\Chromium\\Application\\chrome.exe',
   LibraryAdd: async (_os: string, _f: string, _v: string) => {},
   LibraryRemove: async (_os: string, _f: string, _v: string) => {},
   SaveDevicePreset: async (p: any) => ({ ...p, id: 'my-1', name: p.name || '我的预设', custom: true }),

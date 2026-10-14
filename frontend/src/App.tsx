@@ -3,7 +3,8 @@ import { BorderBeam } from 'border-beam';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api, Profile, Proxy, Settings, onEvent } from './api';
 import { MetalFx } from 'metal-fx';
-import { Icon, Field, flag, ago, useToast, useConfirm, useExit, ToastHost, WindowControls, useMaximised, StatCard, Avatar, CC, CountUp, OsIcon, Ambient, Splash, useSpotlight, Pick, Segmented } from './ui';
+import { Icon, Field, flag, ago, useToast, useConfirm, useExit, ToastHost, WindowControls, useMaximised, StatCard, Avatar, CC, CountUp, OsIcon, Ambient, Splash, useSpotlight, Pick, Segmented, DevIcon } from './ui';
+import { DEVICE_TYPES, devType, devName, osName as osNameOf, needsOpen } from './devices';
 import { ProfileDrawer } from './ProfileDrawer';
 import { ProxyView } from './ProxyView';
 import { SettingsView } from './SettingsView';
@@ -264,7 +265,7 @@ const ProfilesView: React.FC<{
                     </div>
                   </div>
                 </td>
-                <td><div className="os" style={{ fontWeight: 550 }}><OsIcon os={p.fingerprint.os} s={13} />{osLabel(p.fingerprint.os)} <span className="sub" style={{ margin: 0 }}>Chrome {p.fingerprint.browserVersion}</span></div><div className="sub num">{p.fingerprint.screenWidth}×{p.fingerprint.screenHeight} · {p.fingerprint.hardwareConcurrency}C/{p.fingerprint.deviceMemory}G</div></td>
+                <td><div className="os" style={{ fontWeight: 550 }}><OsIcon os={p.fingerprint.os} s={13} />{osLabel(p.fingerprint.os)} <span className="sub" style={{ margin: 0 }}>Chrome {p.fingerprint.browserVersion}</span><span className={`devtag ${(p as any).kernel === 'chromium' || needsOpen(p.fingerprint.os, (p.fingerprint as any).deviceType) ? 'open' : ''}`} title={(p as any).kernel === 'chromium' || needsOpen(p.fingerprint.os, (p.fingerprint as any).deviceType) ? '开源内核' : '定制内核'}><DevIcon t={devType((p.fingerprint as any).deviceType)} s={11} />{(p.fingerprint as any).deviceName || devName((p.fingerprint as any).deviceType)}</span></div><div className="sub num">{p.fingerprint.screenWidth}×{p.fingerprint.screenHeight} · {p.fingerprint.hardwareConcurrency}C/{p.fingerprint.deviceMemory}G</div></td>
                 <td>{px ? <div><CC cc={px.country} /><span>{px.city || px.name}</span>{px.status === 'fail' && <span className="badge fail" style={{ marginLeft: 6 }}>失效</span>}<div className="sub num">{px.ip || px.host}{px.ip && ipShare[px.ip] > 1 && <span className="ip-dup" title="多个环境使用同一出口 IP，容易被平台关联"> ⚠ {ipShare[px.ip]} 个环境共用此 IP</span>}</div></div> : <span className="sub">直连</span>}</td>
                 <td>{(() => { const [txt, tone] = syncState(p, syncBusy); return <span className={`badge ${tone}`}>{tone === 'local' ? <Icon.laptop s={12} /> : <Icon.cloud s={12} />} {txt}{p.storage === 'cloud' && <span className="num" style={{ marginLeft: 3 }}>v{p.cloudVersion}</span>}</span>; })()}</td>
                 <td><span className="sub">{ago(p.lastRun)}</span></td>
@@ -392,12 +393,15 @@ const BulkModal: React.FC<{ proxies: Proxy[]; onClose: () => void; onDone: () =>
   const toast = useToast();
   const [prefix, setPrefix] = useState('Env');
   const [os, setOs] = useState('windows');
+  const [dt, setDt] = useState('desktop');
+  const dtInfo = DEVICE_TYPES.find(d => d.id === dt)!;
+  const pickType = (t: string) => { setDt(t); const i = DEVICE_TYPES.find(d => d.id === t)!; if (!i.oses.includes(os)) setOs(i.oses[0]); };
   const [count, setCount] = useState(10);
   const [group, setGroup] = useState('');
   const [proxyId, setProxyId] = useState('');
   const [busy, setBusy] = useState(false);
   const [out, close] = useExit(onClose);
-  const go = async () => { setBusy(true); await api.CreateProfiles(prefix, os, count, proxyId, group); toast(`已创建 ${count} 个环境`); setBusy(false); onDone(); close(); };
+  const go = async () => { setBusy(true); await api.CreateTypedProfiles(prefix, dt, os, count, proxyId, group); toast(`已创建 ${count} 个环境`); setBusy(false); onDone(); close(); };
   return (
     <div className={`overlay center ${out ? 'out' : ''}`} onMouseDown={e => e.target === e.currentTarget && close()}>
       <BorderBeam size="pulse-inner" colorVariant="ocean" theme="dark" strength={0.6} borderRadius={20}>
@@ -409,7 +413,11 @@ const BulkModal: React.FC<{ proxies: Proxy[]; onClose: () => void; onDone: () =>
             <Field label="数量"><input type="number" min={1} max={500} value={count} onChange={e => setCount(+e.target.value)} /></Field>
           </div>
           <div className="grid2">
-            <Field label="操作系统"><select value={os} onChange={e => setOs(e.target.value)}><option value="windows">Windows</option><option value="macos">macOS</option><option value="linux">Linux</option></select></Field>
+            <Field label="设备类型"><select value={dt} onChange={e => pickType(e.target.value)}>{DEVICE_TYPES.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>
+            <Field label="操作系统"><select value={os} onChange={e => setOs(e.target.value)}>{dtInfo.oses.map(o => <option key={o} value={o}>{osNameOf(o)}</option>)}</select></Field>
+          </div>
+          {needsOpen(os, dt) && <div className="sub" style={{ marginBottom: 10 }}>这些环境会用开源内核启动{dt === 'tv' ? '；电视可信度低，仅建议实验' : ''}。</div>}
+          <div className="grid2">
             <Field label="分组"><input type="text" value={group} onChange={e => setGroup(e.target.value)} /></Field>
           </div>
           <Field label="统一代理" hint="每个环境仍会生成各自独立的指纹">
@@ -423,6 +431,6 @@ const BulkModal: React.FC<{ proxies: Proxy[]; onClose: () => void; onDone: () =>
   );
 };
 
-const osLabel = (o: string) => ({ windows: 'Windows', macos: 'macOS', linux: 'Linux' } as any)[o] || o;
+const osLabel = (o: string) => osNameOf(o);
 
 export default function App() { return <ToastHost><Shell /><SyncPrompt /><EnvSetup onReady={() => {}} /><Splash /></ToastHost>; }
