@@ -6,6 +6,7 @@ import { CookieModal } from './CookieModal';
 import { ExtIcon, Ext } from './ExtensionsView';
 import { GuardPane, LaunchPane } from './FpControls';
 import { KernelMissingNotice } from './KernelInstall';
+import { FoxIcon, FirefoxMissingNotice, FirefoxFpPane, FirefoxFontPane, FirefoxGuardPane, FirefoxLaunchPane, useFirefoxInfo, ffVersionLabel } from './FirefoxKernel';
 import { DEVICE_TYPES, TRUST, devType, osName, osVerLabel, needsOpen, uaOSOf } from './devices';
 
 type FPCatalog = { osVersions: string[]; browserMajors: string[]; userAgents: string[]; platforms: string[]; vendors: string[]; gpus: { vendor: string; renderer: string; custom?: string }[]; fonts: string[]; screens: string[]; cores: string[]; memory: string[]; custom: Record<string, string[]> };
@@ -93,8 +94,11 @@ export const ProfileDrawer: React.FC<{
 
   const dt = devType(fp.deviceType);
   const dtInfo = DEVICE_TYPES.find(d => d.id === dt)!;
-  const forcedOpen = needsOpen(fp.os, dt);
-  const openKernel = forcedOpen || (p as any).kernel === 'chromium';
+  const firefox = (p as any).kernel === 'firefox';
+  const [ffInfo] = useFirefoxInfo(firefox);
+  const forcedOpen = !firefox && needsOpen(fp.os, dt);
+  const openKernel = !firefox && (forcedOpen || (p as any).kernel === 'chromium');
+  const desk = dt === 'desktop' || dt === 'laptop';
   const loadPresets = () => api.DevicePresetsByType(dt, fp.os).then(d => setDevices(d || [])).catch(() => setDevices([]));
   useEffect(() => {
     api.GPUOptions(fp.os).then(setGpus);
@@ -103,8 +107,9 @@ export const ProfileDrawer: React.FC<{
     api.ScreenOptions(fp.os).then(setScreens);
   }, [fp.os, dt]);
 
-  const native = !!(p as any).native && !openKernel;
-  const setKernel = (k: string) => setP(s => ({ ...s, kernel: k } as any));
+  const native = !!(p as any).native && !openKernel && !firefox;
+  // Firefox: desktop only; strict mode and "language follows IP" exclude each other.
+  const setKernel = (k: string) => setP(s => ({ ...s, kernel: k, ...(k === 'firefox' ? { native: undefined } : {}), ...(k === 'firefox' && (s.fingerprint as any).ffStrict ? { fingerprint: { ...s.fingerprint, languageFromIP: false, timezoneFromIP: false } } : {}) } as any));
   const changeType = async (t: string) => {
     const info = DEVICE_TYPES.find(d => d.id === t)!;
     const os = info.oses.includes(fp.os) ? fp.os : info.oses[0];
@@ -172,11 +177,11 @@ export const ProfileDrawer: React.FC<{
           <div key={flash} className={`fpcard ${flash ? 'flash' : ''}`}>
             <Avatar seed={fp.noiseSeed} os={fp.os} />
             <div style={{ minWidth: 0 }}>
-              <div className="ua">{fp.userAgent || '保存时按所选系统自动生成 User-Agent'}</div>
+              <div className="ua">{firefox ? ((fp as any).ffUaOverride && fp.userAgent ? fp.userAgent : `${ffVersionLabel(ffInfo)} · 使用 Firefox 真实 User-Agent`) : (fp.userAgent || '保存时按所选系统自动生成 User-Agent')}</div>
               <div className="chips">
-                <span className="devchip"><DevIcon t={dt} s={12} />{fp.deviceName || dtInfo.name}</span><span>{fp.platform}</span><span className="num">{fp.screenWidth}×{fp.screenHeight} @{fp.pixelRatio}x</span>
+                <span className="devchip"><DevIcon t={dt} s={12} />{fp.deviceName || dtInfo.name}</span>{!firefox && <span>{fp.platform}</span>}<span className="num">{fp.screenWidth}×{fp.screenHeight} @{fp.pixelRatio}x</span>
                 <span className="num">{fp.hardwareConcurrency} 核 · {fp.deviceMemory} GB</span>
-                <span>{(fp.webglRenderer || 'WebGL 自动').replace(' (TM)', '').replace(/^ANGLE \(([^,]+),\s*/, '').split(' (')[0].split(',')[0]}</span>
+                {firefox ? <span className="ffchip"><FoxIcon s={11} /> Firefox · WebGL {(fp as any).ffWebglOff ? '禁用' : '真实'}{(fp as any).ffStrict ? ' · 严格模式' : ''}</span> : <span>{(fp.webglRenderer || 'WebGL 自动').replace(' (TM)', '').replace(/^ANGLE \(([^,]+),\s*/, '').split(' (')[0].split(',')[0]}</span>}
               </div>
             </div>
             <i className="scan" />
@@ -208,30 +213,35 @@ export const ProfileDrawer: React.FC<{
                   <button type="button" className="btn sm" onClick={() => setCookieOpen(true)}><Icon.upload s={13} /> 管理</button>
                 </div></Field>
               : <Field label="导入 Cookies (JSON, 下次启动时写入)" hint="支持 Cookie-Editor / EditThisCookie 的导出格式"><textarea value={p.cookies} onChange={e => setP({ ...p, cookies: e.target.value })} placeholder="[ { &quot;name&quot;: …, &quot;domain&quot;: … } ]" /></Field>}
-            <Field label={`扩展${exts && exts.length ? `（已启用 ${(p.extensionIds || []).filter(id => exts.some(e => e.id === id)).length} / ${exts.length}）` : ''}`} hint={exts && exts.length ? '保存环境后，下次启动时加载' : undefined}>
+            {firefox ? <Field label="扩展"><div className="sub">Firefox 内核暂不支持扩展中心的 Chromium 扩展。</div></Field> : <Field label={`扩展${exts && exts.length ? `（已启用 ${(p.extensionIds || []).filter(id => exts.some(e => e.id === id)).length} / ${exts.length}）` : ''}`} hint={exts && exts.length ? '保存环境后，下次启动时加载' : undefined}>
               {exts === null ? <div className="sub">正在读取扩展…</div>
                 : exts.length === 0 ? <div className="sub">还没有安装扩展，可以在左侧「扩展中心」添加。</div>
                 : <div className="dr-exts">{exts.map(e => { const on = (p.extensionIds || []).includes(e.id); return <div key={e.id} className={`dr-ext ${on ? 'on' : ''}`} onClick={() => setP(s => ({ ...s, extensionIds: on ? (s.extensionIds || []).filter(x => x !== e.id) : [...(s.extensionIds || []), e.id] }))}>
                     <ExtIcon e={e} size={26} /><span className="dr-ext-t"><b className="ellip">{e.name}</b><span className="sub num">v{e.version} · MV{e.manifestVersion}</span></span><div className={`sw ${on ? 'on' : ''}`} />
                   </div>; })}</div>}
-            </Field>
+            </Field>}
             <Field label="备注"><textarea value={p.notes} onChange={e => setP({ ...p, notes: e.target.value })} /></Field>
           </div>}
 
           {tab === 'fp' && <div className="tabpane">
             <div className="section-title" style={{ marginTop: 0 }}>设备类型</div>
             <div className="devgrid">
-              {DEVICE_TYPES.map(d => <button type="button" key={d.id} className={`devtile ${d.id === dt ? 'on' : ''}`} onClick={() => d.id !== dt && changeType(d.id)} title={d.tip}>
+              {DEVICE_TYPES.map(d => { const off = firefox && d.id !== 'desktop' && d.id !== 'laptop'; return <button type="button" key={d.id} className={`devtile ${d.id === dt ? 'on' : ''} ${off ? 'off' : ''}`} disabled={off} onClick={() => !off && d.id !== dt && changeType(d.id)} title={off ? 'Firefox 内核只支持桌面设备' : d.tip}>
                 <DevIcon t={d.id} s={20} /><b>{d.name}</b><i className={`trust ${d.trust}`} />
-              </button>)}
+              </button>; })}
             </div>
             <div className="sub" style={{ margin: '6px 0 12px' }}><span className={`badge ${TRUST[dtInfo.trust][1]}`}><span className="d" />{TRUST[dtInfo.trust][0]}</span> {dtInfo.tip}</div>
             <div className="kernel-row">
               <span className="sub" style={{ margin: 0 }}>内核</span>
-              {forcedOpen
-                ? <span className="kchip"><Icon.cpu s={13} /> 开源内核（Chromium）<small>{dtInfo.id === 'desktop' || dtInfo.id === 'laptop' ? `${osName(fp.os)} 只能用开源内核` : `${dtInfo.name}只能用开源内核`}</small></span>
-                : <Segmented className="compact" value={openKernel ? 'chromium' : ''} onChange={setKernel} items={[['', '定制内核'], ['chromium', '开源内核']]} />}
+              {forcedOpen && !desk
+                ? <span className="kchip"><Icon.cpu s={13} /> 开源内核（Chromium）<small>{`${dtInfo.name}只能用开源内核`}</small></span>
+                : <Segmented className="compact kseg" value={firefox ? 'firefox' : openKernel ? 'chromium' : ''} onChange={setKernel} items={[...(forcedOpen ? [] : [['', '定制内核'] as [string, string]]), ['chromium', forcedOpen ? `开源内核（${osName(fp.os)} 必需）` : '开源内核'], ['firefox', 'Firefox', <FoxIcon s={13} />]]} />}
+              {firefox && <span className={`ff-vchip ${ffInfo && !ffInfo.path ? 'miss' : ''}`} title={ffInfo?.path || ''}>{ffVersionLabel(ffInfo)}</span>}
             </div>
+            {firefox && <div className="sub" style={{ margin: '-4px 0 12px' }}>用本机的 Mozilla Firefox 启动，独立配置目录；指纹通过 Firefox 偏好设置（user.js）和时区环境变量实现，通过 WebDriver BiDi 控制。只支持桌面设备。</div>}
+            {firefox && <FirefoxMissingNotice />}
+            {firefox && <FirefoxFpPane fp={fp as any} setFP={setFP as any} info={ffInfo} />}
+            {!firefox && <>
             {openKernel && <div className="sub" style={{ margin: '-4px 0 12px' }}>{dt === 'desktop' || dt === 'laptop' || dt === 'chromebook' ? '用 CDP 设置 UA、UA-CH、时区和语言，页面脚本补上显卡、屏幕、噪声和字体。' : '用 Chrome 开发者工具同款的设备模拟：UA 与 UA-CH、视口、DPR、触控、屏幕方向，页面脚本补上显卡、噪声和字体。'}{dt === 'tv' ? ' 电视浏览器的内核版本较老，和当前内核的特性不一致。' : ''}</div>}
             {openKernel && <KernelMissingNotice />}
             {native && <div className="sub" style={{ marginBottom: 12 }}>原生模板 {p.native?.templateKey} · 配置 {p.native?.sourceConfigId}。以下项目会写入 startInfo，高级参数通过启动 JSON 管理。</div>}
@@ -272,6 +282,7 @@ export const ProfileDrawer: React.FC<{
               <button className="btn sm" onClick={savePreset}><Icon.check s={14} /> 把当前机型存为我的设备预设</button>
               {device.startsWith('my-') && <button className="btn sm" onClick={delPreset}>删除这个我的预设</button>}
             </div>}
+            </>}
           </div>}
 
           {tab === 'adv' && native && <div className="tabpane">
@@ -287,21 +298,24 @@ export const ProfileDrawer: React.FC<{
             <div className="section-title">地区 — 跟随代理出口 IP</div>
             <Field label="国家/地区预设" hint="一键填入该国家的时区、语言和地理坐标"><CountrySelect value={countryOfTz(fp.timezone)} onChange={c => setFP({ timezone: c.tz, languages: c.langs, latitude: c.lat, longitude: c.lon, timezoneFromIP: false, languageFromIP: false, geoFromIP: false })} /></Field>
             {geoCard}
+            {firefox && (fp as any).ffStrict && <div className="notice warn ff-strict"><Icon.lock s={14} /><span className="grow">已开启 Firefox 严格模式：时区固定为 UTC+0、语言为 en-US，「跟随 IP」和下方手动设置不生效。可在「防护」里关闭严格模式。</span></div>}
+            <div className={firefox && (fp as any).ffStrict ? 'ff-locked' : ''}>
             <Toggle on={fp.timezoneFromIP} onChange={v => setFP({ timezoneFromIP: v })} label="时区跟随 IP" hint={fp.timezoneFromIP && geo?.ok ? `→ ${geo.timezone}` : '关闭则使用下方手动时区'} />
             {!fp.timezoneFromIP && <Field label="时区"><TimezoneSelect value={fp.timezone} onChange={v => setFP({ timezone: v })} /></Field>}
             <Toggle on={fp.languageFromIP} onChange={v => setFP({ languageFromIP: v })} label="语言跟随 IP" hint={fp.languageFromIP && geo?.ok ? `→ ${(geo.languages || []).join(', ')}` : '按出口国家（及地区）设置 Accept-Language 和 navigator.languages'} />
             {!fp.languageFromIP && <Field label="语言（按优先级）"><LanguagePicker value={fp.languages || []} onChange={v => setFP({ languages: v })} /></Field>}
             <Toggle on={fp.geoFromIP} onChange={v => setFP({ geoFromIP: v })} label="地理定位跟随 IP" hint={fp.geoFromIP && geo?.ok ? `→ ${(+geo.lat).toFixed(4)}, ${(+geo.lon).toFixed(4)}（${geo.city || geo.country}）` : '关闭则使用下方手动坐标'} />
+            </div>
             {!fp.geoFromIP && <div className="grid2"><Field label="纬度"><input type="number" step="0.0001" value={fp.latitude} onChange={e => setFP({ latitude: +e.target.value })} /></Field><Field label="经度"><input type="number" step="0.0001" value={fp.longitude} onChange={e => setFP({ longitude: +e.target.value })} /></Field></div>}
 
-            <div className="section-title">字体</div>
+            {firefox ? <FirefoxFontPane fp={fp as any} setFP={setFP as any} /> : <><div className="section-title">字体</div>
             <Field label={`字体（${(fp.fonts || []).length} / ${cat.fonts.length} 种 ${osName(fp.os)} 字体）`} hint="只列出该系统自带字体">
               <FontPicker value={fp.fonts || []} all={cat.fonts} onChange={v => setFP({ fonts: v })} onSave={f => libAdd('fonts', f)} />
-            </Field>
+            </Field></>}
           </div>}
 
-          {tab === 'guard' && <div className="tabpane"><GuardPane fp={fp as any} setFP={setFP as any} open={openKernel} /></div>}
-          {tab === 'launch' && <div className="tabpane"><LaunchPane fp={fp as any} setFP={setFP as any} open={openKernel} /></div>}
+          {tab === 'guard' && <div className="tabpane">{firefox ? <FirefoxGuardPane fp={fp as any} setFP={setFP as any} /> : <GuardPane fp={fp as any} setFP={setFP as any} open={openKernel} />}</div>}
+          {tab === 'launch' && <div className="tabpane">{firefox ? <FirefoxLaunchPane fp={fp as any} setFP={setFP as any} /> : <LaunchPane fp={fp as any} setFP={setFP as any} open={openKernel} />}</div>}
         </div>
 
         <div className="dfoot">

@@ -515,7 +515,57 @@ const M = {
   },
   PendingCloudDeletes: async (): Promise<number> => cdelMock.filter(x => x.pendingDelete).length,
   RetryCloudDeletes: async (): Promise<number> => { await wait(600); return cdelMock.filter(x => x.pendingDelete).length; },
+  // ---- firefox kernel ----
+  _ffInit: (() => { if (!inWails) { const fp = { ...mockFP('windows'), userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0', hardwareConcurrency: 4, ffFontVisibility: 1, gpc: true, languageFromIP: true }; mock.profiles.splice(2, 0, { id: 'ff-demo', name: 'Reddit-Firefox-01', group: '社媒', tags: ['Firefox'], notes: '', storage: 'local', proxyId: 'px2', startUrls: ['https://www.reddit.com'], cookies: '', fingerprint: fp, kernel: 'firefox', createdAt: Date.now() / 1000 - 7200, lastRun: 0, cloudVersion: 0, syncedAt: 0 }); } return 0; })(),
+  FirefoxInfo: async (): Promise<any> => {
+    const none = location.hash.includes('nofirefox') && !ffMock.installed;
+    const auto = none ? '' : ffMock.installed || 'C:\\Program Files\\Mozilla Firefox\\firefox.exe';
+    const cur = (mock.settings.firefoxPath || '').trim();
+    const missing = !!cur && !/firefox\.exe$/i.test(cur);
+    const path = cur && !missing ? cur : auto;
+    const version = !path ? '' : /esr/i.test(path) || ffMock.installed ? '128.5.0esr' : '133.0.3';
+    return { path, auto, version, esr: /esr/.test(version), custom: !!cur, missing, downloadUrl: 'https://www.mozilla.org/zh-CN/firefox/new/' };
+  },
+  PickFirefox: async (): Promise<string> => 'D:\\Portable\\FirefoxESR\\firefox.exe',
+  FirefoxDownloadPage: async () => { window.open('https://www.mozilla.org/zh-CN/firefox/new/', '_blank'); },
+  FirefoxInstallStatus: async (): Promise<any> => ({ ...ffMock.p }),
+  FirefoxInstallCancel: async () => { ffMock.cancel = true; },
+  FirefoxInstallStart: async (channel: string): Promise<any> => { if (ffMock.p.running) throw 'Firefox 正在安装'; simFirefox(channel); return { ...ffMock.p }; },
+  CreateTypedProfilesKernel: async (prefix: string, t: string, os: string, n: number, proxyId: string, group: string, kernel: string): Promise<any[]> => {
+    const out: any[] = await (M as any).CreateTypedProfiles(prefix, kernel === 'firefox' && !['desktop', 'laptop'].includes(t) ? 'desktop' : t, os, n, proxyId, group);
+    if (kernel === 'firefox') out.forEach(p => { p.kernel = 'firefox'; p.fingerprint = { ...p.fingerprint, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0' }; });
+    return out;
+  },
 };
+// ---- firefox kernel ---- (install simulation for the preview)
+const ffMock = { p: { phase: 'idle', running: false, source: 'esr', done: 0, total: 0, pct: 0, speed: 0, eta: -1, message: '' } as any, cancel: false, installed: '' };
+function simFirefox(channel: string) {
+  const E = (x: any) => { ffMock.p = { ...ffMock.p, ...x }; mockEmit('firefox:install', { ...ffMock.p }); };
+  const ver = channel === 'release' ? '133.0.3' : '128.5.0esr', total = 71_303_168;
+  ffMock.cancel = false;
+  E({ phase: 'resolve', running: true, source: channel, done: 0, total: 0, pct: 0, speed: 0, eta: -1, message: '正在获取官方下载地址…', hint: '', error: '', version: '', path: '' });
+  setTimeout(() => {
+    E({ phase: 'download', version: ver, revision: ver, total, message: '正在下载 Firefox 官方安装包…' });
+    let done = 0;
+    const iv = setInterval(() => {
+      if (ffMock.cancel) { clearInterval(iv); return E({ phase: 'cancelled', running: false, speed: 0, eta: -1, message: '已取消安装', hint: '已下载的部分会保留，重新安装时从断点继续' }); }
+      const sp = 6.5 * 1048576; done = Math.min(total, done + sp / 4);
+      E({ done, pct: done * 100 / total, speed: sp, eta: Math.round((total - done) / sp) });
+      if (done >= total) {
+        clearInterval(iv);
+        E({ phase: 'verify', done: 0, total: 0, pct: 0, message: '正在校验 SHA-512…' });
+        setTimeout(() => {
+          E({ phase: 'extract', message: '正在静默安装 Firefox…' });
+          setTimeout(() => {
+            const path = `C:\\Users\\me\\AppData\\Roaming\\GhostBrowser\\firefox\\${channel === 'release' ? 'release' : 'esr'}\\firefox.exe`;
+            ffMock.installed = path; mock.settings.firefoxPath = path;
+            E({ phase: 'done', running: false, path, pct: 100, speed: 0, eta: 0, message: '安装完成，已设为 Firefox 内核' });
+          }, 1600);
+        }, 900);
+      }
+    }, 250);
+  }, 800);
+}
 
 export const api: typeof M = inWails ? (Go as any) : M;
 

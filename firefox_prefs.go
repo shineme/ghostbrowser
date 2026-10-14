@@ -273,9 +273,6 @@ func firefoxPrefs(fp Fingerprint, px *ffProxy, startURLs []string) ffPrefs {
 	if fp.BlockSound {
 		p.set("media.volume_scale", "0.0")
 	}
-	if fp.BlockVideo {
-		p.set("media.autoplay.default", 5)
-	}
 	// UA string only. Inconsistent with the engine when it is not a matching Firefox UA.
 	if fp.FFUAOverride && strings.TrimSpace(fp.UserAgent) != "" {
 		p.set("general.useragent.override", strings.TrimSpace(fp.UserAgent))

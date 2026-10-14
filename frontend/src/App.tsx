@@ -19,6 +19,7 @@ import { ExtensionsView } from './ExtensionsView';
 import { AuditView } from './AuditView';
 import { WindowTools } from './WindowTools';
 import { KernelMissingModal } from './KernelInstall';
+import { FoxIcon, useFirefoxInfo, ffVersionLabel } from './FirefoxKernel';
 
 type Tab = 'profiles' | 'proxies' | 'rpa' | 'extensions' | 'cloud' | 'audit' | 'settings';
 
@@ -278,7 +279,7 @@ const ProfilesView: React.FC<{
           <button className="ib" title="切到前台" onClick={() => focus(p.id)}><Icon.laptop /></button>
           <button className="ib stop" title="停止" onClick={() => stop(p)}><Icon.stop /></button>
         </div>; })}
-        <WindowTools running={runningList} selected={[...sel].filter(id => running.has(id))} bulk={sel.size > 0} />
+        <WindowTools running={runningList.filter(p => (p as any).kernel !== 'firefox')} selected={[...sel].filter(id => running.has(id))} bulk={sel.size > 0} />
       </div>}
 
       <div className="panel list">
@@ -302,7 +303,7 @@ const ProfilesView: React.FC<{
                     </div>
                   </div>
                 </td>
-                <td><div className="os" style={{ fontWeight: 550 }}><OsIcon os={p.fingerprint.os} s={13} />{osLabel(p.fingerprint.os)} <span className="sub" style={{ margin: 0 }}>Chrome {p.fingerprint.browserVersion}</span><span className={`devtag ${(p as any).kernel === 'chromium' || needsOpen(p.fingerprint.os, (p.fingerprint as any).deviceType) ? 'open' : ''}`} title={(p as any).kernel === 'chromium' || needsOpen(p.fingerprint.os, (p.fingerprint as any).deviceType) ? '开源内核' : '定制内核'}><DevIcon t={devType((p.fingerprint as any).deviceType)} s={11} />{(p.fingerprint as any).deviceName || devName((p.fingerprint as any).deviceType)}</span></div><div className="sub num">{p.fingerprint.screenWidth}×{p.fingerprint.screenHeight} · {p.fingerprint.hardwareConcurrency}C/{p.fingerprint.deviceMemory}G</div></td>
+                <td><div className="os" style={{ fontWeight: 550 }}><OsIcon os={p.fingerprint.os} s={13} />{osLabel(p.fingerprint.os)} <span className="sub" style={{ margin: 0 }}>{(p as any).kernel === 'firefox' ? 'Firefox' : `Chrome ${p.fingerprint.browserVersion}`}</span><span className={`devtag ${(p as any).kernel === 'firefox' ? 'ff' : ''} ${(p as any).kernel === 'chromium' || needsOpen(p.fingerprint.os, (p.fingerprint as any).deviceType) ? 'open' : ''}`} title={(p as any).kernel === 'firefox' ? 'Firefox 内核' : (p as any).kernel === 'chromium' || needsOpen(p.fingerprint.os, (p.fingerprint as any).deviceType) ? '开源内核' : '定制内核'}>{(p as any).kernel === 'firefox' ? <FoxIcon s={11} /> : null}<DevIcon t={devType((p.fingerprint as any).deviceType)} s={11} />{(p.fingerprint as any).deviceName || devName((p.fingerprint as any).deviceType)}</span></div><div className="sub num">{p.fingerprint.screenWidth}×{p.fingerprint.screenHeight} · {p.fingerprint.hardwareConcurrency}C/{p.fingerprint.deviceMemory}G</div></td>
                 <td>{px ? <div><CC cc={px.country} /><span>{px.city || px.name}</span>{px.status === 'fail' && <span className="badge fail" style={{ marginLeft: 6 }}>失效</span>}<div className="sub num">{px.ip || px.host}{px.ip && ipShare[px.ip] > 1 && <span className="ip-dup" title="多个环境使用同一出口 IP，容易被平台关联"> ⚠ {ipShare[px.ip]} 个环境共用此 IP</span>}</div></div> : <span className="sub">直连</span>}</td>
                 <td>{(() => { const [txt, tone] = syncState(p, syncBusy); return <InlineTransfer id={p.id} fallback={<span className={`badge ${tone}`}>{tone === 'local' ? <Icon.laptop s={12} /> : <Icon.cloud s={12} />} {txt}{p.storage === 'cloud' && <span className="num" style={{ marginLeft: 3 }}>v{p.cloudVersion}</span>}</span>} />; })()}</td>
                 <td><span className="sub">{ago(p.lastRun)}</span></td>
@@ -439,8 +440,11 @@ const BulkModal: React.FC<{ proxies: Proxy[]; onClose: () => void; onDone: () =>
   const [group, setGroup] = useState('');
   const [proxyId, setProxyId] = useState('');
   const [busy, setBusy] = useState(false);
+  const [kernel, setKernel] = useState<'' | 'firefox'>('');
+  const [ffInfo] = useFirefoxInfo();
+  const ffOK = dt === 'desktop' || dt === 'laptop';
   const [out, close] = useExit(onClose);
-  const go = async () => { setBusy(true); await api.CreateTypedProfiles(prefix, dt, os, count, proxyId, group); toast(`已创建 ${count} 个环境`); setBusy(false); onDone(); close(); };
+  const go = async () => { setBusy(true); await (api as any).CreateTypedProfilesKernel(prefix, dt, os, count, proxyId, group, ffOK ? kernel : ''); toast(`已创建 ${count} 个${kernel === 'firefox' && ffOK ? ' Firefox ' : ''}环境`); setBusy(false); onDone(); close(); };
   return (
     <div className={`overlay center ${out ? 'out' : ''}`} onMouseDown={e => e.target === e.currentTarget && close()}>
       <BorderBeam size="pulse-inner" colorVariant="ocean" theme="dark" strength={0.6} borderRadius={20}>
@@ -455,7 +459,13 @@ const BulkModal: React.FC<{ proxies: Proxy[]; onClose: () => void; onDone: () =>
             <Field label="设备类型"><select value={dt} onChange={e => pickType(e.target.value)}>{DEVICE_TYPES.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>
             <Field label="操作系统"><select value={os} onChange={e => setOs(e.target.value)}>{dtInfo.oses.map(o => <option key={o} value={o}>{osNameOf(o)}</option>)}</select></Field>
           </div>
-          {needsOpen(os, dt) && <div className="sub" style={{ marginBottom: 10 }}>这些环境会用开源内核启动{dt === 'tv' ? '；电视可信度低，仅建议实验' : ''}。</div>}
+          <Field label="内核">
+            <div className="bk-kernel">
+              <button type="button" className={`bk-k ${kernel === '' || !ffOK ? 'on' : ''}`} onClick={() => setKernel('')}><Icon.cpu s={16} /><span><b>Chromium</b><small>{needsOpen(os, dt) ? '开源内核（自动）' : '定制内核 / 开源内核（自动）'}</small></span><i className="radio" /></button>
+              <button type="button" className={`bk-k ${kernel === 'firefox' && ffOK ? 'on' : ''} ${ffOK ? '' : 'off'}`} disabled={!ffOK} title={ffOK ? '' : 'Firefox 内核只支持桌面电脑和笔记本'} onClick={() => setKernel('firefox')}><FoxIcon s={16} /><span><b>Firefox</b><small className={ffInfo && !ffInfo.path ? 'warn' : ''}>{ffOK ? (ffInfo && !ffInfo.path ? '未安装，启动前请在设置中安装' : ffVersionLabel(ffInfo)) : '只支持桌面设备'}</small></span><i className="radio" /></button>
+            </div>
+          </Field>
+          {kernel !== 'firefox' && needsOpen(os, dt) && <div className="sub" style={{ marginBottom: 10 }}>这些环境会用开源内核启动{dt === 'tv' ? '；电视可信度低，仅建议实验' : ''}。</div>}
           <div className="grid2">
             <Field label="分组"><input type="text" value={group} onChange={e => setGroup(e.target.value)} /></Field>
           </div>

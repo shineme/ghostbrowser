@@ -109,12 +109,12 @@ const Setup: React.FC<{ target: RecTarget; given?: Profile[]; onCancel: () => vo
       <div className="rpa-search" style={{ marginBottom: 8 }}><Icon.search s={14} /><input type="text" placeholder="搜索环境名称、分组、标签" value={q} onChange={ev => setQ(ev.target.value)} /></div>
       <div className="assign-list rec-plist">
         {profiles === null && <div className="rec-loading"><ThinkingOrb state="working" size={20} theme="dark" /> 正在读取环境…</div>}
-        {sorted.map(p => <div key={p.id} className={`assign-row ${pick === p.id ? 'on' : ''}`} onClick={() => setPick(p.id)}>
+        {sorted.map(p => { const ff = (p as any).kernel === 'firefox'; return <div key={p.id} className={`assign-row ${pick === p.id ? 'on' : ''} ${ff ? 'ff-dis' : ''}`} title={ff ? 'Firefox 内核暂不支持' : undefined} onClick={() => !ff && setPick(p.id)}>
           <span className={`rec-radio ${pick === p.id ? 'on' : ''}`} />
           <Avatar seed={p.fingerprint?.noiseSeed || p.id} os={p.fingerprint?.os || 'windows'} running={open.has(p.id)} />
           <div style={{ flex: 1, minWidth: 0 }}><div className="nm ell">{p.name}</div><div className="sub ell">{p.group || '未分组'}{(p.tags || []).length ? ' · ' + p.tags.join('、') : ''}</div></div>
-          {open.has(p.id) ? <span className="badge ok"><span className="d" />已打开</span> : <span className="badge unknown">将自动启动</span>}
-        </div>)}
+          {ff ? <span className="badge unknown ff-badge">Firefox 内核暂不支持</span> : open.has(p.id) ? <span className="badge ok"><span className="d" />已打开</span> : <span className="badge unknown">将自动启动</span>}
+        </div>; })}
         {profiles !== null && sorted.length === 0 && <div className="sub" style={{ padding: 22, textAlign: 'center' }}>{list.length ? '没有符合条件的环境' : '还没有环境，请先在「环境」页创建'}</div>}
       </div>
       <div className="rec-label" style={{ marginTop: 16 }}>起始网址 <span className="sub">可选，留空则从浏览器当前页面开始</span></div>

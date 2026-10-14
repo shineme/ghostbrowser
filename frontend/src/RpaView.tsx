@@ -229,8 +229,11 @@ const RunDialog: React.FC<{ wf: RWorkflow; profiles: Profile[]; onClose: () => v
   const groups = useMemo(() => [...new Set(profiles.map(p => p.group || ''))].sort(), [profiles]);
   const shown = profiles.filter(p => (group === '__all' || (p.group || '') === group) &&
     (!q || `${p.name} ${p.group} ${(p.tags || []).join(' ')} ${p.notes}`.toLowerCase().includes(q.toLowerCase())));
-  const allOn = shown.length > 0 && shown.every(p => pick.has(p.id));
-  const toggle = (id: string) => setPick(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  // Firefox kernel environments cannot run RPA (no CDP).
+  const ffK = (p: Profile) => (p as any).kernel === 'firefox';
+  const pickable = shown.filter(p => !ffK(p));
+  const allOn = pickable.length > 0 && pickable.every(p => pick.has(p.id));
+  const toggle = (id: string) => profiles.some(p => p.id === id && ffK(p)) ? undefined : setPick(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const ids = profiles.filter(p => pick.has(p.id)).map(p => p.id);
   const closed = ids.filter(id => !open.has(id)).length;
   const go = async () => {
@@ -249,7 +252,7 @@ const RunDialog: React.FC<{ wf: RWorkflow; profiles: Profile[]; onClose: () => v
               options={[['__all', '全部分组', profiles.length] as [string, string, number], ...groups.map(g => [g, g || '未分组', profiles.filter(p => (p.group || '') === g).length] as [string, string, number])]} /></div>
           </div>
           <div className="rpa-pickhead">
-            <button className="rpa-allbtn" disabled={!shown.length} onClick={() => setPick(s => { const n = new Set(s); shown.forEach(p => allOn ? n.delete(p.id) : n.add(p.id)); return n; })}>
+            <button className="rpa-allbtn" disabled={!pickable.length} onClick={() => setPick(s => { const n = new Set(s); pickable.forEach(p => allOn ? n.delete(p.id) : n.add(p.id)); return n; })}>
               <span className={`chk ${allOn ? 'on' : ''}`}><Icon.check s={11} /></span>
               <span>{allOn ? '取消全选' : '全选'}{group !== '__all' || q ? `（当前筛选 ${shown.length} 个）` : ''}</span>
             </button>
@@ -258,11 +261,11 @@ const RunDialog: React.FC<{ wf: RWorkflow; profiles: Profile[]; onClose: () => v
             {ids.length > 0 && <button className="btn sm ghost" onClick={() => setPick(new Set())}>清空</button>}
           </div>
           <div className="assign-list rpa-plist">
-            {shown.map(p => <div key={p.id} className={`assign-row ${pick.has(p.id) ? 'on' : ''}`} onClick={() => toggle(p.id)}>
+            {shown.map(p => <div key={p.id} className={`assign-row ${pick.has(p.id) ? 'on' : ''} ${ffK(p) ? 'ff-dis' : ''}`} title={ffK(p) ? 'Firefox 内核暂不支持' : undefined} onClick={() => toggle(p.id)}>
               <span className={`chk ${pick.has(p.id) ? 'on' : ''}`}><Icon.check s={11} /></span>
               <Avatar seed={p.fingerprint?.noiseSeed || p.id} os={p.fingerprint?.os || 'windows'} running={open.has(p.id)} />
               <div style={{ flex: 1, minWidth: 0 }}><div className="nm ell">{p.name}</div><div className="sub ell">{p.group || '未分组'}{(p.tags || []).length ? ' · ' + p.tags.join('、') : ''}</div></div>
-              {open.has(p.id) ? <span className="badge ok"><span className="d" />已打开</span> : <span className="badge unknown">未打开</span>}
+              {ffK(p) ? <span className="badge unknown ff-badge">Firefox 内核暂不支持</span> : open.has(p.id) ? <span className="badge ok"><span className="d" />已打开</span> : <span className="badge unknown">未打开</span>}
             </div>)}
             {shown.length === 0 && <div className="sub" style={{ padding: 22, textAlign: 'center' }}>{profiles.length ? '没有符合条件的环境' : '还没有环境，请先在「环境」页创建'}</div>}
           </div>

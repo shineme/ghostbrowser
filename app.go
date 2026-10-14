@@ -1265,3 +1265,32 @@ func (a *App) FirefoxInstallCancel() { ffInst.Cancel() }
 
 // FirefoxDownloadPage opens Mozilla's official download page in the system browser.
 func (a *App) FirefoxDownloadPage() { wruntime.BrowserOpenURL(a.ctx, firefoxDownloadPage) }
+
+// CreateTypedProfilesKernel is CreateTypedProfiles with a kernel choice:
+// "firefox" creates desktop / laptop Firefox environments, anything else
+// behaves exactly like CreateTypedProfiles.
+func (a *App) CreateTypedProfilesKernel(prefix, devType, osName string, count int, proxyID, group, kernel string) []Profile {
+	if kernel != "firefox" {
+		return a.CreateTypedProfiles(prefix, devType, osName, count, proxyID, group)
+	}
+	if devType != "laptop" {
+		devType = "desktop"
+	}
+	if count < 1 {
+		count = 1
+	}
+	out := []Profile{}
+	for i := 1; i <= count; i++ {
+		name := prefix
+		if count > 1 {
+			name = prefix + "-" + itoa(i)
+		}
+		p := Profile{Name: name, Group: group, ProxyID: proxyID, Storage: "local", Kernel: "firefox"}
+		p.Fingerprint = a.NewDeviceFingerprint(devType, osName)
+		p.Fingerprint.UserAgent = "" // Firefox keeps its own UA unless the override is switched on
+		np := a.store.PutProfile(p)
+		a.store.auditNamed("ui", "profile.create", np.ID, np.Name, nil, devType+"/"+osName+"/firefox")
+		out = append(out, np)
+	}
+	return out
+}
