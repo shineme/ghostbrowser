@@ -129,7 +129,7 @@ const M = {
   StartProfile: async (id: string) => { await wait(600); const r = { profileId: id, pid: 1234, debugPort: 9222, wsUrl: 'ws://127.0.0.1:9222/devtools/browser/x', startedAt: Date.now() / 1000 }; mock.running.push(r); return r; },
   StopProfile: async (id: string) => { mock.running = mock.running.filter(r => r.profileId !== id); },
   Running: async () => [...mock.running],
-  ExportCookies: async (_id: string) => '[]',
+  ExportCookies: async (_id: string, _format: string) => '[]',
   ListProxies: async () => [...mock.proxies],
   SaveProxy: async (p: any) => { if (!p.id) p.id = rid(); if (!p.status) p.status = 'unknown'; mock.proxies = [...mock.proxies.filter(x => x.id !== p.id), p]; return p; },
   DeleteProxy: async (id: string) => { mock.proxies = mock.proxies.filter(p => p.id !== id); },
