@@ -17,7 +17,9 @@ import (
 	"time"
 )
 
-func init() { newKernelClient = func() *http.Client { return &http.Client{Transport: &http.Transport{}} } }
+func init() {
+	newKernelClient = func() *http.Client { return &http.Client{Transport: &http.Transport{}} }
+}
 
 func fakeKernelZip(t *testing.T, extra map[string]string) []byte {
 	t.Helper()

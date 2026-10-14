@@ -177,7 +177,9 @@ func (k *kernelInstaller) run(ctx context.Context, root, source, custom string) 
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {
-			k.patch(true, func(s *KernelProgress) { s.Message = fmt.Sprintf("网络中断，%d 秒后自动重试（第 %d 次）…", int(kernelRetryDelay.Seconds()), attempt) })
+			k.patch(true, func(s *KernelProgress) {
+				s.Message = fmt.Sprintf("网络中断，%d 秒后自动重试（第 %d 次）…", int(kernelRetryDelay.Seconds()), attempt)
+			})
 			select {
 			case <-ctx.Done():
 				return "", ctx.Err()
