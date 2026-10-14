@@ -225,7 +225,7 @@ const M = {
     const kinds = ['click', 'click', 'scroll', 'scroll', 'scroll', 'key', 'text', 'select', 'nav'];
     mockSync.timer = setInterval(() => {
       const st = mockSync.st;
-      if (!mock.running.some(r => r.profileId === st.master)) { clearInterval(mockSync.timer); mockSync.st = { ...st, running: false, reason: '主控浏览器已关闭，同步已停止' }; mockEmit('syncer:event', mockSync.st); return; }
+      if (!mock.running.some(r => r.profileId === st.master)) { clearInterval(mockSync.timer); mockSync.st = { ...st, running: false, reason: '主控浏览器已关闭' }; mockEmit('syncer:event', mockSync.st); return; }
       const ev = kinds[Math.floor(Math.random() * kinds.length)];
       const followers = st.followers.map((f: any, i: number) => {
         if (!f.ok) return f;

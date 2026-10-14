@@ -48,7 +48,7 @@ const LayoutPreview: React.FC<{ layout: Layout | null; names: string[]; mode: Mo
   // z-order mirrors the backend: cascade raises the last window, stack the first.
   const z = (i: number) => mode === 'stack' ? cells.length - i : i + 1;
   return (
-    <div className="wt-screen" style={{ width: W, height: H }}>
+    <div className="wt-screen" style={{ width: W, height: H + 12 }}>
       <div className="wt-bar"><i /><i /><i /><span className="num">{scr.w}×{scr.h}</span></div>
       {cells.map((c, i) => {
         const w = c.w * k, h = c.h * k; const col = ACCENTS[i % ACCENTS.length];
@@ -143,7 +143,7 @@ const SyncerPanel: React.FC<{ running: Profile[]; st: SyncerState; lift: boolean
   const okN = st.followers.filter(f => f.ok).length;
 
   return createPortal(
-    <div className={`syncp ${lift ? 'lift' : ''} ${st.running ? 'live' : ''}`}>
+    <div className={`syncp ${lift ? 'lift' : ''} ${st.running ? 'is-live' : ''}`}>
       <div className="syncp-h">
         <span className={`xorb ${st.running ? 'on' : ''}`}><Icon.bolt s={14} /></span>
         <div className="grow"><b>群控同步器</b><span>{st.running ? `正在同步 · ${okN} 台跟随` : '在主控窗口操作，其余窗口同步执行'}</span></div>
@@ -178,7 +178,7 @@ const SyncerPanel: React.FC<{ running: Profile[]; st: SyncerState; lift: boolean
       </> : <>
         <div className="syncp-master">
           {byId[st.master] ? <Avatar seed={byId[st.master].fingerprint.noiseSeed || st.master} os={byId[st.master].fingerprint.os} /> : <span className="avatar" style={avatarStyle(st.master)}>{initials(st.masterName)}</span>}
-          <div className="grow"><span className="lbl"><i className="pulse" />主控</span><b>{st.masterName || '主控环境'}</b></div>
+          <div className="grow"><span className="lbl"><i className="wt-pulse" />主控</span><b>{st.masterName || '主控环境'}</b></div>
           <div className="syncp-last" key={flash}>
             <span>最近动作</span><b>{EV_LABEL[st.lastEvent] || '等待操作'}</b>
           </div>
@@ -243,7 +243,7 @@ export const WindowTools: React.FC<{ running: Profile[]; selected: string[]; bul
         <button ref={btnRef} className={`btn sm ${arr ? 'on' : ''}`} disabled={none} onClick={() => setArr(o => !o)}><Icon.grid s={13} /> 排列窗口</button>
       </span>
       {st.running
-        ? <button className="wt-pill" onClick={() => setPanel(p => !p)} title="打开同步器"><i className="pulse" />同步中 · <b className="num">{okN}</b> 台</button>
+        ? <button className="wt-pill" onClick={() => setPanel(p => !p)} title="打开同步器"><i className="wt-pulse" />同步中 · <b className="num">{okN}</b> 台</button>
         : <span className="wt-tip" data-tip={running.length < 2 ? '至少需要两个正在运行的环境' : ''}>
           <button className={`btn sm ${panel ? 'on' : ''}`} disabled={running.length < 2} onClick={() => setPanel(p => !p)}><Icon.bolt s={13} /> 同步器</button>
         </span>}
