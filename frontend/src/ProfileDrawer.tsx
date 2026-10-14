@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Combo, SearchSelect, FontPicker, CountrySelect, LanguagePicker, TimezoneSelect, countryOfTz } from './locales';
 import { api, Profile, Proxy, Fingerprint } from './api';
 import { Field, Toggle, Icon, flag, useToast, useExit, Segmented, Avatar, DevIcon } from './ui';
+import { CookieModal } from './CookieModal';
+import { ExtIcon, Ext } from './ExtensionsView';
 import { DEVICE_TYPES, TRUST, devType, osName, osVerLabel, needsOpen, uaOSOf } from './devices';
 
 type FPCatalog = { osVersions: string[]; browserMajors: string[]; userAgents: string[]; platforms: string[]; vendors: string[]; gpus: { vendor: string; renderer: string; custom?: string }[]; fonts: string[]; screens: string[]; cores: string[]; memory: string[]; custom: Record<string, string[]> };
@@ -32,6 +34,10 @@ export const ProfileDrawer: React.FC<{
     } catch (e: any) { setPxInfo(String(e?.message || e)); } finally { setPxBusy(false); }
   };
   const [tab, setTab] = useState<'basic' | 'fp' | 'adv'>('basic');
+  // ---- extensions / cookies ----
+  const [exts, setExts] = useState<Ext[] | null>(null);
+  const [cookieOpen, setCookieOpen] = useState(false);
+  useEffect(() => { api.ListExtensions().then(l => setExts((l || []) as Ext[])).catch(() => setExts([])); }, []);
   const [p, setP] = useState<Profile>(() => profile ? JSON.parse(JSON.stringify(profile)) : blank());
   const [gpus, setGpus] = useState<{ vendor: string; renderer: string }[]>([]);
   const [devices, setDevices] = useState<any[]>([]);
@@ -199,7 +205,20 @@ export const ProfileDrawer: React.FC<{
               {pxInfo && <div className="sub" style={{ marginTop: 4 }}>{pxInfo}</div>}
             </Field>
             <Field label="启动页 (每行一个)"><textarea value={(p.startUrls || []).join('\n')} onChange={e => setP({ ...p, startUrls: e.target.value.split('\n') })} placeholder="https://facebook.com" /></Field>
-            <Field label="导入 Cookies (JSON, 下次启动时写入)" hint="支持 Cookie-Editor / EditThisCookie 的导出格式"><textarea value={p.cookies} onChange={e => setP({ ...p, cookies: e.target.value })} placeholder="[ { &quot;name&quot;: …, &quot;domain&quot;: … } ]" /></Field>
+            {profile
+              ? <Field label="Cookies"><div className="ck-row">
+                  <span className="ck-row-ic"><Icon.lock s={15} /></span>
+                  <span className="ck-row-t"><b>导入 / 导出 Cookie</b><span className="sub">JSON（Cookie-Editor / EditThisCookie）或 Netscape cookies.txt{stagedN(p.cookies) ? ` · 待写入 ${stagedN(p.cookies)} 条` : ''}</span></span>
+                  <button type="button" className="btn sm" onClick={() => setCookieOpen(true)}><Icon.upload s={13} /> 管理</button>
+                </div></Field>
+              : <Field label="导入 Cookies (JSON, 下次启动时写入)" hint="支持 Cookie-Editor / EditThisCookie 的导出格式"><textarea value={p.cookies} onChange={e => setP({ ...p, cookies: e.target.value })} placeholder="[ { &quot;name&quot;: …, &quot;domain&quot;: … } ]" /></Field>}
+            <Field label={`扩展${exts && exts.length ? `（已启用 ${(p.extensionIds || []).filter(id => exts.some(e => e.id === id)).length} / ${exts.length}）` : ''}`} hint={exts && exts.length ? '保存环境后，下次启动时加载' : undefined}>
+              {exts === null ? <div className="sub">正在读取扩展…</div>
+                : exts.length === 0 ? <div className="sub">还没有安装扩展，可以在左侧「扩展中心」添加。</div>
+                : <div className="dr-exts">{exts.map(e => { const on = (p.extensionIds || []).includes(e.id); return <div key={e.id} className={`dr-ext ${on ? 'on' : ''}`} onClick={() => setP(s => ({ ...s, extensionIds: on ? (s.extensionIds || []).filter(x => x !== e.id) : [...(s.extensionIds || []), e.id] }))}>
+                    <ExtIcon e={e} size={26} /><span className="dr-ext-t"><b className="ellip">{e.name}</b><span className="sub num">v{e.version} · MV{e.manifestVersion}</span></span><div className={`sw ${on ? 'on' : ''}`} />
+                  </div>; })}</div>}
+            </Field>
             <Field label="备注"><textarea value={p.notes} onChange={e => setP({ ...p, notes: e.target.value })} /></Field>
           </div>}
 
@@ -302,9 +321,12 @@ export const ProfileDrawer: React.FC<{
           <button className="btn primary" onClick={save}><Icon.check s={15} /> 保存环境</button>
         </div>
       </div>
+      {cookieOpen && profile && <CookieModal profile={{ id: profile.id, name: p.name || profile.name }} onClose={() => setCookieOpen(false)} onStaged={staged => setP(s => ({ ...s, cookies: staged }))} />}
     </div>
   );
 };
+
+const stagedN = (c?: string) => { try { const j = JSON.parse(c || '[]'); return Array.isArray(j) ? j.length : 0; } catch { return 0; } };
 
 function blank(): Profile {
   return { id: '', name: '', group: '', tags: [], notes: '', storage: 'local', proxyId: '', inlineProxy: undefined, startUrls: [], cookies: '', createdAt: 0, lastRun: 0, cloudVersion: 0, syncedAt: 0,
