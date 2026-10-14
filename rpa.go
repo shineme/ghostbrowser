@@ -159,7 +159,7 @@ func framePrefix(path []string, log string) string {
 	if len(path) == 0 {
 		return log
 	}
-	return "⧉ " + frameLabel(path) + " › " + log
+	return "框架 " + frameLabel(path) + " › " + log
 }
 
 var errBreakLoop = errors.New("break_loop")

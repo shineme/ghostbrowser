@@ -238,7 +238,7 @@ func TestIframeRunnerLive(t *testing.T) {
 			if !strings.HasPrefix(vars["pv"], "pv-"+c.name+"|") {
 				t.Errorf("execute_js page world = %q", vars["pv"])
 			}
-			if !strings.Contains(logs[0], "⧉ ") {
+			if !strings.Contains(logs[0], "框架 ") {
 				t.Errorf("log lacks frame prefix: %s", logs[0])
 			}
 			if c.name != "sd" {

@@ -96,7 +96,7 @@ func TestEngineFrameContext(t *testing.T) {
 		t.Fatalf("calls:\n%s\nwant:\n%s", got, strings.Join(want, "\n"))
 	}
 	joined := strings.Join(logs, "\n")
-	if !strings.Contains(joined, "⧉ iframe#pay › #b") || !strings.Contains(joined, "进入框架 iframe#outer › iframe[name=inner]") {
+	if !strings.Contains(joined, "框架 iframe#pay › #b") || !strings.Contains(joined, "进入框架 iframe#outer › iframe[name=inner]") {
 		t.Errorf("logs:\n%s", joined)
 	}
 	// A driver without frame support refuses frame steps.

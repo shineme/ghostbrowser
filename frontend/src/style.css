@@ -1743,3 +1743,9 @@ input.mono, textarea.mono { font-family: "JBMono", Consolas, monospace; }
   .rec-orb i:first-child { opacity: .5; transform: scale(.9); }
   .rec-row.new, .rec-row.new .rec-row-main, .rec-row.static, .rec-think.new, .rec-meter b, .rec-edit, .rec-radio.on::after { animation: none; }
 }
+
+/* ---- rpa-iframe ---- */
+.rs-frame { display: inline-flex; align-items: center; gap: 4px; max-width: 60%; margin-right: 6px; padding: 0 6px; border-radius: 6px; vertical-align: top;
+  background: color-mix(in srgb, var(--a2) 14%, transparent); color: var(--txt-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rs-frame svg { flex: none; opacity: .8; }
+.rs-frame > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

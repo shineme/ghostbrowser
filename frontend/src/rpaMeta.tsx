@@ -57,7 +57,7 @@ export type FieldDef = {
 export type StepDef = { type: string; label: string; group: string; icon: keyof typeof RI; desc: string; defaults: Record<string, string>; fields: FieldDef[]; container?: boolean };
 
 // Optional iframe locator shared by every element step (rpa_frames.go).
-const FRAME_HINT = '元素在 iframe 里时填写；留空 = 主页面或「切换框架」进入的框架。多层用 >> 连接，从主页面写起，如 iframe#pay >> iframe[name=card]';
+const FRAME_HINT = '元素在 iframe 里时填写，从主页面写起，多层用 >> 连接；留空 = 主页面或「切换框架」进入的框架';
 const frameField = (show?: (p: Record<string, string>) => boolean): FieldDef => ({ k: 'frame', label: '所在框架', kind: 'selector', ph: '留空 = 主页面', hint: FRAME_HINT, show });
 const condShow = (...kinds: string[]) => (p: Record<string, string>) => kinds.includes(p.kind || 'exists');
 const COND_KIND: [string, string][] = [['exists', '元素存在'], ['not_exists', '元素不存在'], ['contains', '文本包含'], ['equals', '值相等'], ['js', 'JS 结果为真']];
@@ -92,7 +92,7 @@ export const STEP_DEFS: StepDef[] = [
     { k: 'saveAs', label: '保存路径到变量', kind: 'var', ph: '可选，如 shot' },
     frameField(p => !!p.selector),
   ] },
-  { type: 'switch_frame', label: '切换框架', group: '页面', icon: 'frame', desc: '进入 iframe 或返回主页面，后续步骤都在其中执行', defaults: { mode: 'frame', frame: '', timeout: '10000' }, fields: [
+  { type: 'switch_frame', label: '切换框架', group: '页面', icon: 'frame', desc: '进入 iframe 或返回主页面', defaults: { mode: 'frame', frame: '', timeout: '10000' }, fields: [
     { k: 'mode', label: '切换到', kind: 'seg', opts: [['frame', '进入框架'], ['parent', '上一级'], ['top', '返回主页面']] },
     { k: 'frame', label: 'iframe 选择器', kind: 'selector', ph: 'iframe#pay', hint: '相对当前所在框架；多层用 >> 连接，如 iframe#pay >> iframe[name=card]。可用 {{变量}}', show: p => (p.mode || 'frame') === 'frame' },
     { k: 'timeout', label: '等待框架出现', kind: 'num', unit: 'ms', half: true, show: p => (p.mode || 'frame') === 'frame' },
@@ -168,12 +168,14 @@ const condText = (p: Record<string, string>) => {
 /** One-line description shown on a step row. */
 export const summary = (s: RStep): string => {
   const base = summaryBase(s);
-  const fr = s.type !== 'switch_frame' ? (s.params?.frame || '').trim() : '';
-  return fr ? `⧉ ${frameText(fr)} › ${base}` : base;
+  const fr = frameOf(s);
+  return fr ? `框架 ${frameText(fr)} › ${base}` : base;
 };
+/** The frame path an element step runs in ("" = top document / switch_frame context). */
+export const frameOf = (s: RStep) => (s.type !== 'switch_frame' ? (s.params?.frame || '').trim() : '');
 /** A frame path as shown in summaries: "iframe#pay › iframe[name=card]". */
 export const frameText = (f: string) => f.replace(/^frame:/, '').split('>>').map(x => x.trim()).filter(Boolean).join(' › ');
-const summaryBase = (s: RStep): string => {
+export const summaryBase = (s: RStep): string => {
   // Recorded selectors carry a fallback ("css || xpath:…"); show the primary one.
   const p = s.params?.selector?.includes(' || ') ? { ...s.params, selector: s.params.selector.split(' || ')[0] } : (s.params || {});
   switch (s.type) {

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import { Icon, Field, Toggle, Segmented, useToast, useConfirm, useExit } from './ui';
 import {
-  RI, RStep, RWorkflow, RIssue, DEF, STEP_DEFS, GROUPS, FieldDef, StepIcon, toneOf, typeLabel, summary, newStep, flat, countSteps,
+  RI, RStep, RWorkflow, RIssue, DEF, STEP_DEFS, GROUPS, FieldDef, StepIcon, toneOf, typeLabel, summary, summaryBase, frameOf, frameText, newStep, flat, countSteps,
   updateStep, removeStep, moveStep, insertAfter, insertInto, cloneStep, findStep, siblingPos, varsBefore,
 } from './rpaMeta';
 import { RpaRecorder } from './RpaRecorder';
@@ -192,7 +192,7 @@ const StepNode: React.FC<{ s: RStep; ctx: Ctx }> = ({ s, ctx }) => {
         <div className="rs-t">
           <div className="rs-name"><span className="ell">{s.name || label}</span>{s.name && <span className="rs-type">{label}</span>}
             {s.disabled && <span className="rs-flag">已停用</span>}{s.continueOnError && <span className="rs-flag warn">出错继续</span>}</div>
-          <div className="rs-sum" title={bad ? bad.map(b => b.message).join('\n') : summary(s)}>{bad ? <span className="rs-err">{bad[0].message}</span> : summary(s)}</div>
+          <div className="rs-sum" title={bad ? bad.map(b => b.message).join('\n') : summary(s)}>{bad ? <span className="rs-err">{bad[0].message}</span> : frameOf(s) ? <><span className="rs-frame" title={'所在框架：' + frameText(frameOf(s))}><RI.frame s={11} /><span>{frameText(frameOf(s))}</span></span>{summaryBase(s)}</> : summary(s)}</div>
         </div>
         <div className="rs-acts" onClick={e => e.stopPropagation()}>
           <button title="上移" disabled={i <= 0} onClick={() => ctx.act('up', s.id)}><RI.up s={14} /></button>
