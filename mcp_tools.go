@@ -330,8 +330,8 @@ var mcpTools = []mcpTool{
 			if rs, ok := runReg.get(p.ID); ok {
 				return map[string]any{"id": p.ID, "name": p.Name, "status": "running", "alreadyRunning": true, "debugPort": rs.DebugPort, "websocket": rs.WSURL, "pid": rs.PID}, nil
 			}
-			if globalAuto != nil {
-				globalAuto.BeforeLaunch(p.ID)
+			if err := globalAuto.BeforeLaunch(p.ID); err != nil {
+				return nil, err
 			}
 			rs, err := c.store.Launch(p.ID)
 			c.store.auditProfile("mcp", "profile.start", p.ID, err, "")

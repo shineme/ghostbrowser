@@ -14,15 +14,15 @@
  *
  * Routes (either ghostsync.php?r=/api/... or ghostsync.php/api/...):
  *   GET  /api/ping
- *   GET  /api/profiles
- *   POST /api/profiles/{id}/lock      {"device": "..."}
+ *   GET  /api/profiles[?tombstones=1]      (tombstones=1 also lists deleted profiles)
+ *   POST /api/profiles/{id}/lock      {"device": "...", "restore": false}  (410 for a deleted profile unless restore)
  *   POST /api/profiles/{id}/unlock
  *   PUT  /api/profiles/{id}/blob?version=N   (body = encrypted blob)
  *   POST /api/profiles/{id}/commit    {"id","name","version","sha256","meta"}
  *   GET  /api/profiles/{id}/blob[?version=N]   (N = current or a kept older version)
  *   GET  /api/profiles/{id}/history
  *   PUT  /api/profiles/{id}/refs      (under lease: newline-separated chunk IDs of this upload)
- *   POST /api/profiles/{id}/delete
+ *   POST /api/profiles/{id}/delete    {"force": false} -> leaves a tombstone so other devices delete their copy
  *   POST /api/chunks/missing          {"ids": [...]}  -> {"missing": [...]}
  *   PUT  /api/chunks                  framed: (64-hex id, uint32 BE length, GBC1 data)*
  *   POST /api/chunks/get              {"ids": [...]}  -> framed, same layout
@@ -38,6 +38,7 @@ const GHOST_USERS = [                   // extra users, each with an isolated da
     // 'another-random-token-of-32-or-more-characters' => 'alice',
 ];
 const GHOST_MAX_FAILS = 10;             // wrong tokens per IP within 15 minutes before a 15-minute block
+const GHOST_TOMBSTONE_DAYS = 90;        // how long a deleted profile's tombstone is kept so every device learns about it
 // ----------------------------------------------------------------------
 
 error_reporting(E_ALL);
@@ -75,6 +76,7 @@ function gs_cfg(): array
         'max' => max(1, (int)$env('GHOST_SYNC_MAX_BLOB_MB', GHOST_MAX_BLOB_MB)) * 1048576,
         'ttl' => max(60, min(3600, (int)$env('GHOST_SYNC_LEASE_SECONDS', GHOST_LEASE_SECONDS))),
         'keep' => max(1, min(50, (int)$env('GHOST_SYNC_KEEP_VERSIONS', GHOST_KEEP_VERSIONS))),
+        'tomb' => max(1, min(3650, (int)$env('GHOST_SYNC_TOMBSTONE_DAYS', GHOST_TOMBSTONE_DAYS))) * 86400,
         'base' => $dir,
     ];
 }
@@ -250,6 +252,30 @@ function gs_view(array $r): array
         'updatedAt' => (int)$r['updated_at'], 'size' => (int)($r['size'] ?? 0), 'device' => (string)($r['device'] ?? ''), 'deviceName' => (string)($r['device_name'] ?? '')];
 }
 
+function gs_is_tomb(?array $r): bool { return is_array($r) && !empty($r['deleted']); }
+
+function gs_tomb_view(array $r): array
+{
+    return ['id' => $r['id'], 'name' => $r['name'], 'version' => (int)$r['version'], 'deleted' => true,
+        'deletedAt' => (int)($r['deleted_at'] ?? 0), 'deletedBy' => (string)($r['deleted_by'] ?? ''),
+        'deletedByName' => (string)($r['deleted_by_name'] ?? ''), 'updatedAt' => (int)$r['updated_at'], 'lockedBy' => '', 'sha256' => '', 'size' => 0, 'meta' => new stdClass()];
+}
+
+/** 410 for a profile that was deleted from the cloud (tombstone). */
+function gs_tomb_fail(array $r): GsFail
+{
+    $who = (string)($r['deleted_by_name'] ?? '') ?: (string)($r['deleted_by'] ?? '') ?: '另一台设备';
+    return new GsFail(410, '该环境已在「' . $who . '」于 ' . gmdate('Y-m-d H:i', (int)($r['deleted_at'] ?? 0)) . ' (UTC) 从云端删除。');
+}
+
+/** Drop tombstones older than the configured retention. */
+function gs_purge_tombs(array $c, array &$idx): void
+{
+    foreach ($idx['profiles'] as $k => $r) {
+        if (gs_is_tomb($r) && (int)($r['deleted_at'] ?? 0) < time() - $c['tomb'] && (int)$r['lock_until'] <= time()) unset($idx['profiles'][$k]);
+    }
+}
+
 function gs_blank(string $id): array
 {
     return ['id' => $id, 'name' => '', 'version' => 0, 'sha256' => '', 'meta' => [], 'updated_at' => 0, 'size' => 0, 'device' => '',
@@ -348,7 +374,8 @@ function gs_serve(): void
         $limits = array_filter([$c['max'], gs_ini_bytes('post_max_size')]);
         $free = @disk_free_space($c['dir']);
         gs_reply(200, ['ok' => true, 'service' => 'ghostbrowser-sync', 'protocol' => 2, 'single' => true, 'time' => time(),
-            'user' => $user, 'features' => ['chunks', 'history', 'multiuser'], 'keepVersions' => $c['keep'],
+            'user' => $user, 'features' => ['chunks', 'history', 'multiuser', 'tombstones'], 'keepVersions' => $c['keep'],
+            'tombstoneDays' => (int)($c['tomb'] / 86400),
             'maxBody' => $limits ? min($limits) : 0, 'usedBytes' => gs_dir_size($c['dir']),
             'freeBytes' => $free === false ? -1 : (int)$free]);
     }
@@ -406,9 +433,15 @@ function gs_serve(): void
         exit;
     }
     if ($path === '/api/profiles' && $method === 'GET') {
-        $list = gs_tx($c, function (array &$idx) {
+        $tombs = ($_GET['tombstones'] ?? '') === '1';
+        $list = gs_tx($c, function (array &$idx) use ($c, $tombs) {
+            gs_purge_tombs($c, $idx);
             $out = [];
-            foreach ($idx['profiles'] as $r) if ((int)$r['version'] > 0) $out[] = gs_view($r);
+            // Old clients never ask for tombstones and so never see deleted profiles.
+            foreach ($idx['profiles'] as $r) {
+                if (gs_is_tomb($r)) { if ($tombs) $out[] = gs_tomb_view($r); }
+                elseif ((int)$r['version'] > 0) $out[] = gs_view($r);
+            }
             usort($out, function ($a, $b) { return [$b['updatedAt'], $a['id']] <=> [$a['updatedAt'], $b['id']]; });
             return $out;
         });
@@ -423,11 +456,15 @@ function gs_serve(): void
         $b = gs_body();
         $device = $b['device'] ?? null;
         if (!is_string($device) || !preg_match('/^[a-zA-Z0-9_-]{1,128}$/D', $device)) throw new GsFail(400, 'Invalid device ID.');
+        $restore = ($b['restore'] ?? false) === true;
         $ticket = bin2hex(random_bytes(32));
-        $v = gs_tx($c, function (array &$idx) use ($c, $id, $device, $ticket, $ttl) {
+        $v = gs_tx($c, function (array &$idx) use ($c, $id, $device, $ticket, $ttl, $restore) {
             $r = $idx['profiles'][$id] ?? gs_blank($id);
+            // A stale device must not silently bring a deleted profile back.
+            if (gs_is_tomb($r) && !$restore) throw gs_tomb_fail($r);
             if ((int)$r['lock_until'] > time() && $r['lock_device'] !== $device) throw new GsFail(423, 'Profile is locked by another sync operation.');
             gs_clear_pending($c, $r);
+            $r['lock_restore'] = gs_is_tomb($r) && $restore;
             $r['lock_device'] = $device;
             $r['lock_hash'] = hash('sha256', $ticket);
             $r['lock_until'] = time() + $ttl;
@@ -498,6 +535,7 @@ function gs_serve(): void
     }
     if ($action === 'history' && $method === 'GET') {
         $r = gs_tx($c, function (array &$idx) use ($id) { return $idx['profiles'][$id] ?? null; });
+        if (gs_is_tomb($r)) throw gs_tomb_fail($r);
         if (!$r || (int)$r['version'] === 0) throw new GsFail(404, 'Profile has no committed blob.');
         $out = [['version' => (int)$r['version'], 'size' => (int)$r['size'], 'updatedAt' => (int)$r['updated_at'], 'deviceName' => (string)($r['device_name'] ?? ''), 'current' => true]];
         foreach ($r['history'] ?? [] as $h) {
@@ -529,6 +567,7 @@ function gs_serve(): void
             (($b['meta']['encrypted'] ?? null) !== true)) throw new GsFail(400, 'Invalid commit metadata.');
         $idx = gs_tx($c, function (array &$idx) use ($c, $id, $b) {
             $r = gs_lease($idx, $id);
+            if (gs_is_tomb($r) && empty($r['lock_restore'])) throw gs_tomb_fail($r);
             if ((int)$r['version'] + 1 !== $b['version'] || (int)$r['pending_base'] !== (int)$r['version']) throw new GsFail(412, 'Version conflict.');
             if (!$r['pending_path'] || !hash_equals((string)$r['pending_sha'], $b['sha256'])) throw new GsFail(409, 'Upload SHA-256 does not match the commit.');
             $src = $c['dir'] . '/tmp/' . $r['pending_path'];
@@ -567,6 +606,7 @@ function gs_serve(): void
             $r['lock_until'] = 0;
             $r['pending_path'] = $r['pending_sha'] = null;
             $r['pending_size'] = $r['pending_base'] = null;
+            unset($r['deleted'], $r['deleted_at'], $r['deleted_by'], $r['deleted_by_name'], $r['lock_restore']);
             $idx['profiles'][$id] = $r;
             return $idx;
         });
@@ -576,6 +616,7 @@ function gs_serve(): void
     }
     if ($action === 'blob' && $method === 'GET') {
         $r = gs_tx($c, function (array &$idx) use ($id) { return $idx['profiles'][$id] ?? null; });
+        if (gs_is_tomb($r)) throw gs_tomb_fail($r);
         if (!$r || (int)$r['version'] === 0) throw new GsFail(404, 'Profile has no committed blob.');
         $want = $_GET['version'] ?? '';
         if (is_string($want) && $want !== '' && (int)$want !== (int)$r['version']) {
@@ -599,15 +640,43 @@ function gs_serve(): void
         exit;
     }
     if ($action === 'delete' && $method === 'POST') {
-        $idx = gs_tx($c, function (array &$idx) use ($c, $id) {
+        $b = gs_body();
+        $force = ($b['force'] ?? false) === true;
+        $me = gs_header('X-Device-ID');
+        $res = gs_tx($c, function (array &$idx) use ($c, $id, $force, $me) {
+            gs_purge_tombs($c, $idx);
             $r = $idx['profiles'][$id] ?? null;
-            if ($r && (int)$r['lock_until'] > time()) throw new GsFail(423, 'Profile is being synced.');
-            if ($r) { gs_clear_pending($c, $r); unset($idx['profiles'][$id]); }
-            return $idx;
+            if (gs_is_tomb($r)) return ['idx' => $idx, 'state' => 'already', 'version' => (int)$r['version']];
+            if (!$r || (int)$r['version'] === 0) {
+                if ($r && (int)$r['lock_until'] > time() && $r['lock_device'] !== $me && !$force) throw new GsFail(423, '该环境正在被另一台设备上传，暂时不能删除；稍后重试或选择强制删除。');
+                if ($r) { gs_clear_pending($c, $r); unset($idx['profiles'][$id]); }
+                return ['idx' => $idx, 'state' => 'absent', 'version' => 0];
+            }
+            if ((int)$r['lock_until'] > time() && $r['lock_device'] !== $me && !$force) {
+                throw new GsFail(423, '该环境正在被另一台设备（' . $r['lock_device'] . '）同步，暂时不能删除；稍后重试或选择强制删除。');
+            }
+            gs_clear_pending($c, $r);
+            // Tombstone: the entry stays (without data) so other devices learn
+            // about the deletion and stale uploads are refused.
+            $r['version'] = (int)$r['version'] + 1;
+            $r['sha256'] = '';
+            $r['size'] = 0;
+            $r['history'] = [];
+            $r['meta'] = [];
+            $r['deleted'] = true;
+            $r['deleted_at'] = time();
+            $r['deleted_by'] = $me;
+            $r['deleted_by_name'] = substr(rawurldecode(gs_header('X-Device-Name')), 0, 128);
+            $r['updated_at'] = time();
+            $r['lock_device'] = $r['lock_hash'] = '';
+            $r['lock_until'] = 0;
+            $r['lock_restore'] = false;
+            $idx['profiles'][$id] = $r;
+            return ['idx' => $idx, 'state' => 'deleted', 'version' => $r['version']];
         });
-        gs_gc($c, $idx);
+        gs_gc($c, $res['idx']);
         gs_chunk_gc($c, true);
-        gs_reply(200, ['ok' => true]);
+        gs_reply(200, ['ok' => true, 'state' => $res['state'], 'version' => $res['version']]);
     }
     header('Allow: ' . ($action === 'blob' ? 'GET, PUT' : ($action === 'history' ? 'GET' : ($action === 'refs' ? 'PUT' : 'POST'))));
     throw new GsFail(405, 'Method not allowed.');

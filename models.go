@@ -159,6 +159,8 @@ type Settings struct {
 	KernelURL    string `json:"kernelUrl,omitempty"`
 	// 多窗口同步器: last options and selections of the dialog.
 	Syncer *SyncerPrefs `json:"syncer,omitempty"`
+	// cloud delete: last choice in the delete dialog ("local" | "cloud").
+	DeleteMode string `json:"deleteMode,omitempty"`
 }
 
 type RunState struct {

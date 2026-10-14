@@ -279,6 +279,9 @@ func syncStatus(resp *http.Response) error {
 	if resp.StatusCode == 413 {
 		return errBodyTooLarge{front: !strings.Contains(string(b), `"error"`)}
 	}
+	if resp.StatusCode == 410 || resp.StatusCode == 423 {
+		return cloudStatusErr(resp.StatusCode, b)
+	}
 	return fmt.Errorf("sync HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
 }
 
@@ -315,6 +318,11 @@ type cloudMeta struct {
 	Updated int64           `json:"updatedAt"`
 	Size    int64           `json:"size"`
 	Device  string          `json:"deviceName"`
+	// Tombstones (?tombstones=1): the profile was deleted from the cloud.
+	Deleted       bool   `json:"deleted,omitempty"`
+	DeletedAt     int64  `json:"deletedAt,omitempty"`
+	DeletedByName string `json:"deletedByName,omitempty"`
+	DeletedBy     string `json:"deletedBy,omitempty"`
 }
 
 func syncReady(st Settings, password bool) error {
@@ -468,7 +476,8 @@ func (s *Store) pushProfileInner(id string, sent *int64, t *transfer) error {
 		Token   string `json:"lockToken"`
 		Version int64  `json:"version"`
 	}
-	if e = c.jsonRequest("POST", path+"/lock", map[string]string{"device": st.DeviceID}, &lease); e != nil {
+	_, restore := restorePush.LoadAndDelete(id)
+	if e = c.jsonRequest("POST", path+"/lock", map[string]any{"device": st.DeviceID, "restore": restore}, &lease); e != nil {
 		return fmt.Errorf("lock: %w", e)
 	}
 	if lease.Token == "" {
@@ -481,6 +490,9 @@ func (s *Store) pushProfileInner(id string, sent *int64, t *transfer) error {
 			_ = c.jsonRequest("POST", path+"/unlock", map[string]any{}, nil)
 		}
 	}()
+	if restore && lease.Version > p.CloudVer {
+		p.CloudVer = lease.Version // recreate over the tombstone
+	}
 	if lease.Version != p.CloudVer {
 		return fmt.Errorf("conflict: cloud is v%d, local is v%d; pull first", lease.Version, p.CloudVer)
 	}
@@ -677,6 +689,7 @@ func (s *Store) pullProfileInner(id string, want int64, got *int64, t *transfer)
 		return fmt.Errorf("restore failed: %w", e)
 	}
 	s.PutProfile(p)
+	s.clearLocalDeleted(id) // restored on purpose: auto sync may follow it again
 	if chunked {
 		saveSyncCache(root, id, man.Files)
 	} else {
@@ -708,14 +721,10 @@ func (s *Store) ListCloud() ([]cloudMeta, error) {
 	return out, e
 }
 
-// listCloudAll includes the reserved global-data record.
+// listCloudAll includes the reserved global-data record (live entries only).
 func (s *Store) listCloudAll() ([]cloudMeta, error) {
-	var out []cloudMeta
-	e := s.sync().jsonRequest("GET", "/api/profiles", nil, &out)
-	if out == nil {
-		out = []cloudMeta{}
-	}
-	return out, e
+	live, _, e := s.listCloudFull()
+	return live, e
 }
 
 func (s *Store) TestSync() error {

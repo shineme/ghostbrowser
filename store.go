@@ -20,6 +20,7 @@ type Store struct {
 	Proxies  map[string]*Proxy
 	Settings Settings
 	Global   GlobalSyncState
+	CloudDel cloudDeleteState // cloud-aware deletion: local-only markers, queued cloud deletes
 
 	onTransfer func(TransferEvent)
 	bodyCap    atomic.Int64 // largest upload body the sync server accepted after a 413
@@ -93,6 +94,7 @@ type diskData struct {
 	Proxies  []*Proxy        `json:"proxies"`
 	Settings Settings        `json:"settings"`
 	Global   GlobalSyncState `json:"globalSync"`
+	CloudDel cloudDeleteState `json:"cloudDelete"`
 }
 
 func (s *Store) file() string { return filepath.Join(s.dir, "data.json") }
@@ -114,10 +116,11 @@ func (s *Store) load() {
 	}
 	s.Settings = d.Settings
 	s.Global = d.Global
+	s.CloudDel = d.CloudDel
 }
 
 func (s *Store) saveLocked() {
-	d := diskData{Settings: s.Settings, Global: s.Global}
+	d := diskData{Settings: s.Settings, Global: s.Global, CloudDel: s.CloudDel}
 	for _, p := range s.Profiles {
 		d.Profiles = append(d.Profiles, p)
 	}

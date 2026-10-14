@@ -51,7 +51,7 @@ func (a *App) startup(ctx context.Context) {
 		println("mcp:", err.Error())
 	}
 	// Server-first reconcile on start-up, off the UI thread.
-	go func() { time.Sleep(800 * time.Millisecond); a.auto.Reconcile(); a.auto.WatchGlobal() }()
+	go func() { time.Sleep(800 * time.Millisecond); a.auto.Reconcile(); go a.auto.WatchDeletes(); a.auto.WatchGlobal() }()
 	go a.proxyHealthLoop()
 }
 
@@ -107,16 +107,10 @@ func (a *App) saveProfile(p Profile) (Profile, error) {
 	return a.store.PutProfile(p), nil
 }
 
+// DeleteProfiles deletes profiles on this device only (cloud copies stay and
+// are not downloaded again). See DeleteProfilesMode for cloud deletion.
 func (a *App) DeleteProfiles(ids []string) {
-	for _, id := range ids {
-		name := ""
-		if p, ok := a.store.GetProfile(id); ok {
-			name = p.Name
-		}
-		runReg.stop(id)
-		a.store.DeleteProfile(id)
-		a.store.auditNamed("ui", "profile.delete", id, name, nil, "")
-	}
+	a.syncer().DeleteProfiles("ui", ids, "local", false)
 }
 
 // CreateProfiles creates count desktop profiles named prefix-N with fresh fingerprints.
@@ -278,7 +272,10 @@ func (a *App) StartProfile(id string) (*RunState, error) {
 		rs, _ := runReg.get(id)
 		return rs, nil
 	}
-	a.auto.BeforeLaunch(id)
+	if err := a.auto.BeforeLaunch(id); err != nil {
+		a.store.auditNamed("ui", "profile.start", id, "", err, "")
+		return nil, err
+	}
 	rs, err := a.store.Launch(id)
 	a.store.auditProfile("ui", "profile.start", id, err, "")
 	return rs, err
@@ -1178,3 +1175,39 @@ func (a *App) FinalizeRecording(steps []RpaStep, opts RecordFinalizeOptions) Rec
 	recordings.mu.Unlock()
 	return finalizeRecording(steps, opts, secrets)
 }
+
+// ---- cloud delete ----
+
+func (a *App) syncer() *autoSyncer {
+	if a.auto != nil {
+		return a.auto
+	}
+	return &autoSyncer{s: a.store, busy: map[string]bool{}}
+}
+
+// DeleteProfilesMode deletes profiles locally ("local") or on every device
+// ("cloud"). force deletes even when another device holds the sync lease.
+func (a *App) DeleteProfilesMode(ids []string, mode string, force bool) []DeleteResult {
+	if mode != "cloud" {
+		mode = "local"
+	}
+	st := a.store.GetSettings()
+	if st.DeleteMode != mode {
+		st.DeleteMode = mode
+		a.store.PutSettings(st)
+	}
+	return a.syncer().DeleteProfiles("ui", ids, mode, force)
+}
+
+// CloudOnly lists cloud profiles without a local copy (including ones deleted
+// here with "only local" and queued cloud deletes).
+func (a *App) CloudOnly() CloudOnlyList { return a.store.CloudOnly() }
+
+// RestoreLocalDeleted downloads a profile that was deleted only on this device.
+func (a *App) RestoreLocalDeleted(id string) error { return a.store.RestoreLocalDeleted(id) }
+
+// PendingCloudDeletes is the number of cloud deletes waiting for the server.
+func (a *App) PendingCloudDeletes() int { return len(a.store.pendingDeletes()) }
+
+// RetryCloudDeletes sends queued cloud deletes now; returns how many are left.
+func (a *App) RetryCloudDeletes() int { return a.syncer().RetryPendingDeletes() }

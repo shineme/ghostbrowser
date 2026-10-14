@@ -151,8 +151,9 @@ func (a *localAPI) handleLaunchJSON(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
-	if globalAuto != nil {
-		globalAuto.BeforeLaunch(p.ID)
+	if err := globalAuto.BeforeLaunch(p.ID); err != nil {
+		http.Error(w, err.Error(), 410)
+		return
 	}
 	rs, err := a.store.Launch(p.ID)
 	if err != nil {
@@ -197,8 +198,9 @@ func (a *localAPI) handleStart(w http.ResponseWriter, r *http.Request) {
 	if id == "" {
 		id = r.URL.Query().Get("uuid")
 	}
-	if globalAuto != nil {
-		globalAuto.BeforeLaunch(id)
+	if err := globalAuto.BeforeLaunch(id); err != nil {
+		writeJSON(w, map[string]any{"status": "error", "error": err.Error()})
+		return
 	}
 	rs, err := a.store.Launch(id)
 	a.store.auditProfile("api", "profile.start", id, err, "")

@@ -112,9 +112,21 @@ type SyncPrompt struct {
 type syncDecision struct{ pull map[string]bool }
 
 func (a *autoSyncer) plan() (prompt, auto []SyncItem, cloud map[string]cloudMeta, err error) {
-	all, err := a.s.listCloudAll()
+	all, tombs, err := a.s.listCloudFull()
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	// Profiles deleted from the cloud on another device: remove local copies first.
+	a.applyTombstones(tombs)
+	marks, pend := a.s.localDeleted(), a.s.pendingDeletes()
+	known := map[string]bool{}
+	for _, c := range all {
+		known[c.ID] = true
+	}
+	for id := range marks {
+		if !known[id] {
+			a.s.clearLocalDeleted(id) // the cloud copy is gone: nothing left to ignore
+		}
 	}
 	cloud = map[string]cloudMeta{}
 	list := []cloudMeta{}
@@ -151,6 +163,8 @@ func (a *autoSyncer) plan() (prompt, auto []SyncItem, cloud map[string]cloudMeta
 		p, ok := local[c.ID]
 		it := SyncItem{ID: c.ID, Name: c.Name, Action: "pull", CloudVersion: c.Version, CloudUpdated: c.Updated, CloudDevice: c.Device, Size: c.Size}
 		switch {
+		case !ok && (marks[c.ID].DeletedAt != 0 || pend[c.ID].QueuedAt != 0):
+			// Deleted on this device ("only local") or a cloud delete is queued: never pull back.
 		case !ok:
 			it.Reason = "missing_local" // nothing local to overwrite
 			auto = append(auto, it)
@@ -201,6 +215,7 @@ func (a *autoSyncer) Reconcile() SyncEvent {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.emit(SyncEvent{Phase: "start", Message: "正在对比云端与本地环境"})
+	a.RetryPendingDeletes()
 	prompt, auto, _, err := a.plan()
 	if err != nil {
 		ev := SyncEvent{Phase: "error", Error: err.Error(), Message: "无法连接同步服务器，使用本地数据"}
@@ -376,18 +391,25 @@ func (a *autoSyncer) Decide(pull []string) bool {
 
 // BeforeLaunch pulls a profile when the server has a newer version, unless
 // the local copy has unsynced changes or the user chose to keep it.
-// Network problems never block the launch; the local copy is used.
-func (a *autoSyncer) BeforeLaunch(id string) {
-	if !a.enabled() {
-		return
+// Network problems never block the launch; the local copy is used. A profile
+// deleted from the cloud on another device is removed and refused.
+func (a *autoSyncer) BeforeLaunch(id string) error {
+	if a == nil || !a.enabled() {
+		return nil
 	}
 	p, ok := a.s.GetProfile(id)
 	if !ok {
-		return
+		return nil
 	}
-	cloud, err := a.s.ListCloud()
+	cloud, tombs, err := a.s.listCloudFull()
 	if err != nil {
-		return
+		return nil
+	}
+	for _, t := range tombs {
+		if t.ID == id && (t.Version == 0 || p.CloudVer < t.Version) {
+			a.applyTombstones([]cloudMeta{t})
+			return fmt.Errorf("环境「%s」已在 %s 从云端删除，已同步删除本机副本，无法启动", p.Name, tombDevice(t))
+		}
 	}
 	for _, c := range cloud {
 		if c.ID != id || c.Version <= p.CloudVer || c.Version == p.KeepLocal {
@@ -407,6 +429,7 @@ func (a *autoSyncer) BeforeLaunch(id string) {
 			a.emit(ev)
 		}
 	}
+	return nil
 }
 
 // AfterExit pushes a profile as soon as its browser has closed.
@@ -428,7 +451,17 @@ func (a *autoSyncer) AfterExit(id string) {
 		} else {
 			return // deleted
 		}
+		if t, ok := takeExitDelete(id); ok { // deleted in the cloud while it ran
+			a.release(id)
+			a.removeForTomb(t)
+			return
+		}
 		e := retry(3, a.push, id)
+		if isCloudDeleted(e) { // deleted on another device since the last list
+			a.release(id)
+			a.removeForTomb(cloudMeta{ID: id, DeletedByName: "另一台设备"})
+			return
+		}
 		ev := SyncEvent{Phase: "item", ID: id, Name: name, Action: "push"}
 		if e != nil {
 			ev.Error = e.Error()
@@ -446,8 +479,8 @@ func retry(n int, f func(string) error, id string) error {
 		if e = f(id); e == nil {
 			return nil
 		}
-		if isConflict(e) {
-			return e // retrying cannot fix a version conflict
+		if isConflict(e) || isCloudDeleted(e) {
+			return e // retrying cannot fix a version conflict or a cloud deletion
 		}
 		time.Sleep(time.Duration(i+1) * 2 * time.Second)
 	}
