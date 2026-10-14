@@ -186,6 +186,10 @@ export function GetSettings() {
   return window['go']['main']['App']['GetSettings']();
 }
 
+export function GetSyncerPrefs() {
+  return window['go']['main']['App']['GetSyncerPrefs']();
+}
+
 export function ImportCookies(arg1, arg2, arg3) {
   return window['go']['main']['App']['ImportCookies'](arg1, arg2, arg3);
 }
@@ -318,6 +322,10 @@ export function NewFingerprint(arg1) {
   return window['go']['main']['App']['NewFingerprint'](arg1);
 }
 
+export function NormalizeSyncURL(arg1) {
+  return window['go']['main']['App']['NormalizeSyncURL'](arg1);
+}
+
 export function OpenWorkflowFile() {
   return window['go']['main']['App']['OpenWorkflowFile']();
 }
@@ -410,6 +418,10 @@ export function SaveSettings(arg1) {
   return window['go']['main']['App']['SaveSettings'](arg1);
 }
 
+export function SaveSyncerPrefs(arg1) {
+  return window['go']['main']['App']['SaveSyncerPrefs'](arg1);
+}
+
 export function SaveWorkflow(arg1) {
   return window['go']['main']['App']['SaveWorkflow'](arg1);
 }
@@ -428,6 +440,10 @@ export function SetProfileExtensions(arg1, arg2) {
 
 export function SetProfilesGroup(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetProfilesGroup'](arg1, arg2, arg3);
+}
+
+export function SetSyncOptions(arg1) {
+  return window['go']['main']['App']['SetSyncOptions'](arg1);
 }
 
 export function SpeedTestProxies(arg1) {
@@ -484,6 +500,10 @@ export function SyncNow() {
 
 export function SyncServerInfo() {
   return window['go']['main']['App']['SyncServerInfo']();
+}
+
+export function SyncTabAction(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['SyncTabAction'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function SyncerState() {

@@ -94,6 +94,8 @@ export function GPUOptions(arg1:string):Promise<Array<Record<string, string>>>;
 
 export function GetSettings():Promise<main.Settings>;
 
+export function GetSyncerPrefs():Promise<main.SyncerPrefs>;
+
 export function ImportCookies(arg1:string,arg2:string,arg3:string):Promise<main.CookieImportResult>;
 
 export function ImportNativeJSON(arg1:string):Promise<main.Profile>;
@@ -160,6 +162,8 @@ export function NewDeviceFingerprint(arg1:string,arg2:string):Promise<main.Finge
 
 export function NewFingerprint(arg1:string):Promise<main.Fingerprint>;
 
+export function NormalizeSyncURL(arg1:string):Promise<string>;
+
 export function OpenWorkflowFile():Promise<string>;
 
 export function ParseProxy(arg1:string):Promise<main.Proxy>;
@@ -206,6 +210,8 @@ export function SaveProxy(arg1:main.Proxy):Promise<main.Proxy>;
 
 export function SaveSettings(arg1:main.Settings):Promise<main.Settings>;
 
+export function SaveSyncerPrefs(arg1:main.SyncerPrefs):Promise<main.SyncerPrefs>;
+
 export function SaveWorkflow(arg1:main.Workflow):Promise<main.Workflow>;
 
 export function SaveWorkflowFile(arg1:string):Promise<string>;
@@ -215,6 +221,8 @@ export function ScreenOptions(arg1:string):Promise<Array<string>>;
 export function SetProfileExtensions(arg1:string,arg2:Array<string>):Promise<void>;
 
 export function SetProfilesGroup(arg1:Array<string>,arg2:string,arg3:string):Promise<number>;
+
+export function SetSyncOptions(arg1:main.SyncOptions):Promise<main.SyncerState>;
 
 export function SpeedTestProxies(arg1:Array<string>):Promise<Array<main.Proxy>>;
 
@@ -243,6 +251,8 @@ export function SyncLog():Promise<Array<main.SyncLogEntry>>;
 export function SyncNow():Promise<main.SyncEvent>;
 
 export function SyncServerInfo():Promise<main.serverInfo>;
+
+export function SyncTabAction(arg1:string,arg2:Array<string>,arg3:string,arg4:string,arg5:boolean):Promise<main.TabActionResult>;
 
 export function SyncerState():Promise<main.SyncerState>;
 
