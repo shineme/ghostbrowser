@@ -161,6 +161,12 @@ type Settings struct {
 	Syncer *SyncerPrefs `json:"syncer,omitempty"`
 	// cloud delete: last choice in the delete dialog ("local" | "cloud").
 	DeleteMode string `json:"deleteMode,omitempty"`
+	// app shell: tray, updater, site shortcuts catalog.
+	CloseToTrayOff bool   `json:"closeToTrayOff,omitempty"` // closing the window quits instead of hiding to the tray
+	UpdateAutoOff  bool   `json:"updateAutoOff,omitempty"`  // no automatic update check (start + every 6 h)
+	UpdateURL      string `json:"updateUrl,omitempty"`      // custom latest.json URL ("" = the sync server)
+	UpdateGitHub   string `json:"updateGithub,omitempty"`   // fallback: owner/repo of a PUBLIC GitHub repo with releases
+	CatalogURL     string `json:"catalogUrl,omitempty"`     // custom catalog.json URL ("" = the sync server)
 }
 
 type RunState struct {
