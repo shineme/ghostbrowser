@@ -343,7 +343,7 @@ var geoSources = []geoSource{
 	{"ipwho.is", "https://ipwho.is/", parseIPWho},
 	{"ipapi.co", "https://ipapi.co/json/", parseIPAPICo},
 	{"ip.sb", "https://api.ip.sb/geoip", parseIPSB},
-	{"realip.cc", "https://realip.cc/", parseRealIP},
+	{"realip.cc", "https://realip.cc/json", parseRealIP},
 }
 
 // geoChainBudget caps the whole chain so a dead proxy is not tried five times
