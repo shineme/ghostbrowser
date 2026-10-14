@@ -535,6 +535,8 @@ func TestSecAdminPage(t *testing.T) {
 	}
 	_, _ = a.SetupRecovery()
 	_, _ = env.dev("bob", "B", "bob-password").ListCloud()
+	env.raw("bob", "PUT", "/api/keys", "dev-bob-B", `{"envelope":{"v":1},"epoch":5}`, nil) // 409, shows under 最近错误
+	env.raw("owner", "POST", "/api/shares", "dev-owner-A", `{"to":"bob","days":400}`, nil)
 	code, body := env.raw("", "GET", "/admin", "", "", nil)
 	if code != 200 || !strings.Contains(body, "管理令牌") || strings.Contains(body, "bob") {
 		t.Fatalf("login page: %d", code)
