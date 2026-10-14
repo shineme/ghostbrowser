@@ -332,3 +332,68 @@ func TestRpaStorePersist(t *testing.T) {
 		t.Fatalf("delete: %v", err)
 	}
 }
+
+type fakeCloser struct{ *fakeDriver }
+
+func (fakeCloser) Close() {}
+
+func TestRpaServiceRun(t *testing.T) {
+	dir := t.TempDir()
+	evs := make(chan RpaEvent, 100)
+	svc := &rpaService{
+		db: newRpaStore(dir), dir: dir,
+		profile: func(id string) (*Profile, bool) { return &Profile{ID: id, Name: "P-" + id}, id != "gone" },
+		session: func(id string) (string, bool) { return "ws://x/" + id, id == "open" },
+		start:   func(string) (string, error) { return "", errors.New("no") },
+		stop:    func(string) {},
+		emit:    func(e RpaEvent) { evs <- e },
+		newDriver: func(string) (rpaDriverCloser, error) {
+			f := newFake()
+			f.texts["h1"] = "Title"
+			return fakeCloser{f}, nil
+		},
+		cancels: map[string]context.CancelFunc{},
+	}
+	w, err := svc.db.Put(Workflow{Name: "w", Steps: []RpaStep{st(stGoto, "url", "a.com"), st(stExtractText, "selector", "h1", "var", "t")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Run(w.ID, nil, RpaRunOptions{}); err == nil {
+		t.Fatal("run with no profiles should fail")
+	}
+	runID, err := svc.Run(w.ID, []string{"open", "closed", "open"}, RpaRunOptions{Concurrency: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.After(5 * time.Second)
+	for done := false; !done; {
+		select {
+		case e := <-evs:
+			done = e.Phase == "run" && e.Status != "running"
+		case <-deadline:
+			t.Fatal("run did not finish")
+		}
+	}
+	r, ok := svc.db.Run(runID)
+	if !ok || r.Status != "partial" || len(r.Targets) != 2 || r.StepCount != 2 {
+		t.Fatalf("run = %+v", r)
+	}
+	for _, tg := range r.Targets {
+		switch tg.ProfileID {
+		case "open":
+			if tg.Status != "ok" || tg.Vars["t"] != "Title" || len(tg.Steps) != 2 || tg.ProfileName != "P-open" {
+				t.Fatalf("open target = %+v", tg)
+			}
+		case "closed":
+			if tg.Status != "failed" || !strings.Contains(tg.Error, "未打开") {
+				t.Fatalf("closed target = %+v", tg)
+			}
+		}
+	}
+	if got, _ := svc.db.Get(w.ID); got.LastStatus != "partial" || got.RunCount != 1 || got.LastRunID != runID {
+		t.Fatalf("workflow stats = %+v", got)
+	}
+	if runs := newRpaStore(dir).Runs(w.ID); len(runs) != 1 {
+		t.Fatalf("persisted runs = %d", len(runs))
+	}
+}
