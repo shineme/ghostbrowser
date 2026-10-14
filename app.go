@@ -1237,3 +1237,8 @@ func (a *App) EmptyTrash() int { return a.store.EmptyTrash("ui") }
 
 // TrashDays is how many days deleted profiles are kept.
 func (a *App) TrashDays() int { return trashDays(a.store.GetSettings()) }
+// ---- session store ----
+
+// SessionStoreInfo summarises what the profile's login snapshot carries
+// (cookies incl. partitioned, LocalStorage, IndexedDB) for the UI.
+func (a *App) SessionStoreInfo(id string) SessionStoreInfo { return a.store.SessionStoreInfo(id) }

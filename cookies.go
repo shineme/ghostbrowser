@@ -363,11 +363,16 @@ func readSnapshot(dir string) ([]Cookie, int64) {
 		return nil, 0
 	}
 	var snap struct {
-		SavedAt int64           `json:"savedAt"`
-		Cookies json.RawMessage `json:"cookies"`
+		Schema   int             `json:"schema"`
+		SavedAt  int64           `json:"savedAt"`
+		Cookies  json.RawMessage `json:"cookies"`
+		Cookies2 json.RawMessage `json:"cookies2"` // schema 2 (sessionstore.go)
 	}
-	if json.Unmarshal(b, &snap) != nil {
+	if json.Unmarshal(b, &snap) != nil || snap.Schema > sessionSchema {
 		return nil, 0
+	}
+	if len(snap.Cookies2) > 0 {
+		snap.Cookies = snap.Cookies2
 	}
 	list, _ := cdpCookies(snap.Cookies)
 	now := float64(time.Now().Unix())

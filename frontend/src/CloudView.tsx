@@ -91,7 +91,7 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
       <div className="toolbar">
         <Segmented className="compact" value={tab} onChange={t => { setTab(t); if (t === 'log') loadLog(); }}
           items={[['list', '全部环境'], ['only', only?.length ? `仅云端 · ${only.length}` : '仅云端'], ['log', fails ? `同步日志 · ${fails} 失败` : '同步日志']]} />
-        <div className="sub" style={{ color: 'var(--txt-3)' }}>{cloud.length} 个云端 · {profiles.length - cloud.length} 个本地 · 自动同步{settings!.autoSyncOff ? '已关闭' : '已开启'}</div>
+        <div className="sub" style={{ color: 'var(--txt-3)' }}>{cloud.length} 个云端 · {profiles.length - cloud.length} 个本地 · 自动同步{settings!.autoSyncOff ? '已关闭' : '已开启'}{' · 登录状态：'}{(settings as any).syncSessionStorage === false ? '仅 Cookie' : 'Cookie + LocalStorage + IndexedDB'}</div>
         <div style={{ flex: 1 }} />
         {tab === 'only' && only?.some(i => i.pendingDelete) && <button className="btn sm ghost" onClick={retryDeletes}><Icon.refresh s={13} /> 重试云端删除</button>}
         {tab === 'log' && log.length > 0 && <button className="btn sm ghost" onClick={async () => { await api.ClearSyncLog(); loadLog(); }}><Icon.trash s={13} /> 清空日志</button>}

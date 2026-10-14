@@ -3,6 +3,7 @@ import { api, Settings } from './api';
 import { Icon, Field, Toggle, useToast } from './ui';
 import type { EnvStatus } from './EnvSetup';
 import { KernelInstaller } from './KernelInstall';
+import { SessionScopeChips } from './SessionStore';
 
 const mb = (b: number) => b ? `${(b / 1048576).toFixed(b > 1e8 ? 0 : 1)} MB` : '';
 
@@ -118,6 +119,13 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
           <Field label="云端较新时询问等待（秒）" hint="0 = 不弹窗，直接执行右侧动作"><input type="number" min={0} max={300} value={s.syncPromptSecs ?? 3} onChange={e => set({ syncPromptSecs: Math.max(0, Math.min(300, Math.round(+e.target.value || 0))) })} /></Field>
           <Field label="倒计时结束后"><select value={s.syncPromptAction || 'pull'} onChange={e => set({ syncPromptAction: e.target.value })}><option value="pull">拉取云端覆盖本地</option><option value="keep">保留本地（上传覆盖云端）</option></select></Field>
         </div>}
+        {/* ---- session store ---- */}
+        <Toggle on={(s as any).syncSessionStorage !== false} onChange={v => set({ syncSessionStorage: v } as any)} label="同步网站登录状态（会话存储）" hint="换设备启动时恢复网站登录。除普通 Cookie 外，还同步分区 Cookie、LocalStorage 和 IndexedDB，适合网页应用（SPA）。关闭后只同步普通 Cookie" />
+        <div className={`ss-opts ${(s as any).syncSessionStorage !== false ? '' : 'dim'}`}>
+          <SessionScopeChips on={(s as any).syncSessionStorage !== false} />
+          {(s as any).syncSessionStorage !== false && <Field label="单个环境快照上限（MB）" hint="超出时保留全部 Cookie 和最近访问网站的 LocalStorage，较早网站的 IndexedDB 先舍弃。只采集 http/https 网站，不含扩展页面">
+            <input type="number" min={4} max={256} value={(s as any).sessionStoreCapMB || 32} onChange={e => set({ sessionStoreCapMB: Math.max(4, Math.min(256, Math.round(+e.target.value || 32))) } as any)} /></Field>}
+        </div>
         <Field label="本机设备名"><input type="text" value={s.deviceName} onChange={e => set({ deviceName: e.target.value })} /></Field>
         <button className="btn" onClick={test} disabled={testing}><Icon.refresh s={14} /> {testing ? '测试中…' : '测试连接'}</button>
       </div>

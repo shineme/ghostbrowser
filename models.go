@@ -168,6 +168,10 @@ type Settings struct {
 	DeleteMode string `json:"deleteMode,omitempty"`
 	// Recycle bin: days a deleted profile is kept before it is purged (0 = 30).
 	TrashDays int `json:"trashDays,omitempty"`
+	// session store: also sync LocalStorage / IndexedDB / partitioned cookies
+	// with the login snapshot (nil = on), and its size cap in MB (0 = 32).
+	SyncSessionStorage *bool `json:"syncSessionStorage,omitempty"`
+	SessionStoreCapMB  int   `json:"sessionStoreCapMB,omitempty"`
 }
 
 type RunState struct {

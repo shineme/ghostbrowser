@@ -1,3 +1,4 @@
+import { SessionSnapshotLine } from './SessionStore';
 import React, { useEffect, useRef, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api } from './api';
@@ -89,6 +90,7 @@ export const CookieModal: React.FC<{ profile: { id: string; name: string }; init
               : <span><b>未运行</b><span className="sub"> · 导入的 Cookie 下次启动时写入{info.snapshotAt ? ` · 导出使用 ${ago(info.snapshotAt)}关闭时的快照（${info.snapshot} 条）` : ' · 还没有关闭时的快照'}</span></span>}
             {info && !info.running && info.staged > 0 && <span className="badge warn" style={{ marginLeft: 'auto' }}>待写入 <span className="num">{info.staged}</span></span>}
           </div>
+          <SessionSnapshotLine profileId={profile.id} />
 
           <div className="ck-bar">
             <Segmented value={mode} onChange={m => { setMode(m); setErr(''); setRes(null); }} items={[['import', '导入', <Icon.upload s={14} />], ['export', '导出', <Icon.download s={14} />]]} />

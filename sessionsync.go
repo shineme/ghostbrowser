@@ -27,6 +27,21 @@ func snapshotSession(dir, device, ws string) error {
 	if ws == "" || !strings.HasPrefix(ws, "ws") {
 		return nil
 	}
+	// session store: schema 2 with LocalStorage / IndexedDB / partitioned cookies (sessionstore.go).
+	if on, capBytes := sessionCfg(); on {
+		return snapshotSessionV2(dir, device, ws, true, capBytes)
+	}
+	return snapshotSessionLegacy(dir, device, ws)
+}
+
+// snapshotSessionLegacy writes the schema-1 (cookies only) snapshot.
+func snapshotSessionLegacy(dir, device, ws string) error {
+	if ws == "" || !strings.HasPrefix(ws, "ws") {
+		return nil
+	}
+	if _, err := readSessionFile(dir); err == errSessionSchema {
+		return err // never overwrite a newer client's snapshot
+	}
 	raw, err := exportCookies(ws)
 	if err != nil {
 		return err
@@ -74,6 +89,9 @@ func restoreSession(dir, device, ws string) {
 	if err != nil {
 		return
 	}
+	if restoreSessionAny(b, dir, device, ws) { // schema 2 (sessionstore.go)
+		return
+	}
 	var snap sessionSnap
 	if json.Unmarshal(b, &snap) != nil || snap.Device == device || len(snap.Cookies) == 0 {
 		return
@@ -99,17 +117,18 @@ func restoreSession(dir, device, ws string) {
 // afterStart restores a session from another device and keeps the snapshot
 // fresh while the browser runs (every 15 s, plus before a stop from the app).
 func (s *Store) afterStart(id, ws string) {
+	sessionCfgStore.Store(s)
 	dir := s.ProfileDir(id)
 	device := s.GetSettings().DeviceID
 	restoreSession(dir, device, ws)
 	go func() {
 		time.Sleep(5 * time.Second)
-		for {
+		for n := 1; ; n++ {
 			rs, ok := runReg.get(id)
 			if !ok || rs.WSURL != ws {
 				return
 			}
-			_ = snapshotSession(dir, device, ws)
+			_ = snapshotSessionTick(dir, device, ws, n)
 			time.Sleep(15 * time.Second)
 		}
 	}()
