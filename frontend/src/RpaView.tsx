@@ -146,8 +146,8 @@ export function RpaView({ profiles }: { profiles: Profile[]; reload?: () => void
                 {types.length > 9 && <span className="more num">+{types.length - 9}</span>}
               </div>
               <div className="rc-meta">
-                <span className="num">{n} 步</span><i />
-                <span className="num">运行 {w.runCount || 0} 次</span>
+                <span><b className="num">{n}</b> 步</span><i />
+                <span>运行 <b className="num">{w.runCount || 0}</b> 次</span>
                 <div className="spacer" />
                 {w.lastRunId
                   ? <button className="rc-last" onClick={() => openRun(w)} title="查看运行详情">

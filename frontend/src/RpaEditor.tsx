@@ -235,6 +235,8 @@ const AddMenu: React.FC<{ onPick: (t: string) => void; onClose: () => void; hint
 };
 
 // ---------------- inspector ----------------
+// Backend issue text "<step>：缺少<what>" → the param it refers to.
+const MISSING: Record<string, string> = { 网址: 'url', 选择器: 'selector', 变量名: 'var', 代码: 'code', 判断代码: 'code', 文件路径: 'files', 标签页序号: 'index', 比较值: 'left' };
 const Inspector: React.FC<{ s: RStep; issues: RIssue[]; vars: string[]; onPatch: (fn: (s: RStep) => RStep) => void; onVar: (v: string) => void; onFocusField: (k: string, el: any) => void; onDelete: () => void }> = ({ s, issues, vars, onPatch, onVar, onFocusField, onDelete }) => {
   const def = DEF[s.type];
   const p = s.params || {};
@@ -253,7 +255,7 @@ const Inspector: React.FC<{ s: RStep; issues: RIssue[]; vars: string[]; onPatch:
       </div>
       {issues.length > 0 && <div className="notice bad" style={{ marginBottom: 14 }}><Icon.alert /><span className="grow">{issues.map(i => i.message).join('；')}</span></div>}
       <Field label="步骤名称（可选）"><input type="text" value={s.name || ''} placeholder={def?.label} onFocus={focus('__name')} onChange={e => onPatch(x => ({ ...x, name: e.target.value }))} /></Field>
-      {rows.map((r, i) => <div key={i} className={r.length === 2 ? 'grid2' : ''}>{r.map(f => <ParamField key={f.k} f={f} v={p[f.k] ?? ''} set={v => set(f.k, v)} onFocus={focus(f.k)} bad={issues.some(x => x.message.includes(f.label.replace('元素', '')))} />)}</div>)}
+      {rows.map((r, i) => <div key={i} className={r.length === 2 ? 'grid2' : ''}>{r.map(f => <ParamField key={f.k} f={f} v={p[f.k] ?? ''} set={v => set(f.k, v)} onFocus={focus(f.k)} bad={issues.some(x => MISSING[(x.message.split('缺少')[1] || '').trim()] === f.k)} />)}</div>)}
       {s.type === 'break_loop' && <div className="sub" style={{ marginBottom: 14 }}>没有参数。执行到这里会立即结束最近的一层循环，继续执行循环之后的步骤。</div>}
       {def?.container && <div className="sub insp-tip">{s.type === 'condition' ? '在左侧「则 / 否则」分支里添加要执行的步骤。' : '在左侧「循环体」里添加每一轮要执行的步骤；用「跳出循环」可提前结束。'}</div>}
 
