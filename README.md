@@ -140,7 +140,7 @@ go test -run TestEnsureAgainstRealShop -v .
 - 自动同步：启动时以服务器为准对比；启动环境前拉取云端新版本；关闭浏览器后上传（失败自动重试）；退出软件前等待上传完成
 - 云端版本较新时弹窗倒计时询问，默认动作可在设置里改
 - **同步网站登录状态（会话存储，默认开启）**：浏览器运行时，登录快照（`ghost-session.json`，随环境一起加密同步）除普通 Cookie 外还包含分区 Cookie（CHIPS，保留 partitionKey / SameSite / 过期时间 / Secure / HttpOnly / 域名 / 路径）、每个网站的 LocalStorage 和 IndexedDB；在另一台电脑启动时自动写回，网页应用（SPA）换设备后也保持登录。两种内核（定制内核 / 开源 Chromium）都通过 CDP 实现：
-  - 采集：每 15 秒刷新 Cookie 和已打开网站的 LocalStorage，IndexedDB 每 60 秒及关闭浏览器前采集一次；在隔离环境中读取，网页无法察觉。没打开的网站沿用上次快照（90 天未访问自动清理）；只采集 http/https 网站，不含扩展页面和 chrome:// 页面
+  - 采集：每 15 秒刷新 Cookie 和已打开网站的 LocalStorage，IndexedDB 每 60 秒及关闭浏览器前采集一次；在独立的隔离环境中读取，不经过网页自己的脚本。没打开的网站沿用上次快照（90 天未访问自动清理）；只采集 http/https 网站，不含扩展页面和 chrome:// 页面
   - 恢复：在隐藏标签页里打开对应网站，导航请求被直接拦截返回空白页（不访问网络、不运行网站脚本），再写入 LocalStorage 和 IndexedDB（按原版本号建库、补建表和索引）；之前已打开的同站标签会自动刷新
   - IndexedDB 为尽力恢复：支持字符串、数字、BigInt、日期、正则、ArrayBuffer/TypedArray、Blob/File、Map/Set、嵌套对象和复合主键；无法序列化的值（CryptoKey、文件句柄等）会跳过并标记「部分」
   - 设置 → 云端同步可关闭（关闭后只同步普通 Cookie，与旧版格式相同）并设置单个环境的快照上限（默认 32 MB）：超出时保留全部 Cookie 和最近访问网站的 LocalStorage，较早网站的 IndexedDB 先舍弃；Cookie 弹窗显示快照包含的内容和大小

@@ -127,12 +127,13 @@ func TestSessionStoreLive(t *testing.T) {
 		t.Fatal("cookies not cleared")
 	}
 	before := hits
-	snap.Device = "dev-B"
-	st, err := restoreSessionV2(snap, ws)
-	if err != nil {
-		t.Fatal(err)
+	// The real start-up path: restoreSession sees a snapshot from another
+	// device, restores it and re-takes it under this device's ID.
+	restoreSession(dir, "dev-B", ws)
+	if again, err := readSessionFile(dir); err != nil || again.Device != "dev-B" || again.Schema != 2 || len(again.Origins) != 1 {
+		t.Fatalf("snapshot after restore: %+v %v", again, err)
 	}
-	t.Logf("restore: %+v", st)
+	t.Logf("restore done; server requests during restore: %d", hits-before)
 	if hits != before {
 		t.Fatalf("restore reached the site's server (%d requests); it must be intercepted", hits-before)
 	}
