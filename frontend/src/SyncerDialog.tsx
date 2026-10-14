@@ -246,7 +246,7 @@ export const SyncerDialog: React.FC<{ running: Profile[]; st: SyncerState; onClo
 
   return createPortal(
     <div className={`overlay center sd-ov ${out ? 'out' : ''}`} onMouseDown={e => e.target === e.currentTarget && close()}>
-      <div className={`modal sd ${st.running ? 'live' : ''}`} role="dialog" aria-label="多窗口同步器">
+      <div className={`modal sd ${st.running ? "is-live" : ""}`} role="dialog" aria-label="多窗口同步器">
         <div className="dhead sd-head">
           <div className={`glyph sd-glyph ${st.running ? 'spin' : ''}`}>{G.sync(19)}</div>
           <div className="grow sd-title">
@@ -260,10 +260,10 @@ export const SyncerDialog: React.FC<{ running: Profile[]; st: SyncerState; onClo
         </div>
 
         <div className="dbody sd-body">
-          <div className="sd-note"><span className="sd-note-ic">{G.info(16)}</span><div>
+          {!st.running && <div className="sd-note"><span className="sd-note-ic">{G.info(16)}</span><div>
             <b>主控窗口的网页操作、地址跳转与标签页新建、切换、关闭会复制到受控窗口。</b>
             <span>所有操作仅在本机通过调试协议传递，不经过任何服务器；输入法候选、文件选择框与 iframe 内的操作不会同步。</span>
-          </div></div>
+          </div></div>}
 
           <div className="sd-pickers">
             <div className="sd-field"><label>主控窗口</label>
