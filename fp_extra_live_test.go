@@ -248,3 +248,177 @@ return { f, ws };`
 		t.Errorf("protection off but blocked: %v", got)
 	}
 }
+
+// Media device IDs: aliases stable across launches, different per origin and
+// per seed, getUserMedia accepts the alias (fake capture devices in headless).
+const mediaIDExpr = `
+// A page that saved the alias earlier asks for it before listing devices.
+let early = 'none';
+const saved = localStorage.getItem('cam');
+if (saved) { try { const s = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: saved } } }); early = s.getVideoTracks()[0].getSettings().deviceId === saved ? 'ok' : 'mismatch'; s.getTracks().forEach(t => t.stop()); } catch (e) { early = e.name; } }
+const d = await navigator.mediaDevices.enumerateDevices();
+const cam = d.find(x => x.kind === 'videoinput');
+let gum = 'skip', settingsId = '', capId = '';
+if (cam && cam.deviceId) {
+  try { const s = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: cam.deviceId } } });
+    const tr = s.getVideoTracks()[0]; settingsId = tr.getSettings().deviceId; capId = cam.getCapabilities ? cam.getCapabilities().deviceId : ''; s.getTracks().forEach(t => t.stop()); gum = 'ok'; }
+  catch (e) { gum = e.name + ':' + e.message; }
+}
+const d2 = await navigator.mediaDevices.enumerateDevices();
+if (cam) localStorage.setItem('cam', cam.deviceId);
+return { early, n: d.length, ids: d.map(x => x.deviceId).join(','), groups: d.map(x => x.groupId).join(','), again: d2.map(x => x.deviceId).join(','),
+  cam: cam ? cam.deviceId : '', gum, settingsId, capId, json: cam ? JSON.stringify(cam) : '', isInfo: !!cam && cam instanceof InputDeviceInfo,
+  ts: Function.prototype.toString.call(MediaDevices.prototype.enumerateDevices) };`
+
+// fpLiveSeq launches one browser with user-data-dir udd and evaluates expr on
+// each URL in turn in the same tab (navigations = reloads / origin changes).
+func fpLiveSeq(t *testing.T, fp Fingerprint, udd string, hosts []string, urls []string, expr string) []map[string]any {
+	t.Helper()
+	bin := os.Getenv("GHOST_CHROME")
+	if bin == "" {
+		t.Skip("set GHOST_CHROME to a Chromium binary")
+	}
+	port := freePort()
+	args := append([]string{"--headless=new", "--no-sandbox", "--user-data-dir=" + udd, fmt.Sprintf("--remote-debugging-port=%d", port)}, launchFlags(fp)...)
+	rules := []string{}
+	secure := []string{}
+	for _, h := range hosts {
+		rules = append(rules, "MAP "+h+" 127.0.0.1")
+	}
+	for _, u := range urls {
+		secure = append(secure, strings.TrimSuffix(u, "/"))
+	}
+	args = append(args, "--host-resolver-rules="+strings.Join(rules, ","), "--unsafely-treat-insecure-origin-as-secure="+strings.Join(secure, ","),
+		"--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream")
+	cmd := exec.Command(bin, append(mergeFlags(args), "about:blank")...)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { cmd.Process.Kill(); cmd.Wait() }()
+	ws, err := waitDebugger(port, 20*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	em, err := startEmulation(ws, fp, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer em.Close()
+	c, err := dialCDP(ws, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.c.Close()
+	time.Sleep(300 * time.Millisecond)
+	raw, err := c.call("", "Target.createTarget", map[string]any{"url": "about:blank"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ct struct{ TargetID string }
+	_ = json.Unmarshal(raw, &ct)
+	r, _ := c.call("", "Target.attachToTarget", map[string]any{"targetId": ct.TargetID, "flatten": true})
+	var at struct{ SessionID string }
+	_ = json.Unmarshal(r, &at)
+	sid := at.SessionID
+	_, _ = c.call(sid, "Page.enable", nil)
+	var out []map[string]any
+	for _, u := range urls {
+		if _, err := c.call(sid, "Page.navigate", map[string]any{"url": u}); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(900 * time.Millisecond)
+		r, err := c.call(sid, "Runtime.evaluate", map[string]any{"returnByValue": true, "awaitPromise": true, "expression": "(async () => JSON.stringify(await (async () => {" + expr + "})()))()"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ev struct{ Result struct{ Value string } }
+		_ = json.Unmarshal(r, &ev)
+		var got map[string]any
+		if err := json.Unmarshal([]byte(ev.Result.Value), &got); err != nil {
+			t.Fatalf("eval at %s: %s", u, r)
+		}
+		out = append(out, got)
+	}
+	return out
+}
+
+func TestFpExtraMediaIDAliasLive(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, "<html><body>media</body></html>")
+	}))
+	defer srv.Close()
+	_, port, _ := strings.Cut(strings.TrimPrefix(srv.URL, "http://"), ":")
+	hosts := []string{"shop-a.test", "shop-b.test"}
+	ua, ub := "http://shop-a.test:"+port+"/", "http://shop-b.test:"+port+"/"
+	fp := fpLiveBase("M")
+	fp.MediaIDAlias = true
+	udd := liveUserDataDir(t)
+	first := fpLiveSeq(t, fp, udd, hosts, []string{ua, ua, ub}, mediaIDExpr) // load, reload, other origin
+	relaunch := fpLiveSeq(t, fp, udd, hosts, []string{ua}, mediaIDExpr)      // same profile dir, new launch
+	other := fp
+	other.NoiseSeed = effectiveSeed("N", 1, false)
+	seed2 := fpLiveSeq(t, other, udd, hosts, []string{ua}, mediaIDExpr)
+	realFp := fp
+	realFp.MediaIDAlias = false
+	real := fpLiveSeq(t, realFp, udd, hosts, []string{ua}, mediaIDExpr)
+	a, reload, b, a2, o, r := first[0], first[1], first[2], relaunch[0], seed2[0], real[0]
+	t.Logf("A cam=%v gum=%v n=%v\nreload cam=%v\nB cam=%v\nrelaunch cam=%v\nseed2 cam=%v\nreal cam=%v", a["cam"], a["gum"], a["n"], reload["cam"], b["cam"], a2["cam"], o["cam"], r["cam"])
+	if a["n"].(float64) < 2 || a["cam"] == "" {
+		t.Fatalf("fake devices not visible: %v", a)
+	}
+	// deviceId aliases are stable; groupId follows Chrome, which re-salts it
+	// for every document, so only its grouping has to match.
+	if a["ids"] != reload["ids"] || a["ids"] != a["again"] {
+		t.Error("aliases not stable across reloads")
+	}
+	if pattern(a["groups"]) != pattern(r["groups"]) || a["groups"] == r["groups"] {
+		t.Errorf("group aliases do not mirror the real grouping: %v vs %v", a["groups"], r["groups"])
+	}
+	if a["ids"] != a2["ids"] {
+		t.Error("aliases not stable across launches of the same profile")
+	}
+	if reload["early"] != "ok" || a2["early"] != "ok" {
+		t.Errorf("saved alias before enumerateDevices: reload=%v relaunch=%v", reload["early"], a2["early"])
+	}
+	if a["ids"] == b["ids"] {
+		t.Error("two origins share device ids")
+	}
+	if a["ids"] == o["ids"] {
+		t.Error("two seeds share device ids")
+	}
+	if a["cam"] == r["cam"] || strings.Contains(fmt.Sprint(r["ids"]), fmt.Sprint(a["cam"])) {
+		t.Error("aliases equal the real ids")
+	}
+	if a["gum"] != "ok" || a["settingsId"] != a["cam"] || a["capId"] != a["cam"] {
+		t.Errorf("getUserMedia with alias: gum=%v settings=%v cap=%v cam=%v", a["gum"], a["settingsId"], a["capId"], a["cam"])
+	}
+	if !strings.Contains(fmt.Sprint(a["json"]), fmt.Sprint(a["cam"])) || a["isInfo"] != true || a["ts"] != "function enumerateDevices() { [native code] }" {
+		t.Errorf("shape json=%v isInfo=%v ts=%v", a["json"], a["isInfo"], a["ts"])
+	}
+}
+
+// pattern maps a comma list to first-seen indexes ("x,y,x" -> "0,1,0").
+func pattern(v any) string {
+	idx := map[string]int{}
+	var out []string
+	for _, p := range strings.Split(fmt.Sprint(v), ",") {
+		if _, ok := idx[p]; !ok {
+			idx[p] = len(idx)
+		}
+		out = append(out, fmt.Sprint(idx[p]))
+	}
+	return strings.Join(out, ",")
+}
+
+func TestFpExtraWebGPUOffLive(t *testing.T) {
+	fp := fpLiveBase("G")
+	fp.WebGPU = "off"
+	got := fpLive(t, fp, `return { gpu: typeof navigator.gpu, has: 'gpu' in navigator, cls: typeof GPUAdapter };`)
+	on := fpLiveBase("G")
+	got2 := fpLive(t, on, `return { gpu: typeof navigator.gpu };`)
+	t.Logf("off=%v on=%v", got, got2)
+	if got["gpu"] != "undefined" || got["has"] != false || got["cls"] != "undefined" {
+		t.Errorf("WebGPU still visible: %v", got)
+	}
+}
