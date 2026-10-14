@@ -3,6 +3,7 @@ import { api, Settings } from './api';
 import { Icon, Field, Toggle, useToast } from './ui';
 import type { EnvStatus } from './EnvSetup';
 import { KernelInstaller } from './KernelInstall';
+import { AppShellSettings } from './AppShell';
 
 const mb = (b: number) => b ? `${(b / 1048576).toFixed(b > 1e8 ? 0 : 1)} MB` : '';
 
@@ -121,6 +122,8 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
         <Field label="本机设备名"><input type="text" value={s.deviceName} onChange={e => set({ deviceName: e.target.value })} /></Field>
         <button className="btn" onClick={test} disabled={testing}><Icon.refresh s={14} /> {testing ? '测试中…' : '测试连接'}</button>
       </div>
+
+      <AppShellSettings s={s} set={set} index={4} />
 
       <div style={{ display: 'flex', gap: 10 }}>
         <button className="btn primary" onClick={save}><Icon.check s={15} /> 保存设置</button>

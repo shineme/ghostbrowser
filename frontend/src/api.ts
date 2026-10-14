@@ -515,6 +515,19 @@ const M = {
   },
   PendingCloudDeletes: async (): Promise<number> => cdelMock.filter(x => x.pendingDelete).length,
   RetryCloudDeletes: async (): Promise<number> => { await wait(600); return cdelMock.filter(x => x.pendingDelete).length; },
+  // ---- app shell ---- (待重启 / updater / tray / site shortcuts / announcements)
+  PendingRestart: async (): Promise<string[]> => mock.running.map(r => r.profileId).filter(id => { const p = mock.profiles.find(x => x.id === id); return p && shellMock.launched[id] !== undefined && shellMock.launched[id] !== shellMock.key(p); }),
+  RestartProfile: async (id: string): Promise<any> => { await wait(1400); const p = mock.profiles.find(x => x.id === id); if (p) shellMock.launched[id] = shellMock.key(p); return mock.running.find(r => r.profileId === id); },
+  StartProfileAt: async (id: string, url: string): Promise<any> => { await wait(700); if (!/^https?:\/\//i.test(url)) throw '网址无效：只支持 http/https'; let r = mock.running.find(x => x.profileId === id); if (!r) { r = { profileId: id, pid: 1234, debugPort: 9222, wsUrl: '', startedAt: Date.now() / 1000 }; mock.running.push(r); const p = mock.profiles.find(x => x.id === id); if (p) shellMock.launched[id] = shellMock.key(p); } return r; },
+  AppVersion: async (): Promise<string> => '0.7.2',
+  TrayAvailable: async (): Promise<boolean> => true,
+  UpdateInfo: async (): Promise<any> => ({ ...shellMock.info }),
+  CheckUpdate: async (): Promise<any> => { await wait(900); shellMock.info = { ...shellMock.info, checkedAt: Date.now() / 1000, error: location.hash.includes('upderr') ? '同步服务器：HTTP 404：服务器上还没有发布更新（缺少 update/latest.json）。' : '' }; return { ...shellMock.info }; },
+  UpdateProgress: async (): Promise<any> => ({ ...shellMock.prog }),
+  InstallUpdate: async (): Promise<void> => { shellMock.install(); },
+  GetCatalog: async (): Promise<any> => shellMock.catalog(),
+  RefreshCatalog: async (): Promise<any> => { await wait(800); if (location.hash.includes('offline')) { shellMock.offline = true; return shellMock.catalog(); } shellMock.offline = false; shellMock.fetchedAt = Date.now() / 1000; return shellMock.catalog(); },
+  MarkAnnouncementsRead: async (ids: string[]): Promise<any> => { ids.forEach(id => { if (!shellMock.read.includes(id)) shellMock.read.push(id); }); return shellMock.catalog(); },
 };
 
 export const api: typeof M = inWails ? (Go as any) : M;
@@ -903,3 +916,40 @@ const recFinalize = (steps: any[], o: any) => {
   out.forEach((s: any) => { delete s.params._rec; Object.values(s.params).forEach((v: any) => { for (const m of String(v).matchAll(/\{\{\s*(password|upload_file\d*)\s*\}\}/g)) vars[m[1]] = ''; }); });
   return { steps: out, vars };
 };
+
+// ---- app shell ---- (mock helpers for the preview)
+const shellMock: any = {
+  key: (p: any) => JSON.stringify([p.proxyId, p.kernel || '', p.fingerprint?.timezone, p.fingerprint?.languages, p.fingerprint?.userAgent, p.fingerprint?.screenWidth]),
+  launched: {} as Record<string, string>,
+  info: { current: '0.7.2', latest: '0.8.0', available: true, source: 'server', checkedAt: Date.now() / 1000 - 420, error: '',
+    notes: '## 新功能\n- **托盘常驻**：关闭窗口后环境和代理继续运行，可从托盘恢复\n- **待重启提示**：运行中修改代理或指纹后一键重启生效\n- 网站快捷入口与公告中心\n\n## 修复\n1. 修复云同步在弱网下偶尔重复上传的问题\n2. 修复部分 4K 屏幕下窗口排列错位\n\n详情见 [更新日志](https://example.com/changelog)' },
+  prog: { phase: 'idle', got: 0, total: 0, pct: 0 },
+  install() {
+    const total = 96 << 20; let got = 0;
+    const tick = () => {
+      if (location.hash.includes('updbad') && got > total * 0.98) { shellMock.prog = { phase: 'error', got, total, pct: 100, error: '更新包签名校验失败：文件可能被篡改或不是官方发布，已拒绝安装' }; mockEmit('update:progress', shellMock.prog); return; }
+      if (got >= total) { shellMock.prog = { phase: 'verifying', got, total, pct: 100 }; mockEmit('update:progress', shellMock.prog); setTimeout(() => { shellMock.prog = { phase: 'installing', got, total, pct: 100 }; mockEmit('update:progress', shellMock.prog); setTimeout(() => { shellMock.prog = { phase: 'restarting', got, total, pct: 100 }; mockEmit('update:progress', shellMock.prog); }, 900); }, 900); return; }
+      got = Math.min(total, got + (3 + Math.random() * 5) * (1 << 20));
+      shellMock.prog = { phase: 'downloading', got, total, pct: got * 100 / total }; mockEmit('update:progress', shellMock.prog);
+      setTimeout(tick, 260);
+    };
+    tick();
+  },
+  offline: false, fetchedAt: Date.now() / 1000 - 1800, read: ['welcome'] as string[],
+  catalog() {
+    const empty = location.hash.includes('nocatalog');
+    return { fetchedAt: empty ? 0 : shellMock.fetchedAt, offline: shellMock.offline || empty, error: shellMock.offline || empty ? (empty ? '没有配置同步服务器，快捷入口与公告使用本地缓存' : '连接失败：dial tcp: i/o timeout') : '', read: [...shellMock.read], source: 'server',
+      catalog: empty ? { revision: 0, groups: [], announcements: [] } : { revision: 4, groups: [
+        { id: 'ai', name: 'AI', sites: [{ id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com/', icon: '' }, { id: 'claude', name: 'Claude', url: 'https://claude.ai/', icon: '' }, { id: 'gemini', name: 'Gemini', url: 'https://gemini.google.com/', icon: '' }, { id: 'pplx', name: 'Perplexity', url: 'https://www.perplexity.ai/', icon: '' }, { id: 'mj', name: 'Midjourney', url: 'https://www.midjourney.com/', icon: '' }] },
+        { id: 'shop', name: '电商', sites: [{ id: 'amz', name: 'Amazon 卖家中心', url: 'https://sellercentral.amazon.com/', icon: '' }, { id: 'shopee', name: 'Shopee 卖家中心', url: 'https://seller.shopee.cn/', icon: '' }, { id: 'tts', name: 'TikTok Shop 全球卖家中心（跨境）', url: 'https://seller.tiktokglobalshop.com/', icon: '' }, { id: 'ebay', name: 'eBay', url: 'https://www.ebay.com/', icon: '' }, { id: 'etsy', name: 'Etsy', url: 'https://www.etsy.com/', icon: '' }, { id: 'shopify', name: 'Shopify 后台', url: 'https://admin.shopify.com/', icon: '' }] },
+        { id: 'social', name: '社媒', sites: [{ id: 'fb', name: 'Facebook', url: 'https://www.facebook.com/', icon: '' }, { id: 'ig', name: 'Instagram', url: 'https://www.instagram.com/', icon: '' }, { id: 'x', name: 'X', url: 'https://x.com/', icon: '' }, { id: 'tt', name: 'TikTok', url: 'https://www.tiktok.com/', icon: '' }, { id: 'yt', name: 'YouTube', url: 'https://www.youtube.com/', icon: '' }] },
+      ], announcements: [
+        { id: 'maint-1018', title: '同步服务器维护通知：10 月 18 日 02:00–04:00（北京时间）', body: '维护期间**云同步暂停**，本地环境不受影响。\n\n- 请在维护前完成重要环境的上传\n- 维护结束后会自动重新同步', level: 'warn', start: Date.now() / 1000 - 3600, end: Date.now() / 1000 + 4 * 86400 },
+        { id: 'v080', title: 'v0.8.0 已发布', body: '新增托盘常驻、待重启提示、网站快捷入口。在 `设置 → 应用与更新` 中检查更新。', level: 'info', start: Date.now() / 1000 - 86400, end: 0 },
+        { id: 'welcome', title: '欢迎使用网站快捷入口', body: '点击环境列表 **启动** 旁的箭头即可直接打开常用网站。', level: 'info', start: Date.now() / 1000 - 9 * 86400, end: 0 },
+      ] } };
+  },
+};
+mock.running.forEach(r => { const p = mock.profiles.find(x => x.id === r.profileId); if (p) shellMock.launched[r.profileId] = shellMock.key(p); });
+// preview: the second running profile had its proxy changed while running -> 待重启
+if (mock.running[1]) shellMock.launched[mock.running[1].profileId] = 'stale';
