@@ -72,37 +72,53 @@ function Shell() {
 
   const navRef = useRef<HTMLDivElement>(null);
   const [pillY, setPillY] = useState(0);
-  useLayoutEffect(() => {
+  // Sidebar collapse (Ctrl+B): icon-only rail, remembered across launches.
+  const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem('gb.sideCollapsed') === '1'; } catch { return false; } });
+  const [tip, setTip] = useState<{ text: string; y: number } | null>(null);
+  const toggleSide = useCallback(() => setCollapsed(c => { try { localStorage.setItem('gb.sideCollapsed', c ? '0' : '1'); } catch { /* private mode */ } return !c; }), []);
+  const placePill = useCallback(() => {
     const el = navRef.current?.querySelector<HTMLButtonElement>(`button[data-t="${tab}"]`);
     if (el) setPillY(el.offsetTop);
   }, [tab]);
+  useLayoutEffect(placePill, [placePill, collapsed]);
+  useEffect(() => { window.addEventListener('resize', placePill); return () => window.removeEventListener('resize', placePill); }, [placePill]);
+  useEffect(() => { setTip(null); }, [collapsed]);
+  const tipOn = (text: string) => (e: React.MouseEvent<HTMLElement>) => { if (!collapsed) return; const r = e.currentTarget.getBoundingClientRect(); setTip({ text, y: r.top + r.height / 2 }); };
+  const tipOff = () => setTip(null);
   useSpotlight();
   // Ctrl/Cmd+1..4 switches sections
   useEffect(() => {
-    const k = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && /^[1-7]$/.test(e.key)) { e.preventDefault(); setTab(nav[+e.key - 1][0]); } };
+    const k = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && /^[1-7]$/.test(e.key)) { e.preventDefault(); setTab(nav[+e.key - 1][0]); }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b' && !(e.target as HTMLElement)?.isContentEditable) { e.preventDefault(); toggleSide(); }
+    };
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
   });
 
   return (
-    <div className={`app ${max ? 'max' : ''}`}>
+    <div className={`app ${max ? 'max' : ''} ${collapsed ? 'side-collapsed' : ''}`}>
       <Ambient />
       <WindowControls max={max} />
-      <aside className="side">
+      <aside className="side" onTransitionEnd={e => { if (e.target === e.currentTarget || (e.target as HTMLElement).classList?.contains('side')) placePill(); }}>
         <div className="brand">
-          <MetalFx preset="chromatic" theme="dark" borderRadius={10} style={{ width: 36, height: 36 }}><div className="logo"><Icon.ghost s={20} /></div></MetalFx>
-          <div><h1>Ghost<b>Browser</b></h1><span>指纹浏览器 · 群控管理</span></div>
+          <MetalFx preset="chromatic" theme="dark" borderRadius={10} style={{ width: 36, height: 36, flex: 'none' }}><div className="logo"><Icon.ghost s={20} /></div></MetalFx>
+          <div className="brand-txt"><h1>Ghost<b>Browser</b></h1><span>指纹浏览器 · 群控管理</span></div>
         </div>
-        <div className="nav-label">工作台</div>
+        <div className="nav-label"><span>工作台</span></div>
         <nav className="nav" ref={navRef}>
           <span className="pill" style={{ transform: `translateY(${pillY}px)` }} />
-          {nav.map(([t, ic, label, count]) => {
+          {nav.map(([t, ic, label, count], i) => {
             const I = Icon[ic];
-            return <button key={t} data-t={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
-              <I /> {label} {count != null && <span className="count num">{count}</span>}
+            return <button key={t} data-t={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)} aria-label={label} onMouseEnter={tipOn(count ? `${label} · ${count}　Ctrl+${i + 1}` : `${label}　Ctrl+${i + 1}`)} onMouseLeave={tipOff}>
+              <I /> <span className="nl">{label}</span> {count != null && <span className={`count num ${count ? '' : 'zero'}`}>{count}</span>}
             </button>;
           })}
         </nav>
         <div className="spacer" />
+        <button className="side-toggle" onClick={toggleSide} aria-label={collapsed ? '展开侧栏' : '收起侧栏'} aria-expanded={!collapsed} onMouseEnter={tipOn('展开侧栏　Ctrl+B')} onMouseLeave={tipOff}>
+          <Icon.sidebar s={17} /><span className="nl">收起侧栏</span><kbd className="nl">Ctrl B</kbd>
+        </button>
+        <div className="status-mini" onMouseEnter={tipOn(`本地 API :${settings?.apiPort ?? '—'} · 运行中 ${running.size} / ${profiles.length}`)} onMouseLeave={tipOff}><span className="live" /><b className="num">{running.size}</b></div>
         <div className="status-card spot">
           <div className="row1"><span className="live" /> 本地 API 运行中</div>
           <div className="row2"><span>端口</span><b className="num">:{settings?.apiPort ?? '—'}</b></div>
@@ -110,6 +126,7 @@ function Shell() {
           <div className="row2"><span>运行中</span><b className="num">{running.size} / {profiles.length}</b></div>
         </div>
       </aside>
+      {tip && collapsed && <div className="side-tip" style={{ top: tip.y }}>{tip.text.split('　')[0]}{tip.text.includes('　') && <kbd>{tip.text.split('　')[1]}</kbd>}</div>}
 
       <main className="main">
         <div className="topbar">

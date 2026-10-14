@@ -226,15 +226,15 @@ func TestKernelResolveMirrorListing(t *testing.T) {
 }
 
 func TestKernelErrHints(t *testing.T) {
-	_, h := kernelErrHint(&httpErr{code: 403, what: "x"})
+	_, h := kernelErrHint(&httpErr{code: 403, what: "x"}, "official")
 	if !strings.Contains(h, "国内镜像") {
 		t.Fatal(h)
 	}
-	_, h = kernelErrHint(&netErr{errors.New("dial tcp: i/o timeout")})
+	_, h = kernelErrHint(&netErr{errors.New("dial tcp: i/o timeout")}, "official")
 	if !strings.Contains(h, "国内镜像") {
 		t.Fatal(h)
 	}
-	m, _ := kernelErrHint(&diskErr{need: 2 << 30, free: 1 << 30})
+	m, _ := kernelErrHint(&diskErr{need: 2 << 30, free: 1 << 30}, "mirror")
 	if !strings.Contains(m, "磁盘空间不足") {
 		t.Fatal(m)
 	}

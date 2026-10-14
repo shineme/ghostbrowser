@@ -685,7 +685,7 @@ function simKernel(source: string) {
       if (K.cancel) { clearInterval(iv); return E({ phase: 'cancelled', running: false, speed: 0, eta: -1, message: '已取消安装', hint: '已下载的部分会保留，重新安装时从断点继续' }); }
       sp = sp * 0.75 + (7 + Math.random() * 6) * 1048576 / slow * 0.25;
       done = Math.min(total, done + sp * 0.25 * 4);
-      if (done / total >= failAt) { clearInterval(iv); return stop('网络连接失败或被中断', '可能无法访问该下载源，请切换到「国内镜像」或配置代理后重试；已下载的部分会保留', '网络错误: read tcp 192.168.1.8:52114->101.37.183.5:443: wsarecv: An existing connection was forcibly closed by the remote host.'); }
+      if (done / total >= failAt) { clearInterval(iv); return stop('网络连接失败或被中断', source === 'mirror' ? '可能无法访问该下载源，请检查网络或代理设置，也可以切换到「自定义地址」使用其他镜像；点击「重试」会从断点继续' : '可能无法访问该下载源，请切换到「国内镜像」或填写自定义下载地址；点击「重试」会从断点继续', '网络错误: read tcp 192.168.1.8:52114->101.37.183.5:443: wsarecv: An existing connection was forcibly closed by the remote host.'); }
       E({ done, pct: done * 100 / total, speed: sp, eta: Math.round((total - done) / sp) });
       if (done >= total) {
         clearInterval(iv);

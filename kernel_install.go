@@ -133,7 +133,7 @@ func (k *kernelInstaller) Start(root, source, custom string, onDone func(path st
 				s.Hint = "已下载的部分会保留，重新安装时从断点继续"
 			})
 		default:
-			msg, hint := kernelErrHint(err)
+			msg, hint := kernelErrHint(err, source)
 			k.patch(true, func(s *KernelProgress) {
 				s.Phase, s.Running, s.Speed, s.ETA = "error", false, 0, -1
 				s.Message, s.Hint, s.Error = msg, hint, err.Error()
@@ -691,7 +691,11 @@ func retryable(err error) bool {
 }
 
 // kernelErrHint turns an error into a short Chinese message and a next step.
-func kernelErrHint(err error) (string, string) {
+func kernelErrHint(err error, source string) (string, string) {
+	switchTo := "请切换到「国内镜像」或填写自定义下载地址"
+	if source == "mirror" {
+		switchTo = "请检查网络或代理设置，也可以切换到「自定义地址」使用其他镜像"
+	}
 	var ne *netErr
 	var he *httpErr
 	var de *diskErr
@@ -700,11 +704,11 @@ func kernelErrHint(err error) (string, string) {
 	case errors.As(err, &de):
 		return de.Error(), "清理系统盘空间后点击「重试」"
 	case errors.As(err, &he) && (he.code == 403 || he.code == 404):
-		return he.Error(), "该下载源无法访问此文件，请切换到「国内镜像」或填写自定义下载地址"
+		return he.Error(), "该下载源无法访问此文件，" + switchTo
 	case errors.As(err, &he):
 		return he.Error(), "下载服务器暂时异常，稍后点击「重试」，或换一个下载源"
 	case errors.As(err, &oe), errors.As(err, &ne):
-		return "网络连接失败或被中断", "可能无法访问该下载源，请切换到「国内镜像」或配置代理后重试；已下载的部分会保留"
+		return "网络连接失败或被中断", "可能无法访问该下载源，" + switchTo + "；点击「重试」会从断点继续"
 	case errors.Is(err, errZipCorrupt):
 		return "压缩包已损坏", "已删除损坏的文件，点击「重试」重新下载"
 	}

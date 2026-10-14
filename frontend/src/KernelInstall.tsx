@@ -72,10 +72,10 @@ export const KernelProgressView: React.FC<{ p: KernelProgress; onCancel: () => v
           : (p.phase === 'error' || p.phase === 'cancelled') && <button className="btn sm" onClick={onRetry}><Icon.refresh s={13} /> {p.phase === 'cancelled' ? '继续安装' : '重试'}</button>}
       </div>
       <div className={`xbar ${state === 'muted' ? '' : state} ${indet ? 'indet' : ''}`}><i style={indet ? undefined : { width: `${pct}%` }} /></div>
-      <div className="ki-meta num">
+      <div className="ki-meta">
         {p.phase === 'download' && p.total > 0
-          ? <><span>{fmtBytes(p.done)} / {fmtBytes(p.total)}</span><span>{p.speed > 0 ? <><b>{fmtSpeed(p.speed)}</b>{p.eta > 0 ? ` · 剩余约 ${fmtEta(p.eta)}` : ''}</> : '正在测速…'}</span></>
-          : p.phase === 'extract' ? <><span>正在解压 {p.total > 0 ? `${fmtBytes(p.done)} / ${fmtBytes(p.total)}` : ''}</span><span>请勿关闭程序</span></>
+          ? <><span className="num">{fmtBytes(p.done)} / {fmtBytes(p.total)}</span><span>{p.speed > 0 ? <><b className="num">{fmtSpeed(p.speed)}</b>{p.eta > 0 ? ` · 剩余约 ${fmtEta(p.eta)}` : ''}</> : '正在测速…'}</span></>
+          : p.phase === 'extract' ? <><span>正在解压 <span className="num">{p.total > 0 ? `${fmtBytes(p.done)} / ${fmtBytes(p.total)}` : ''}</span></span><span>请勿关闭程序</span></>
           : p.phase === 'error' && p.hint ? <span className="ki-hint"><Icon.alert s={12} /> {p.hint}</span>
           : p.phase === 'done' ? <span>已设为默认开源内核，手机 / 平板 / Mac / Linux 环境将用它启动</span>
           : p.running ? <span>{p.message}</span> : null}
@@ -121,7 +121,7 @@ export const KernelInstaller: React.FC<{ source?: string; url?: string; onInstal
         ? <KernelProgressView p={p} onCancel={cancel} onRetry={start} compact={compact} />
         : <div className="ki-cta">
           <div className="ki-cta-ic"><Icon.download s={18} /></div>
-          <div className="ki-cta-txt"><b>一键安装开源 Chromium</b><span>Windows x64 官方快照，约 360 MB，解压后约 860 MB · 支持断点续传</span></div>
+          <div className="ki-cta-txt"><b>一键安装开源 Chromium</b><span>{src === 'custom' ? '从自定义地址下载 .zip，自动解压并校验 chrome.exe · 支持断点续传' : 'Windows x64 官方快照，约 360 MB，解压后约 860 MB · 支持断点续传'}</span></div>
           <button className="btn primary" onClick={start}><Icon.download s={14} /> 一键安装</button>
         </div>}
       {show && !p.running && p.phase !== 'error' && p.phase !== 'cancelled' && !compact && <div className="ki-again"><button className="btn sm ghost" onClick={start}><Icon.refresh s={13} /> 安装最新版本</button></div>}
