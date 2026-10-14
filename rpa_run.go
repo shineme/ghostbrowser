@@ -343,6 +343,9 @@ type cdpDriver struct {
 	implicit time.Duration
 	ctx      context.Context // the run's context (SetContext); nil = never cancelled
 	unwatch  func() bool
+	fpath    []string          // current frame path (UseFrame); nil = top document
+	fsess    map[string]string // OOPIF frame id → our session on its target
+	worlds   map[string]int    // session/frameId → isolated world context
 }
 
 // errBrowserGone is returned once the browser (or our CDP connection) is gone.
@@ -607,38 +610,18 @@ func (d *cdpDriver) call(method string, params any) (json.RawMessage, error) {
 	return r, d.wrapErr(method, err)
 }
 
-// eval evaluates an expression in the page and decodes its value into out.
+// eval evaluates an expression in the page (or in the current frame's
+// isolated world, see UseFrame) and decodes its value into out.
 func (d *cdpDriver) eval(expr string, out any) error {
+	if len(d.fpath) > 0 {
+		_, err := d.frameEval(expr, out, false)
+		return err
+	}
 	raw, err := d.call("Runtime.evaluate", map[string]any{"expression": expr, "returnByValue": true, "awaitPromise": true, "userGesture": true})
 	if err != nil {
 		return err
 	}
-	var r struct {
-		Result struct {
-			Value json.RawMessage `json:"value"`
-		} `json:"result"`
-		Exc *struct {
-			Text      string `json:"text"`
-			Exception struct {
-				Description string `json:"description"`
-			} `json:"exception"`
-		} `json:"exceptionDetails"`
-	}
-	if err := json.Unmarshal(raw, &r); err != nil {
-		return err
-	}
-	if r.Exc != nil {
-		msg := r.Exc.Exception.Description
-		if msg == "" {
-			msg = r.Exc.Text
-		}
-		msg = strings.TrimPrefix(strings.SplitN(msg, "\n", 2)[0], "Error: ")
-		return fmt.Errorf("%s", msg)
-	}
-	if out != nil && len(r.Result.Value) > 0 {
-		return json.Unmarshal(r.Result.Value, out)
-	}
-	return nil
+	return decodeEvalResult(raw, out)
 }
 
 func jsq(s string) string { b, _ := json.Marshal(s); return string(b) }
@@ -694,7 +677,10 @@ func (d *cdpDriver) Goto(url string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		var st string
-		err := d.eval(`document.readyState`, &st)
+		raw, err := d.call("Runtime.evaluate", map[string]any{"expression": "document.readyState", "returnByValue": true})
+		if err == nil {
+			err = decodeEvalResult(raw, &st)
+		}
 		if err == nil && st == "complete" {
 			return nil
 		}
@@ -714,11 +700,27 @@ func (d *cdpDriver) Click(sel string, double bool) error {
 		X, Y float64
 		OK   bool
 	}
-	if err := d.eval(onEl(sel, `el.scrollIntoView({block: 'center', inline: 'center'}); await new Promise(r => setTimeout(r, 120));
-		const r = el.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2;
+	measure := `const r = el.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2;
 		const hit = document.elementFromPoint(x, y);
-		return { X: x, Y: y, OK: r.width > 0 && r.height > 0 && !!hit && (hit === el || el.contains(hit) || hit.contains(el)) };`), &pt); err != nil {
-		return err
+		return { X: x, Y: y, OK: r.width > 0 && r.height > 0 && !!hit && (hit === el || el.contains(hit) || hit.contains(el)) };`
+	if len(d.fpath) == 0 {
+		if err := d.eval(onEl(sel, `el.scrollIntoView({block: 'center', inline: 'center'}); await new Promise(r => setTimeout(r, 120));`+measure), &pt); err != nil {
+			return err
+		}
+	} else {
+		// Inside a frame: bring the iframes and then the element into view,
+		// measure without scrolling, and translate to top-level coordinates.
+		if _, err := d.resolveFrame(d.fpath, true); err != nil {
+			return err
+		}
+		if err := d.eval(onEl(sel, `el.scrollIntoView({block: 'center', inline: 'center'}); await new Promise(r => setTimeout(r, 120));`), nil); err != nil {
+			return err
+		}
+		fc, err := d.frameEval(onEl(sel, measure), &pt, false)
+		if err != nil {
+			return err
+		}
+		pt.X, pt.Y = fc.ox+pt.X*fc.scale, fc.oy+pt.Y*fc.scale
 	}
 	if !pt.OK {
 		// Covered or zero-size: fall back to a DOM click.
@@ -766,8 +768,19 @@ func (d *cdpDriver) Fill(sel, text string, clear bool) error {
 	if kind == "select" || text == "" {
 		return nil
 	}
-	if _, err := d.call("Input.insertText", map[string]any{"text": text}); err != nil {
-		return err
+	// Text goes to the session that owns the frame (an OOPIF has its own
+	// input routing target); for the top document and same-process frames
+	// that is the page session.
+	sid := d.sid
+	if len(d.fpath) > 0 {
+		fc, err := d.resolveFrame(d.fpath, false)
+		if err != nil {
+			return err
+		}
+		sid = fc.sid
+	}
+	if _, err := d.conn.call(sid, "Input.insertText", map[string]any{"text": text}); err != nil {
+		return d.wrapErr("Input.insertText", err)
 	}
 	return d.eval(onEl(sel, `el.dispatchEvent(new Event('change', {bubbles: true}));`), nil)
 }
@@ -877,6 +890,10 @@ func (d *cdpDriver) Eval(code string, vars map[string]string) (string, error) {
 	vb, _ := json.Marshal(vars)
 	expr := "(async () => { const vars = " + string(vb) + ";\n" + jsBody(code) + "\n})().then(v => typeof v === 'string' ? v : v === undefined ? '' : JSON.stringify(v))"
 	var out string
+	if len(d.fpath) > 0 {
+		_, err := d.frameEval(expr, &out, true)
+		return out, err
+	}
 	err := d.eval(expr, &out)
 	return out, err
 }
@@ -896,6 +913,10 @@ func (d *cdpDriver) Screenshot(fullPage bool) ([]byte, error) {
 			}
 		}
 	}
+	return d.capture(params)
+}
+
+func (d *cdpDriver) capture(params map[string]any) ([]byte, error) {
 	raw, err := d.call("Page.captureScreenshot", params)
 	if err != nil {
 		return nil, err
@@ -914,22 +935,15 @@ func (d *cdpDriver) Upload(sel string, files []string) error {
 	if err := d.waitPresent(sel); err != nil {
 		return err
 	}
-	raw, err := d.call("Runtime.evaluate", map[string]any{"expression": "(() => {" + rpaFind + "return __gbq(" + jsq(sel) + "); })()"})
+	sid, obj, err := d.frameObj("(() => {" + rpaFind + "return __gbq(" + jsq(sel) + "); })()")
 	if err != nil {
 		return err
 	}
-	var r struct {
-		Result struct {
-			ObjectID string `json:"objectId"`
-			Subtype  string `json:"subtype"`
-		} `json:"result"`
-	}
-	_ = json.Unmarshal(raw, &r)
-	if r.Result.ObjectID == "" || r.Result.Subtype == "null" {
+	if obj == "" {
 		return fmt.Errorf("找不到元素：%s", sel)
 	}
-	_, err = d.call("DOM.setFileInputFiles", map[string]any{"files": files, "objectId": r.Result.ObjectID})
-	return err
+	_, err = d.conn.call(sid, "DOM.setFileInputFiles", map[string]any{"files": files, "objectId": obj})
+	return d.wrapErr("DOM.setFileInputFiles", err)
 }
 
 func (d *cdpDriver) tabs() []string {

@@ -64,9 +64,10 @@ const (
 	stCondition   = "condition"
 	stLoop        = "loop"
 	stBreakLoop   = "break_loop"
+	stSwitchFrame = "switch_frame" // 进入框架 / 返回主页面
 )
 
-var rpaStepTypes = []string{stGoto, stClick, stFill, stWaitFor, stDelay, stScroll, stExtractText, stExecuteJS, stScreenshot, stUpload, stSelectTab, stCloseTab, stCondition, stLoop, stBreakLoop}
+var rpaStepTypes = []string{stGoto, stClick, stFill, stWaitFor, stDelay, stScroll, stExtractText, stExecuteJS, stScreenshot, stUpload, stSelectTab, stCloseTab, stCondition, stLoop, stBreakLoop, stSwitchFrame}
 
 // RpaDriver is what the engine needs from a browser. The CDP implementation
 // lives in rpa_run.go; tests inject a fake.
@@ -90,6 +91,18 @@ type RpaDriver interface {
 	CloseTab(index int) error  // 1-based, 0 = current
 }
 
+// rpaFramer is implemented by drivers that can run element steps inside an
+// iframe (rpa_frames.go). path lists iframe selectors from the top document;
+// nil means the top document. It waits up to timeout for the frame.
+type rpaFramer interface {
+	UseFrame(path []string, timeout time.Duration) error
+}
+
+// rpaElemShooter captures a single element (screenshot step with selector).
+type rpaElemShooter interface {
+	ScreenshotElement(sel string) ([]byte, error)
+}
+
 // RpaStepEvent reports one step's progress.
 type RpaStepEvent struct {
 	StepID string            `json:"stepId"`
@@ -111,6 +124,42 @@ type rpaEngine struct {
 	index  map[string]int
 	iter   int
 	sleep  func(ctx context.Context, d time.Duration) error
+	frame  []string // frame context set by switch_frame (nil = top document)
+}
+
+// rpaFrameSteps are the step types that act on page elements and accept a
+// "frame" param.
+var rpaFrameSteps = map[string]bool{stClick: true, stFill: true, stWaitFor: true, stScroll: true, stExtractText: true,
+	stExecuteJS: true, stScreenshot: true, stUpload: true, stCondition: true, stLoop: true}
+
+// stepFrame is the frame a step runs in: its own "frame" param (a path from
+// the top document) or else the switch_frame context.
+func (e *rpaEngine) stepFrame(s *RpaStep) []string {
+	if p := parseFramePath(e.p(s, "frame")); len(p) > 0 {
+		return p
+	}
+	return e.frame
+}
+
+// enterFrame points the driver at the step's frame before an element step.
+func (e *rpaEngine) enterFrame(s *RpaStep, timeout time.Duration) ([]string, error) {
+	path := e.stepFrame(s)
+	f, ok := e.d.(rpaFramer)
+	if !ok {
+		if len(path) > 0 {
+			return path, fmt.Errorf("当前浏览器不支持在框架里执行步骤")
+		}
+		return nil, nil
+	}
+	return path, f.UseFrame(path, timeout)
+}
+
+// framePrefix prefixes a log line with the frame it ran in.
+func framePrefix(path []string, log string) string {
+	if len(path) == 0 {
+		return log
+	}
+	return "⧉ " + frameLabel(path) + " › " + log
 }
 
 var errBreakLoop = errors.New("break_loop")
@@ -230,7 +279,7 @@ func stepLabel(s *RpaStep) string {
 var rpaTypeNames = map[string]string{
 	stGoto: "打开网址", stClick: "点击", stFill: "输入文本", stWaitFor: "等待元素", stDelay: "延时", stScroll: "滚动",
 	stExtractText: "提取文本", stExecuteJS: "执行 JS", stScreenshot: "截图", stUpload: "上传文件", stSelectTab: "切换标签页",
-	stCloseTab: "关闭标签页", stCondition: "条件判断", stLoop: "循环", stBreakLoop: "跳出循环",
+	stCloseTab: "关闭标签页", stCondition: "条件判断", stLoop: "循环", stBreakLoop: "跳出循环", stSwitchFrame: "切换框架",
 }
 
 // p returns an interpolated parameter.
@@ -274,6 +323,42 @@ func need(v, what string) error {
 }
 
 func (e *rpaEngine) exec(ctx context.Context, s *RpaStep) (log, shot string, err error) {
+	if rpaFrameSteps[s.Type] && s.Type != stCondition && s.Type != stLoop && !(s.Type == stWaitFor && strings.TrimSpace(e.p(s, "selector")) == "") {
+		to := time.Duration(0)
+		if s.Type == stWaitFor {
+			to = e.timeout(s, 10000)
+		}
+		var path []string
+		if path, err = e.enterFrame(s, to); err != nil {
+			return framePrefix(path, ""), "", err
+		}
+		log, shot, err = e.execStep(ctx, s)
+		return framePrefix(path, log), shot, err
+	}
+	switch s.Type {
+	case stSelectTab, stCloseTab:
+		e.frame = nil // a frame path belongs to the tab it was set in
+	case stSwitchFrame:
+		next := switchFramePath(e.frame, e.p(s, "frame"))
+		if len(next) > 0 {
+			f, ok := e.d.(rpaFramer)
+			if !ok {
+				return "", "", fmt.Errorf("当前浏览器不支持框架")
+			}
+			if err = f.UseFrame(next, e.timeout(s, 10000)); err != nil {
+				return "", "", err
+			}
+		}
+		e.frame = next
+		if len(next) == 0 {
+			return "返回主页面", "", nil
+		}
+		return "进入框架 " + frameLabel(next), "", nil
+	}
+	return e.execStep(ctx, s)
+}
+
+func (e *rpaEngine) execStep(ctx context.Context, s *RpaStep) (log, shot string, err error) {
 	d := e.d
 	switch s.Type {
 	case stGoto:
@@ -362,7 +447,15 @@ func (e *rpaEngine) exec(ctx context.Context, s *RpaStep) (log, shot string, err
 		return "返回 " + clip(v, 80), "", nil
 	case stScreenshot:
 		var png []byte
-		if png, err = d.Screenshot(e.pBool(s, "fullPage", false)); err != nil {
+		if sel := strings.TrimSpace(e.p(s, "selector")); sel != "" {
+			es, ok := d.(rpaElemShooter)
+			if !ok {
+				return "", "", fmt.Errorf("当前浏览器不支持元素截图")
+			}
+			if png, err = es.ScreenshotElement(sel); err != nil {
+				return
+			}
+		} else if png, err = d.Screenshot(e.pBool(s, "fullPage", false)); err != nil {
 			return
 		}
 		if e.saveSh != nil {
@@ -420,7 +513,13 @@ func (e *rpaEngine) cond(s *RpaStep) (bool, error) {
 		if err := need(sel, "选择器"); err != nil {
 			return false, err
 		}
-		ok, err := e.d.Exists(sel)
+		ok := false
+		path, err := e.enterFrame(s, time.Millisecond)
+		if err == nil {
+			ok, err = e.d.Exists(sel)
+		} else if len(path) > 0 && !fatal(err) {
+			err = nil // the frame is not there, so neither is the element
+		}
 		if s.Params["kind"] == "not_exists" {
 			ok = !ok
 		}
@@ -428,6 +527,9 @@ func (e *rpaEngine) cond(s *RpaStep) (bool, error) {
 	case "js":
 		code := s.Params["code"]
 		if err := need(code, "判断代码"); err != nil {
+			return false, err
+		}
+		if _, err := e.enterFrame(s, 0); err != nil {
 			return false, err
 		}
 		v, err := e.d.Eval("const __r = await (async () => {\n"+jsBody(code)+"\n})();\nreturn !!__r;", e.snapshot())
