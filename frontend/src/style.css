@@ -939,3 +939,9 @@ input.is-bad, textarea.is-bad { border-color: rgba(255,107,122,.55); }
 .rpa-allbtn:disabled { opacity: .4; cursor: default; }
 .rr-meta-i { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; }
 .rr-l { grid-template-columns: 20px 34px 18px 168px minmax(0, 1fr) 64px; }
+.rpa-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.rpa-opts > * { min-width: 0; }
+.rpa-opts .toggle { height: 100%; align-items: flex-start; }
+.rpa-opts .toggle .sw { margin-top: 2px; flex: none; }
+.rpa-plist { max-height: 212px; }
+.rr-hrow > .badge { justify-self: start; }

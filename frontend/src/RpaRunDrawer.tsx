@@ -109,7 +109,7 @@ export const RpaRunDrawer: React.FC<{ wf: RWorkflow; runId: string; profiles: Pr
                   <StatusBadge s={h.status} />
                   <div className="rr-h-t"><b className="num">{clock(h.startedAt)}</b><span className="sub">{ago(h.startedAt)} · {h.targets.length} 个环境 · 并发 {h.concurrency}</span></div>
                   <div className="rr-h-r"><span className="num">{ok}/{h.targets.length}</span><span className="sub">成功</span></div>
-                  <div className="rr-h-r"><span className="num">{h.endedAt ? dur((h.endedAt - h.startedAt) * 1000) : '进行中'}</span><span className="sub">用时</span></div>
+                  <div className="rr-h-r"><span>{h.endedAt ? dur((h.endedAt - h.startedAt) * 1000) : '进行中'}</span><span className="sub">用时</span></div>
                   <RI.chev s={15} />
                 </button>;
               })}</div>}

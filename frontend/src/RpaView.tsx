@@ -263,9 +263,8 @@ const RunDialog: React.FC<{ wf: RWorkflow; profiles: Profile[]; onClose: () => v
           <Field label="并发数" hint={`同时运行 ${conc} 个环境${+conc > 1 ? '，其余排队依次执行' : '，逐个执行'}`}>
             <Segmented className="block" items={[['1', '1'], ['3', '3'], ['5', '5'], ['10', '10']]} value={conc} onChange={setConc} />
           </Field>
-          <Toggle on={autoStart} onChange={setAutoStart} label="自动启动未打开的环境" hint={closed ? `所选中有 ${closed} 个环境未打开${autoStart ? '，会先自动启动' : '，它们会直接失败'}` : '浏览器没开时先帮你启动'} />
-          <div style={{ height: 8 }} />
-          <div className={autoStart ? '' : 'rpa-dim'}><Toggle on={closeAfter && autoStart} onChange={v => autoStart && setCloseAfter(v)} label="结束后关闭" hint="只关闭本次自动启动的浏览器，你自己打开的不会动" /></div>
+          <div className="rpa-opts"><Toggle on={autoStart} onChange={setAutoStart} label="自动启动未打开的环境" hint={closed ? `所选中有 ${closed} 个环境未打开${autoStart ? '，会先自动启动' : '，它们会直接失败'}` : '浏览器没开时先帮你启动'} />
+          <div className={autoStart ? '' : 'rpa-dim'}><Toggle on={closeAfter && autoStart} onChange={v => autoStart && setCloseAfter(v)} label="结束后关闭" hint="只关闭本次自动启动的浏览器，你自己打开的不会动" /></div></div>
           {e && <div className="notice bad" style={{ margin: '12px 0 0' }}><Icon.alert /><span className="grow">{e}</span></div>}
         </div>
         <div className="dfoot"><div className="spacer" /><button className="btn" onClick={() => close()}>取消</button>
