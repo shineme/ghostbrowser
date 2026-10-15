@@ -296,13 +296,13 @@ const ProfilesView: React.FC<{
 
       {runningList.length > 0 && <div className="run-strip">
         <span className="lbl"><Icon.bolt /> 运行中 {runningList.length}</span>
-        {runningList.map(p => { const px = proxyName[p.proxyId]; const st = runs[p.id]; return <div key={p.id} className="run-chip">
+        <div className="run-chips">{runningList.map(p => { const px = proxyName[p.proxyId]; const st = runs[p.id]; return <div key={p.id} className="run-chip">
           <Avatar seed={p.fingerprint.noiseSeed || p.id} os={p.fingerprint.os} running />
           <div className="t"><b>{p.name}{pending.has(p.id) && <RestartTag compact />}</b><span className="num">{st ? dur(st) : '启动中'} · {px ? (px.ip || px.host) : '直连'}</span></div>
           {pending.has(p.id) && <button className="ib restart" title="待重启：点击重启使新设置生效" disabled={restarting.has(p.id)} onClick={() => restart(p)}><Icon.refresh /></button>}
           <button className="ib" title="切到前台" onClick={() => focus(p.id)}><Icon.laptop /></button>
           <button className="ib stop" title="停止" onClick={() => stop(p)}><Icon.stop /></button>
-        </div>; })}
+        </div>; })}</div>
         <WindowTools running={runningList.filter(p => (p as any).kernel !== 'firefox')} selected={[...sel].filter(id => running.has(id))} bulk={sel.size > 0} />
       </div>}
 

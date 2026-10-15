@@ -737,7 +737,7 @@ const M = {
   PendingRestart: async (): Promise<string[]> => mock.running.map(r => r.profileId).filter(id => { const p = mock.profiles.find(x => x.id === id); return p && shellMock.launched[id] !== undefined && shellMock.launched[id] !== shellMock.key(p); }),
   RestartProfile: async (id: string): Promise<any> => { await wait(1400); const p = mock.profiles.find(x => x.id === id); if (p) shellMock.launched[id] = shellMock.key(p); return mock.running.find(r => r.profileId === id); },
   StartProfileAt: async (id: string, url: string): Promise<any> => { await wait(700); if (!/^https?:\/\//i.test(url)) throw '网址无效：只支持 http/https'; let r = mock.running.find(x => x.profileId === id); if (!r) { r = { profileId: id, pid: 1234, debugPort: 9222, wsUrl: '', startedAt: Date.now() / 1000 }; mock.running.push(r); const p = mock.profiles.find(x => x.id === id); if (p) shellMock.launched[id] = shellMock.key(p); } return r; },
-  AppVersion: async (): Promise<string> => '0.8.0',
+  AppVersion: async (): Promise<string> => '0.8.1',
   TrayAvailable: async (): Promise<boolean> => true,
   UpdateInfo: async (): Promise<any> => ({ ...shellMock.info }),
   CheckUpdate: async (): Promise<any> => { await wait(900); shellMock.info = { ...shellMock.info, checkedAt: Date.now() / 1000, error: location.hash.includes('upderr') ? '同步服务器：HTTP 404：服务器上还没有发布更新（缺少 update/latest.json）。' : '' }; return { ...shellMock.info }; },
@@ -1168,7 +1168,7 @@ const recFinalize = (steps: any[], o: any) => {
 const shellMock: any = {
   key: (p: any) => JSON.stringify([p.proxyId, p.kernel || '', p.fingerprint?.timezone, p.fingerprint?.languages, p.fingerprint?.userAgent, p.fingerprint?.screenWidth]),
   launched: {} as Record<string, string>,
-  info: { current: '0.8.0', latest: '0.8.1', available: true, source: 'server', checkedAt: Date.now() / 1000 - 420, error: '',
+  info: { current: '0.8.1', latest: '0.8.2', available: true, source: 'server', checkedAt: Date.now() / 1000 - 420, error: '',
     notes: '## 新功能\n- **托盘常驻**：关闭窗口后环境和代理继续运行，可从托盘恢复\n- **待重启提示**：运行中修改代理或指纹后一键重启生效\n- 网站快捷入口与公告中心\n\n## 修复\n1. 修复云同步在弱网下偶尔重复上传的问题\n2. 修复部分 4K 屏幕下窗口排列错位\n\n详情见 [更新日志](https://example.com/changelog)' },
   prog: { phase: 'idle', got: 0, total: 0, pct: 0 },
   install() {
