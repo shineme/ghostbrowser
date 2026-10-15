@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="body" x1="96" y1="40" x2="420" y2="470" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8fa0ff"/>
+      <stop offset=".5" stop-color="#b07cff"/>
+      <stop offset="1" stop-color="#e58bff"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".55"/>
+      <stop offset=".45" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="256" cy="300" r="250" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b07cff" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#b07cff" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="clip"><path id="g" d="M256 44c-98 0-170 76-170 172v214c0 18 20 27 33 15l30-27c10-9 24-9 34 0l30 27c10 9 24 9 34 0l30-27c10-9 24-9 34 0l30 27c10 9 24 9 34 0l30-27c13-12 33-3 33 15V216C426 120 354 44 256 44z"/></clipPath>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#5b3bd6" flood-opacity=".45"/></filter>
+  </defs>
+  <g filter="url(#sh)">
+    <use href="#g" fill="url(#body)"/>
+  </g>
+  <g clip-path="url(#clip)" fill="none" stroke="#fff" stroke-linecap="round" stroke-opacity=".22" stroke-width="10">
+    <path d="M150 470V300c0-62 48-110 106-110s106 48 106 110v170"/>
+    <path d="M190 470V300c0-38 30-68 66-68s66 30 66 68v170"/>
+    <path d="M230 470V300c0-15 12-26 26-26s26 11 26 26v170"/>
+    <path d="M110 470V280c0-86 66-152 146-152s146 66 146 152v190" stroke-opacity=".14"/>
+  </g>
+  <path clip-path="url(#clip)" d="M60 40h400v220H60z" fill="url(#shine)"/>
+  <ellipse cx="200" cy="222" rx="30" ry="40" fill="#14111f"/>
+  <ellipse cx="312" cy="222" rx="30" ry="40" fill="#14111f"/>
+  <circle cx="210" cy="208" r="10" fill="#fff"/>
+  <circle cx="322" cy="208" r="10" fill="#fff"/>
+</svg>

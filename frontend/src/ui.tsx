@@ -1,3 +1,4 @@
+import ghostMark from './assets/images/ghost-mark.svg';
 import React, { createContext, useContext, useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -409,7 +410,7 @@ export const Splash: React.FC = () => {
   if (gone) return null;
   return (
     <div className="splash"><div className="mark">
-      <div className="logo"><Icon.ghost s={38} /></div>
+      <div className="logo"><img src={ghostMark} alt="" draggable={false} /></div>
       <div className="word">Ghost<b>Browser</b></div>
       <div className="line"><i /></div>
     </div></div>

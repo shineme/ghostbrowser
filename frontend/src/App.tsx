@@ -1,8 +1,8 @@
+import ghostMark from './assets/images/ghost-mark.svg';
 import React, { useEffect, useMemo, useState, useCallback, useLayoutEffect, useRef } from 'react';
 import { BorderBeam } from 'border-beam';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api, Profile, Proxy, Settings, onEvent } from './api';
-import { MetalFx } from 'metal-fx';
 import { DeleteModal, DelTarget } from './DeleteModal';
 import { TrashModal, useTrashCount } from './TrashView';
 import { Icon, Field, flag, ago, useToast, useConfirm, useExit, ToastHost, WindowControls, useMaximised, StatCard, Avatar, CC, CountUp, OsIcon, Ambient, Splash, useSpotlight, Pick, Segmented, DevIcon, MoreMenu } from './ui';
@@ -119,7 +119,7 @@ function Shell() {
       <WindowControls max={max} />
       <aside className="side" onTransitionEnd={e => { if (e.target === e.currentTarget || (e.target as HTMLElement).classList?.contains('side')) placePill(); }}>
         <div className="brand">
-          <MetalFx preset="chromatic" theme="dark" borderRadius={10} style={{ width: 36, height: 36, flex: 'none' }}><div className="logo"><Icon.ghost s={20} /></div></MetalFx>
+          <div className="logo"><img src={ghostMark} alt="" draggable={false} /></div>
           <div className="brand-txt"><h1>Ghost<b>Browser</b></h1><span>指纹浏览器 · 群控管理</span></div>
         </div>
         <div className="nav-label"><span>工作台</span></div>

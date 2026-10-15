@@ -79,6 +79,8 @@ go test -run TestEnsureAgainstRealShop -v .
 
 ## 功能
 
+- 应用图标（v0.8.5）：Spectral 渐变幽灵 + 指纹纹路，透明背景；EXE、托盘、侧栏和启动画面统一使用（源文件 `frontend/src/assets/images/ghost-mark.svg`）。
+
 ### 环境
 - 开源内核版本兼容：支持 Chrome/Chromium 110 及以上（推荐 120+，已在 110–155 与 ungoogled-chromium 上实测），自动识别内核版本（版本目录、chrome.exe 版本信息或 --version），UA / UA-CH 大版本始终跟随内核；设置页对过旧内核、品牌版 Chrome 137+（不支持命令行加载扩展）和 Edge 给出中文提示，低于 110 拒绝启动
 - 新建、批量创建、复制、删除；分组、标签、启动网址、导入 Cookie
