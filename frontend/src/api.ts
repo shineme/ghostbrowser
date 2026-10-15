@@ -737,7 +737,7 @@ const M = {
   PendingRestart: async (): Promise<string[]> => mock.running.map(r => r.profileId).filter(id => { const p = mock.profiles.find(x => x.id === id); return p && shellMock.launched[id] !== undefined && shellMock.launched[id] !== shellMock.key(p); }),
   RestartProfile: async (id: string): Promise<any> => { await wait(1400); const p = mock.profiles.find(x => x.id === id); if (p) shellMock.launched[id] = shellMock.key(p); return mock.running.find(r => r.profileId === id); },
   StartProfileAt: async (id: string, url: string): Promise<any> => { await wait(700); if (!/^https?:\/\//i.test(url)) throw '网址无效：只支持 http/https'; let r = mock.running.find(x => x.profileId === id); if (!r) { r = { profileId: id, pid: 1234, debugPort: 9222, wsUrl: '', startedAt: Date.now() / 1000 }; mock.running.push(r); const p = mock.profiles.find(x => x.id === id); if (p) shellMock.launched[id] = shellMock.key(p); } return r; },
-  AppVersion: async (): Promise<string> => '0.8.1',
+  AppVersion: async (): Promise<string> => '0.8.2',
   TrayAvailable: async (): Promise<boolean> => true,
   UpdateInfo: async (): Promise<any> => ({ ...shellMock.info }),
   CheckUpdate: async (): Promise<any> => { await wait(900); shellMock.info = { ...shellMock.info, checkedAt: Date.now() / 1000, error: location.hash.includes('upderr') ? '同步服务器：HTTP 404：服务器上还没有发布更新（缺少 update/latest.json）。' : '' }; return { ...shellMock.info }; },

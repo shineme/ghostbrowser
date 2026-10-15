@@ -171,6 +171,16 @@ func (o *Overrider) Start(port int) (func(), error) {
 		}
 		_ = b.CallSession(p.SessionID, "Runtime.runIfWaitingForDebugger", nil, nil)
 	})
+	// A service worker stopped for being idle keeps its sessions when it
+	// starts again (for the next navigation or fetch in its scope): no new
+	// attachedToTarget, it just waits for the debugger on the old session and
+	// reports that with Inspector.targetReloadedAfterCrash. Unanswered, the
+	// page load that woke it hangs (DevTools disables the start timeouts).
+	b.On("Inspector.targetReloadedAfterCrash", func(m cdpMessage) {
+		if m.SessionID != "" {
+			_ = b.CallSession(m.SessionID, "Runtime.runIfWaitingForDebugger", nil, nil)
+		}
+	})
 	if err := b.Call("Target.setAutoAttach", map[string]any{
 		"autoAttach": true, "waitForDebuggerOnStart": true, "flatten": true,
 	}, nil); err != nil {

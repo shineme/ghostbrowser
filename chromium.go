@@ -119,23 +119,7 @@ func (s *Store) launchChromium(p *Profile, st Settings) (*RunState, error) {
 	userDir := s.ProfileDir(p.ID)
 	_ = os.MkdirAll(userDir, 0o755)
 	port := freePort()
-	args := []string{
-		"--user-data-dir=" + userDir,
-		fmt.Sprintf("--remote-debugging-port=%d", port),
-		"--remote-allow-origins=http://127.0.0.1",
-		"--no-first-run", "--no-default-browser-check", "--disable-sync",
-		"--disable-features=Translate,MediaRouter",
-		"--lang=" + firstLang(fp.Languages),
-		"--user-agent=" + fp.UserAgent, // workers and the very first request
-	}
-	args = append(args, launchFlags(fp)...)
-	if isMobileType(fp.DeviceType) || fp.DeviceType == "tablet" {
-		args = append(args, "--touch-events=enabled")
-	}
-	if fp.WebRTC == "disabled" || (fp.WebRTC == "proxy" && px != nil) {
-		args = append(args, "--force-webrtc-ip-handling-policy=disable_non_proxied_udp")
-	}
-	args = withExtensionArgs(args, extensionDirs(p))
+	args := chromiumBaseArgs(userDir, port, fp, px, p)
 	var relay *undetectable.Relay
 	if px != nil && px.Type != "none" && px.Host != "" {
 		pu := px.URL()
@@ -217,6 +201,29 @@ func (s *Store) launchChromium(p *Profile, st Settings) (*RunState, error) {
 	}
 	s.afterStart(p.ID, ws)
 	return rs, nil
+}
+
+// chromiumBaseArgs is the kernel command line before the proxy and the
+// user's own start-up parameters.
+func chromiumBaseArgs(userDir string, port int, fp Fingerprint, px *Proxy, p *Profile) []string {
+	args := []string{
+		"--user-data-dir=" + userDir,
+		fmt.Sprintf("--remote-debugging-port=%d", port),
+		"--remote-allow-origins=http://127.0.0.1",
+		"--no-first-run", "--no-default-browser-check", "--disable-sync",
+		"--disable-features=Translate,MediaRouter",
+		"--lang=" + firstLang(fp.Languages),
+		"--user-agent=" + fp.UserAgent, // workers and the very first request
+	}
+	args = append(args, launchFlags(fp)...)
+	if isMobileType(fp.DeviceType) || fp.DeviceType == "tablet" {
+		args = append(args, "--touch-events=enabled")
+	}
+	if fp.WebRTC == "disabled" || (fp.WebRTC == "proxy" && px != nil) {
+		args = append(args, "--force-webrtc-ip-handling-policy=disable_non_proxied_udp")
+	}
+	args = withExtensionArgs(args, extensionDirs(p))
+	return args
 }
 
 // logTail returns the last few lines of a launch log for error messages.
@@ -372,6 +379,7 @@ type emulator struct {
 	startTarget string
 	net         *fpNet   // port-scan protection / video blocking (nil = off)
 	workerPause sync.Map // worker session → chan signalled on Debugger.paused
+	workerSess  sync.Map // worker session → true when it patches the worker, false when it only resumes it
 	major       int      // kernel's Chrome major from Browser.getVersion (0 = unknown)
 	ws          string   // CDP endpoint (UA guard registration, cdp_uaguard.go)
 }
@@ -384,6 +392,11 @@ func (e *emulator) Close() {
 		e.conn.c.Close()
 	}
 }
+
+// emuPerf switches emulator features off for the page-load benchmark
+// (perf_live_test.go). The zero value is the production behaviour.
+// legacySW restores the v0.8.1 worker handling (before/after comparison).
+var emuPerf struct{ noWait, noScript, noChild, noWorker, legacySW bool }
 
 func startEmulation(ws string, fp Fingerprint, px *Proxy, startURLs []string) (*emulator, error) {
 	e := &emulator{fp: fp, existing: map[string]bool{}, net: newFpNet(fp)}
@@ -424,7 +437,7 @@ func startEmulation(ws string, fp Fingerprint, px *Proxy, startURLs []string) (*
 			e.existing[t.TargetID] = true
 		}
 	}
-	if _, err = conn.call("", "Target.setAutoAttach", map[string]any{"autoAttach": true, "waitForDebuggerOnStart": true, "flatten": true}); err != nil {
+	if _, err = conn.call("", "Target.setAutoAttach", map[string]any{"autoAttach": true, "waitForDebuggerOnStart": !emuPerf.noWait, "flatten": true}); err != nil {
 		conn.c.Close()
 		return nil, err
 	}
@@ -575,6 +588,23 @@ func acceptLanguage(langs []string) string {
 	return strings.Join(out, ",")
 }
 
+// autoAttachChildren makes a page or iframe session auto-attach (paused) its
+// out-of-process iframes and dedicated workers. Service workers are left to
+// the browser-level auto-attach: a second, page-level session on a service
+// worker has to be released before the worker starts, which also starts it
+// before the patch is armed (see the worker case in onEvent).
+func autoAttachChildren(c *cdpConn, sid string, wait bool) {
+	p := map[string]any{"autoAttach": true, "waitForDebuggerOnStart": wait, "flatten": true,
+		"filter": []map[string]any{{"type": "service_worker", "exclude": true}, {"type": "browser", "exclude": true}, {"type": "tab", "exclude": true}, {}}}
+	if emuPerf.legacySW {
+		delete(p, "filter")
+	}
+	if _, err := c.call(sid, "Target.setAutoAttach", p); err != nil {
+		delete(p, "filter") // kernels without TargetFilter support
+		_, _ = c.call(sid, "Target.setAutoAttach", p)
+	}
+}
+
 // patchWorker runs the page script in a worker before the worker's own code.
 // A worker waiting for the debugger has no context to evaluate in yet, so it
 // is resumed with an instrumentation breakpoint that pauses right before its
@@ -623,6 +653,31 @@ func (e *emulator) onEvent(m cdpMsg) {
 	if e.net.onEvent(e.conn, m) {
 		return
 	}
+	switch m.Method {
+	case "Inspector.targetReloadedAfterCrash":
+		// A service worker that was stopped (idle) and starts again keeps its
+		// sessions, so no new attachedToTarget arrives: it waits for the
+		// debugger on the existing session. Without this the navigation or
+		// fetch that woke it up hangs (indefinitely: DevTools disables the
+		// service worker start timeouts).
+		if patch, ok := e.workerSess.Load(m.Session); ok {
+			if patch.(bool) && !emuPerf.noWorker {
+				_, _ = e.conn.call(m.Session, "Network.setUserAgentOverride", e.ua)
+				e.patchWorker(m.Session)
+			} else {
+				_, _ = e.conn.call(m.Session, "Runtime.runIfWaitingForDebugger", nil)
+			}
+		}
+		return
+	case "Target.detachedFromTarget":
+		var d struct {
+			SessionID string `json:"sessionId"`
+		}
+		if json.Unmarshal(m.Params, &d) == nil {
+			e.workerSess.Delete(d.SessionID)
+		}
+		return
+	}
 	if m.Method != "Target.attachedToTarget" {
 		return
 	}
@@ -646,9 +701,13 @@ func (e *emulator) onEvent(m cdpMsg) {
 	}
 	switch ev.TargetInfo.Type {
 	case "page", "iframe":
+		if emuPerf.noChild && ev.TargetInfo.Type == "iframe" {
+			resume()
+			return
+		}
 		e.emulate(sid, ev.TargetInfo.Type == "page")
 		e.net.attach(c, sid, ev.TargetInfo.TargetID, ev.TargetInfo.Type == "page")
-		_, _ = c.call(sid, "Target.setAutoAttach", map[string]any{"autoAttach": true, "waitForDebuggerOnStart": true, "flatten": true})
+		autoAttachChildren(c, sid, !emuPerf.noWait)
 		resume()
 		if ev.TargetInfo.Type == "page" && ev.Waiting && e.major > 0 && e.major < chromiumLegacyBelow {
 			go e.ensureScript(sid)
@@ -676,7 +735,28 @@ func (e *emulator) onEvent(m cdpMsg) {
 			}
 		}
 	case "worker", "shared_worker", "service_worker":
+		if emuPerf.noWorker {
+			e.workerSess.Store(sid, false)
+			resume()
+			return
+		}
 		_, _ = c.call(sid, "Network.setUserAgentOverride", e.ua)
+		// Service and shared workers also attach to the auto-attach of each
+		// page they serve (on kernels that ignore the filter, see
+		// autoAttachChildren). Any session's runIfWaitingForDebugger starts
+		// the worker and a page-level session must be released before the
+		// worker runs at all, so the patch is driven from the browser-level
+		// session only and page-level sessions just let go. (Driving it from
+		// both left the worker stuck before activation: pages that wait on
+		// their service worker never finished loading.)
+		if ev.TargetInfo.Type != "worker" && m.Session != "" && !emuPerf.legacySW {
+			e.workerSess.Store(sid, false)
+			resume()
+			return
+		}
+		if !emuPerf.legacySW {
+			e.workerSess.Store(sid, true)
+		}
 		// Patch the worker before its own script runs so navigator and
 		// OffscreenCanvas values match the page's (see patchWorker).
 		if ev.Waiting {
@@ -692,7 +772,9 @@ func (e *emulator) onEvent(m cdpMsg) {
 func (e *emulator) emulate(sid string, top bool) {
 	c, fp := e.conn, e.fp
 	_, _ = c.call(sid, "Page.enable", nil)
-	_, _ = c.call(sid, "Page.addScriptToEvaluateOnNewDocument", map[string]any{"source": e.script, "runImmediately": true})
+	if !emuPerf.noScript {
+		_, _ = c.call(sid, "Page.addScriptToEvaluateOnNewDocument", map[string]any{"source": e.script, "runImmediately": true})
+	}
 	_, _ = c.call(sid, "Emulation.setUserAgentOverride", e.ua)
 	_, _ = c.call(sid, "Network.setUserAgentOverride", e.ua)
 	if fp.Timezone != "" {
