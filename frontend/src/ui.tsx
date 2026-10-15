@@ -48,12 +48,15 @@ export const Icon = {
   alert: (p: IP) => <svg {...S(p)}><path d="M12 9v4M12 17h.01" /><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /></svg>,
   sidebar: (p: IP) => <svg {...S(p)}><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M9 4v16" /></svg>,
   ghost: (p: IP) => <svg {...S(p)}><path d="M9 10h.01M15 10h.01M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 21l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8Z" /></svg>,
+  star: (p: IP) => <svg {...S(p)}><path d="M11.5 2.8a.56.56 0 0 1 1 0l2.3 4.7a2.1 2.1 0 0 0 1.6 1.2l5.2.8a.56.56 0 0 1 .3 1l-3.8 3.6a2.1 2.1 0 0 0-.6 1.9l.9 5.2a.56.56 0 0 1-.8.6l-4.6-2.5a2.1 2.1 0 0 0-2 0l-4.6 2.5a.56.56 0 0 1-.8-.6l.9-5.2a2.1 2.1 0 0 0-.6-1.9L1.9 10.5a.56.56 0 0 1 .3-1l5.2-.8a2.1 2.1 0 0 0 1.6-1.2Z" /></svg>,
+  link: (p: IP) => <svg {...S(p)}><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" /><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" /></svg>,
   more: (p: IP) => <svg {...S(p)}><circle cx="5" cy="12" r="1.3" /><circle cx="12" cy="12" r="1.3" /><circle cx="19" cy="12" r="1.3" /></svg>,
 };
 
 // ---- toast ----
-type Toast = { id: number; msg: string; kind: string; out?: boolean };
-const ToastCtx = createContext<(msg: string, kind?: string) => void>(() => {});
+export type ToastAction = { label: string; onClick: () => void };
+type Toast = { id: number; msg: string; kind: string; out?: boolean; action?: ToastAction; life: number };
+const ToastCtx = createContext<(msg: string, kind?: string, action?: ToastAction) => void>(() => {});
 export const useToast = () => useContext(ToastCtx);
 
 // ---- confirm (replaces window.confirm, which looks foreign in a designed app) ----
@@ -64,12 +67,14 @@ export const useConfirm = () => useContext(ConfirmCtx);
 export const ToastHost: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [list, setList] = useState<Toast[]>([]);
   const [ask, setAsk] = useState<(ConfirmOpts & { resolve: (v: boolean) => void }) | null>(null);
-  const push = useCallback((msg: string, kind = 'ok') => {
+  const push = useCallback((msg: string, kind = 'ok', action?: ToastAction) => {
     const id = Date.now() + Math.random();
-    setList(l => [...l.slice(-3), { id, msg, kind }]);
-    setTimeout(() => setList(l => l.map(t => t.id === id ? { ...t, out: true } : t)), 3200);
-    setTimeout(() => setList(l => l.filter(t => t.id !== id)), 3480);
+    const life = action ? 7000 : 3200; // a toast with a button stays long enough to use it
+    setList(l => [...l.slice(-3), { id, msg, kind, action, life }]);
+    setTimeout(() => setList(l => l.map(t => t.id === id ? { ...t, out: true } : t)), life);
+    setTimeout(() => setList(l => l.filter(t => t.id !== id)), life + 280);
   }, []);
+  const dismiss = (id: number) => { setList(l => l.map(t => t.id === id ? { ...t, out: true } : t)); setTimeout(() => setList(l => l.filter(t => t.id !== id)), 280); };
   const confirm = useCallback((o: ConfirmOpts) => new Promise<boolean>(resolve => setAsk({ ...o, resolve })), []);
   return (
     <ToastCtx.Provider value={push}>
@@ -77,9 +82,11 @@ export const ToastHost: React.FC<{ children: React.ReactNode }> = ({ children })
         {children}
         {ask && <ConfirmDialog o={ask} done={v => { ask.resolve(v); setAsk(null); }} />}
         <div className="toasts">{list.map(t =>
-          <div key={t.id} className={`toast ${t.kind} ${t.out ? 'out' : ''}`}>
-            <span className="ti">{t.kind === 'bad' ? <Icon.alert s={14} /> : <Icon.check s={14} />}</span>
-            <span>{t.msg}</span><i className="life" />
+          <div key={t.id} className={`toast ${t.kind} ${t.out ? 'out' : ''} ${t.action ? 'has-act' : ''}`}>
+            <span className="ti">{t.kind === 'bad' ? <Icon.alert s={14} /> : t.kind === 'star' ? <Icon.star s={14} /> : <Icon.check s={14} />}</span>
+            <span className="tm">{t.msg}</span>
+            {t.action && <button className="toast-act" onClick={() => { t.action!.onClick(); dismiss(t.id); }}>{t.action.label}</button>}
+            <i className="life" style={{ animationDuration: `${t.life}ms` }} />
           </div>)}
         </div>
       </ConfirmCtx.Provider>

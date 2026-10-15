@@ -204,6 +204,9 @@ type Settings struct {
 	UpdateURL      string `json:"updateUrl,omitempty"`      // custom latest.json URL ("" = the sync server)
 	UpdateGitHub   string `json:"updateGithub,omitempty"`   // fallback: owner/repo of a PUBLIC GitHub repo with releases
 	CatalogURL     string `json:"catalogUrl,omitempty"`     // custom catalog.json URL ("" = the sync server)
+	// default browser: profile that opens external links (http/https/file)
+	// when GhostBrowser is the system browser. Device-local: never synced.
+	DefaultProfileID string `json:"defaultProfileId,omitempty"`
 }
 
 type RunState struct {

@@ -737,7 +737,16 @@ const M = {
   PendingRestart: async (): Promise<string[]> => mock.running.map(r => r.profileId).filter(id => { const p = mock.profiles.find(x => x.id === id); return p && shellMock.launched[id] !== undefined && shellMock.launched[id] !== shellMock.key(p); }),
   RestartProfile: async (id: string): Promise<any> => { await wait(1400); const p = mock.profiles.find(x => x.id === id); if (p) shellMock.launched[id] = shellMock.key(p); return mock.running.find(r => r.profileId === id); },
   StartProfileAt: async (id: string, url: string): Promise<any> => { await wait(700); if (!/^https?:\/\//i.test(url)) throw '网址无效：只支持 http/https'; let r = mock.running.find(x => x.profileId === id); if (!r) { r = { profileId: id, pid: 1234, debugPort: 9222, wsUrl: '', startedAt: Date.now() / 1000 }; mock.running.push(r); const p = mock.profiles.find(x => x.id === id); if (p) shellMock.launched[id] = shellMock.key(p); } return r; },
-  AppVersion: async (): Promise<string> => '0.8.2',
+  AppVersion: async (): Promise<string> => '0.8.3',
+  // ---- default browser ---- (#dbunsupported = non-Windows, #dbdefault = already the system browser, #dbpick = a link waiting for a profile)
+  DefaultBrowserStatus: async (): Promise<any> => dbMock.status(),
+  SetDefaultProfile: async (id: string): Promise<any> => { await wait(120); if (id && !mock.profiles.some(p => p.id === id)) throw new Error('环境不存在'); dbMock.profileId = id; const st = dbMock.status(); mockEmit('defaultbrowser:changed', st); return st; },
+  RegisterDefaultBrowser: async (): Promise<any> => { await wait(500); if (location.hash.includes('dbunsupported')) throw new Error('只有 Windows 版可以设为系统默认浏览器'); dbMock.registered = true; const st = dbMock.status(); mockEmit('defaultbrowser:changed', st); return st; },
+  UnregisterDefaultBrowser: async (): Promise<any> => { await wait(300); dbMock.registered = false; dbMock.isDefault = false; const st = dbMock.status(); mockEmit('defaultbrowser:changed', st); return st; },
+  OpenDefaultAppsSettings: async (): Promise<void> => { await wait(200); },
+  OpenURLIn: async (id: string, url: string): Promise<void> => { await wait(200); if (!/^(https?|file):/i.test(url)) throw new Error('链接无效：只支持 http / https / file'); dbMock.pending = dbMock.pending.filter(u => u !== url); if (!mock.running.some(r => r.profileId === id)) { mock.running.push({ profileId: id, pid: 4321, debugPort: 9333, wsUrl: '', startedAt: Date.now() / 1000 }); setTimeout(() => mockEmit('profile:started', id), 600); } },
+  PendingLinks: async (): Promise<string[]> => { const l = dbMock.pending; dbMock.pending = []; return l; },
+  DismissLink: async (url: string): Promise<void> => { dbMock.pending = dbMock.pending.filter(u => u !== url); },
   TrayAvailable: async (): Promise<boolean> => true,
   UpdateInfo: async (): Promise<any> => ({ ...shellMock.info }),
   CheckUpdate: async (): Promise<any> => { await wait(900); shellMock.info = { ...shellMock.info, checkedAt: Date.now() / 1000, error: location.hash.includes('upderr') ? '同步服务器：HTTP 404：服务器上还没有发布更新（缺少 update/latest.json）。' : '' }; return { ...shellMock.info }; },
@@ -746,6 +755,15 @@ const M = {
   GetCatalog: async (): Promise<any> => shellMock.catalog(),
   RefreshCatalog: async (): Promise<any> => { await wait(800); if (location.hash.includes('offline')) { shellMock.offline = true; return shellMock.catalog(); } shellMock.offline = false; shellMock.fetchedAt = Date.now() / 1000; return shellMock.catalog(); },
   MarkAnnouncementsRead: async (ids: string[]): Promise<any> => { ids.forEach(id => { if (!shellMock.read.includes(id)) shellMock.read.push(id); }); return shellMock.catalog(); },
+};
+// ---- default browser ---- (preview state)
+const dbMock = {
+  registered: location.hash.includes('dbdefault') || location.hash.includes('dbreg'), isDefault: location.hash.includes('dbdefault'), profileId: '',
+  pending: location.hash.includes('dbpick') ? ['https://www.amazon.com/gp/your-account/order-history?ref_=ya_d_c_yo', 'https://mail.google.com/mail/u/0/#inbox'] : [] as string[],
+  status() {
+    const p = mock.profiles.find(x => x.id === dbMock.profileId);
+    return { supported: !location.hash.includes('dbunsupported'), registered: dbMock.registered, isSystemDefault: dbMock.isDefault, profileId: p ? p.id : '', profileName: p ? p.name : '' };
+  },
 };
 // ---- firefox kernel ---- (install simulation for the preview)
 const ffMock = { p: { phase: 'idle', running: false, source: 'esr', done: 0, total: 0, pct: 0, speed: 0, eta: -1, message: '' } as any, cancel: false, installed: '' };
@@ -1168,7 +1186,7 @@ const recFinalize = (steps: any[], o: any) => {
 const shellMock: any = {
   key: (p: any) => JSON.stringify([p.proxyId, p.kernel || '', p.fingerprint?.timezone, p.fingerprint?.languages, p.fingerprint?.userAgent, p.fingerprint?.screenWidth]),
   launched: {} as Record<string, string>,
-  info: { current: '0.8.1', latest: '0.8.2', available: true, source: 'server', checkedAt: Date.now() / 1000 - 420, error: '',
+  info: { current: '0.8.2', latest: '0.8.3', available: true, source: 'server', checkedAt: Date.now() / 1000 - 420, error: '',
     notes: '## 新功能\n- **托盘常驻**：关闭窗口后环境和代理继续运行，可从托盘恢复\n- **待重启提示**：运行中修改代理或指纹后一键重启生效\n- 网站快捷入口与公告中心\n\n## 修复\n1. 修复云同步在弱网下偶尔重复上传的问题\n2. 修复部分 4K 屏幕下窗口排列错位\n\n详情见 [更新日志](https://example.com/changelog)' },
   prog: { phase: 'idle', got: 0, total: 0, pct: 0 },
   install() {

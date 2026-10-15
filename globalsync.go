@@ -73,6 +73,7 @@ func (s *Store) setGlobalState(g GlobalSyncState) {
 
 func (s *Store) globalPayload() globalPayload {
 	st := s.GetSettings()
+	st.DefaultProfileID = "" // device-local (default browser profile)
 	px := s.ListProxies()
 	sort.Slice(px, func(i, j int) bool { return px[i].ID < px[j].ID })
 	return globalPayload{Format: 1, Device: st.DeviceName, SavedAt: time.Now().Unix(), Settings: st, Proxies: px, Library: userLib.snapshot()}
@@ -83,7 +84,7 @@ func (s *Store) globalPayload() globalPayload {
 // computers do not keep re-uploading or conflicting.
 func globalHash(g globalPayload) string {
 	st := g.Settings
-	st.DeviceID, st.DeviceName, st.ProfilesDir = "", "", ""
+	st.DeviceID, st.DeviceName, st.ProfilesDir, st.DefaultProfileID = "", "", "", ""
 	type pxKey struct {
 		ID, Name, Type, Host string
 		Port                 int
@@ -231,6 +232,7 @@ func (s *Store) PullGlobal() (err error) {
 		ns.UndetectableKit = st.UndetectableKit
 	}
 	ns.ProfilesDir = st.ProfilesDir // where this computer keeps its browser data
+	keepDeviceLocal(&ns, st)
 	ns.KernelMode = "undetectable"
 	s.mu.Lock()
 	s.Settings = ns

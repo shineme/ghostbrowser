@@ -51,9 +51,16 @@ func (a *App) startup(ctx context.Context) {
 		println("mcp:", err.Error())
 	}
 	// Server-first reconcile on start-up, off the UI thread.
-	go func() { time.Sleep(800 * time.Millisecond); a.auto.Reconcile(); go a.auto.WatchDeletes(); go a.watchShares(); a.auto.WatchGlobal() }()
+	go func() {
+		time.Sleep(800 * time.Millisecond)
+		a.auto.Reconcile()
+		go a.auto.WatchDeletes()
+		go a.watchShares()
+		a.auto.WatchGlobal()
+	}()
 	go a.proxyHealthLoop()
 	a.appShellStartup()
+	a.linksStartup() // default browser: route queued links once everything is up
 }
 
 // ---------- profiles ----------
@@ -471,6 +478,7 @@ func (a *App) SaveSettings(s Settings) Settings {
 	if s.Syncer == nil { // settings page loaded before the syncer dialog saved: keep its prefs
 		s.Syncer = a.store.GetSettings().Syncer
 	}
+	keepDeviceLocal(&s, a.store.GetSettings()) // default browser: only SetDefaultProfile changes it
 	out := a.store.PutSettings(s)
 	api.restart(a.store)
 	return out
@@ -1254,11 +1262,13 @@ func (a *App) EmptyTrash() int { return a.store.EmptyTrash("ui") }
 
 // TrashDays is how many days deleted profiles are kept.
 func (a *App) TrashDays() int { return trashDays(a.store.GetSettings()) }
+
 // ---- session store ----
 
 // SessionStoreInfo summarises what the profile's login snapshot carries
 // (cookies incl. partitioned, LocalStorage, IndexedDB) for the UI.
 func (a *App) SessionStoreInfo(id string) SessionStoreInfo { return a.store.SessionStoreInfo(id) }
+
 // ---- 环境自检 / 一键修复 ----
 
 // CheckEnvironment runs the environment self-check for one profile.
@@ -1291,6 +1301,7 @@ func (a *App) RestoreRepair(profileID, entryID string) (RepairResult, error) {
 // CheckSystemClock compares the system clock with an HTTPS server's Date
 // header (report only; never changes the system time).
 func (a *App) CheckSystemClock() ClockReport { return CheckClock(nil) }
+
 // ---- fingerprint extras ----
 
 // RegenerateSeed gives a profile a new noise seed (Canvas / WebGL / audio /
@@ -1345,6 +1356,7 @@ func (a *App) ListTerminals() []TerminalSession { return terms.list() }
 
 // CloseTerminal closes a terminal window (and its proxy relay).
 func (a *App) CloseTerminal(id string) error { return terms.close(id) }
+
 // ---- firefox kernel ----
 
 // FirefoxInfo reports the Firefox the Firefox kernel launches (setting or auto-detected) and its version.

@@ -555,6 +555,28 @@ export namespace main {
 	        this.staged = source["staged"];
 	    }
 	}
+	export class DefaultBrowserStatus {
+	    supported: boolean;
+	    registered: boolean;
+	    isSystemDefault: boolean;
+	    profileId: string;
+	    profileName: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DefaultBrowserStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.supported = source["supported"];
+	        this.registered = source["registered"];
+	        this.isSystemDefault = source["isSystemDefault"];
+	        this.profileId = source["profileId"];
+	        this.profileName = source["profileName"];
+	        this.error = source["error"];
+	    }
+	}
 	export class DeleteResult {
 	    id: string;
 	    name: string;
@@ -2172,6 +2194,7 @@ export namespace main {
 	    updateUrl?: string;
 	    updateGithub?: string;
 	    catalogUrl?: string;
+	    defaultProfileId?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -2213,6 +2236,7 @@ export namespace main {
 	        this.updateUrl = source["updateUrl"];
 	        this.updateGithub = source["updateGithub"];
 	        this.catalogUrl = source["catalogUrl"];
+	        this.defaultProfileId = source["defaultProfileId"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

@@ -20,6 +20,11 @@ func main() {
 		os.Exit(runMcpStdio())
 	}
 	handleAfterUpdate(os.Args[1:]) // updater: wait for the previous version to exit
+	// default browser: started by a link click (--open-url / bare URL / file)
+	coldLinks = parseOpenURLArgs(os.Args[1:])
+	if len(coldLinks) > 0 {
+		allowForegroundHandoff()
+	}
 	// Create an instance of the app structure
 	app := NewApp()
 
@@ -33,7 +38,14 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		Frameless:        true,
+		Frameless:   true,
+		StartHidden: len(coldLinks) > 0, // link click: open it, keep the manager out of the way
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId: "ghostbrowser-7d3f2a91-manager",
+			OnSecondInstanceLaunch: func(d options.SecondInstanceData) {
+				app.onSecondInstance(d.Args)
+			},
+		},
 		BackgroundColour: &options.RGBA{R: 0, G: 0, B: 0, A: 0},
 		Windows: &windows.Options{
 			WebviewIsTransparent:              true,

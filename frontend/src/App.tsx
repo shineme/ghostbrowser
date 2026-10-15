@@ -25,6 +25,7 @@ import { TerminalView } from './TerminalView';
 import { FoxIcon, useFirefoxInfo, ffVersionLabel } from './FirefoxKernel';
 import { ShareDialog, ShIc, shareLeft } from './SharingView'; // share
 import { TopbarExtras, usePendingRestart, RestartTag, useRestart, SiteLaunch } from './AppShell';
+import { DefaultStar, LinkPicker, useDefaultBrowser, DBStatus } from './DefaultBrowser';
 
 type Tab = 'profiles' | 'proxies' | 'rpa' | 'extensions' | 'terminal' | 'cloud' | 'audit' | 'settings';
 
@@ -58,6 +59,10 @@ function Shell() {
   useEffect(() => onEvent('shares:changed', () => { reload(); toast('有分享已撤销或过期，本机副本已删除'); }), [reload]);
   useEffect(() => { const f = (e: any) => { setTab('cloud'); setTimeout(() => window.dispatchEvent(new CustomEvent('gb:cloud-tab', { detail: e.detail })), 60); }; window.addEventListener('gb:goto-cloud', f); return () => window.removeEventListener('gb:goto-cloud', f); }, []);
   useEffect(() => onEvent('profile:exit', (id: string) => { setRunning(s => { const n = new Set(s); n.delete(id); return n; }); }), []);
+  // default browser: a link launched a profile, or failed to open
+  const [dbStatus, setDbStatus] = useDefaultBrowser();
+  useEffect(() => onEvent('profile:started', (id: string) => { setRunning(s => new Set(s).add(id)); reload(); }), [reload]);
+  useEffect(() => onEvent('defaultbrowser:opened', (e: any) => { if (e?.error) toast(`链接没有打开（${e.name || '环境'}）：${e.error}`, 'bad'); }), []);
 
   const proxyName = useMemo(() => Object.fromEntries(proxies.map(p => [p.id, p])), [proxies]);
 
@@ -151,7 +156,7 @@ function Shell() {
         </div>
         <div className="content">
           <div key={tab} className="page">
-            {tab === 'profiles' && <ProfilesView {...{ profiles, proxyName, running, setRunning, reload }} />}
+            {tab === 'profiles' && <ProfilesView {...{ profiles, proxyName, running, setRunning, reload, dbStatus, setDbStatus }} />}
             {tab === 'proxies' && <ProxyView proxies={proxies} profiles={profiles} reload={reload} />}
             {tab === 'rpa' && <RpaView profiles={profiles} reload={reload} />}
             {tab === 'extensions' && <ExtensionsView profiles={profiles} reload={reload} />}
@@ -162,6 +167,7 @@ function Shell() {
           </div>
         </div>
       </main>
+      <LinkPicker profiles={profiles} running={running} />
     </div>
   );
 }
@@ -169,7 +175,8 @@ function Shell() {
 const ProfilesView: React.FC<{
   profiles: Profile[]; proxyName: Record<string, Proxy>; running: Set<string>;
   setRunning: React.Dispatch<React.SetStateAction<Set<string>>>; reload: () => void;
-}> = ({ profiles, proxyName, running, setRunning, reload }) => {
+  dbStatus: DBStatus; setDbStatus: (s?: DBStatus) => void;
+}> = ({ profiles, proxyName, running, setRunning, reload, dbStatus, setDbStatus }) => {
   const toast = useToast();
   const ask = useConfirm();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -322,7 +329,7 @@ const ProfilesView: React.FC<{
                   <div className="cell-id">
                     <Avatar seed={p.fingerprint.noiseSeed || p.id} os={p.fingerprint.os} running={isRun} />
                     <div>
-                      <div className="nm">{p.name}{needRestart && <RestartTag />}</div>
+                      <div className="nm"><span className="nm-line"><span className="nm-t">{p.name}</span><DefaultStar profile={p} on={dbStatus.profileId === p.id} onChanged={setDbStatus} /></span>{needRestart && <RestartTag />}</div>
                       {(p as any).shareId ? <div className="sub sh-rowtag"><span className="badge cloud" title={`由 ${(p as any).sharedFrom} 共享，配置只读`}><ShIc.share s={11} /> 共享 · {(p as any).sharedFrom}</span><span className={`sh-left ${shareLeft((p as any).shareExpires)[1]}`}>{shareLeft((p as any).shareExpires)[0]}</span></div> :
                       <div className="sub">{p.group || '未分组'}{(p.tags || []).length ? <span style={{ marginLeft: 6 }}>{(p.tags || []).map(t => <span key={t} className="tag">{t}</span>)}</span> : null}</div>}
                     </div>

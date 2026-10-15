@@ -154,6 +154,10 @@ export function DeclineShare(arg1) {
   return window['go']['main']['App']['DeclineShare'](arg1);
 }
 
+export function DefaultBrowserStatus() {
+  return window['go']['main']['App']['DefaultBrowserStatus']();
+}
+
 export function DefaultKernelPath() {
   return window['go']['main']['App']['DefaultKernelPath']();
 }
@@ -192,6 +196,10 @@ export function DevicePresetsByType(arg1, arg2) {
 
 export function DeviceTypes() {
   return window['go']['main']['App']['DeviceTypes']();
+}
+
+export function DismissLink(arg1) {
+  return window['go']['main']['App']['DismissLink'](arg1);
 }
 
 export function DuplicateWorkflow(arg1) {
@@ -454,6 +462,14 @@ export function NormalizeSyncURL(arg1) {
   return window['go']['main']['App']['NormalizeSyncURL'](arg1);
 }
 
+export function OpenDefaultAppsSettings() {
+  return window['go']['main']['App']['OpenDefaultAppsSettings']();
+}
+
+export function OpenURLIn(arg1, arg2) {
+  return window['go']['main']['App']['OpenURLIn'](arg1, arg2);
+}
+
 export function OpenWorkflowFile() {
   return window['go']['main']['App']['OpenWorkflowFile']();
 }
@@ -468,6 +484,10 @@ export function PauseRecording() {
 
 export function PendingCloudDeletes() {
   return window['go']['main']['App']['PendingCloudDeletes']();
+}
+
+export function PendingLinks() {
+  return window['go']['main']['App']['PendingLinks']();
 }
 
 export function PendingRestart() {
@@ -544,6 +564,10 @@ export function RefreshCatalog() {
 
 export function RegenerateSeed(arg1) {
   return window['go']['main']['App']['RegenerateSeed'](arg1);
+}
+
+export function RegisterDefaultBrowser() {
+  return window['go']['main']['App']['RegisterDefaultBrowser']();
 }
 
 export function RemoveExtension(arg1) {
@@ -664,6 +688,10 @@ export function ScreenOptions(arg1) {
 
 export function SessionStoreInfo(arg1) {
   return window['go']['main']['App']['SessionStoreInfo'](arg1);
+}
+
+export function SetDefaultProfile(arg1) {
+  return window['go']['main']['App']['SetDefaultProfile'](arg1);
 }
 
 export function SetDeleteMode(arg1) {
@@ -804,6 +832,10 @@ export function UnlockSyncWithPassword(arg1) {
 
 export function UnlockSyncWithRecoveryKey(arg1, arg2) {
   return window['go']['main']['App']['UnlockSyncWithRecoveryKey'](arg1, arg2);
+}
+
+export function UnregisterDefaultBrowser() {
+  return window['go']['main']['App']['UnregisterDefaultBrowser']();
 }
 
 export function UpdateInfo() {

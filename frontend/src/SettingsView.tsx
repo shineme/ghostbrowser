@@ -6,6 +6,7 @@ import { KernelInstaller } from './KernelInstall';
 import { SessionScopeChips } from './SessionStore';
 import { FirefoxSettingsCard, FoxIcon, useFirefoxInfo } from './FirefoxKernel';
 import { AppShellSettings } from './AppShell';
+import { DefaultBrowserCard } from './DefaultBrowser';
 
 const mb = (b: number) => b ? `${(b / 1048576).toFixed(b > 1e8 ? 0 : 1)} MB` : '';
 
@@ -137,6 +138,8 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
       </div>
 
       <AppShellSettings s={s} set={set} index={4} />
+
+      <DefaultBrowserCard index={5} />
 
       <div style={{ display: 'flex', gap: 10 }}>
         <button className="btn primary" onClick={save}><Icon.check s={15} /> 保存设置</button>

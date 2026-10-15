@@ -78,6 +78,8 @@ export function DataDir():Promise<string>;
 
 export function DeclineShare(arg1:string):Promise<void>;
 
+export function DefaultBrowserStatus():Promise<main.DefaultBrowserStatus>;
+
 export function DefaultKernelPath():Promise<string>;
 
 export function DeleteDevicePreset(arg1:string):Promise<void>;
@@ -97,6 +99,8 @@ export function DevicePresets(arg1:string):Promise<Array<main.DevicePreset>>;
 export function DevicePresetsByType(arg1:string,arg2:string):Promise<Array<main.DevicePreset>>;
 
 export function DeviceTypes():Promise<Array<main.DeviceTypeInfo>>;
+
+export function DismissLink(arg1:string):Promise<void>;
 
 export function DuplicateWorkflow(arg1:string):Promise<main.Workflow>;
 
@@ -228,6 +232,10 @@ export function NewNoiseSeed():Promise<number>;
 
 export function NormalizeSyncURL(arg1:string):Promise<string>;
 
+export function OpenDefaultAppsSettings():Promise<void>;
+
+export function OpenURLIn(arg1:string,arg2:string):Promise<void>;
+
 export function OpenWorkflowFile():Promise<string>;
 
 export function ParseProxy(arg1:string):Promise<main.Proxy>;
@@ -235,6 +243,8 @@ export function ParseProxy(arg1:string):Promise<main.Proxy>;
 export function PauseRecording():Promise<main.RecordState>;
 
 export function PendingCloudDeletes():Promise<number>;
+
+export function PendingLinks():Promise<Array<string>>;
 
 export function PendingRestart():Promise<Array<string>>;
 
@@ -273,6 +283,8 @@ export function RecoveryStatus():Promise<main.RecoveryState>;
 export function RefreshCatalog():Promise<main.CatalogState>;
 
 export function RegenerateSeed(arg1:string):Promise<number>;
+
+export function RegisterDefaultBrowser():Promise<main.DefaultBrowserStatus>;
 
 export function RemoveExtension(arg1:string):Promise<void>;
 
@@ -333,6 +345,8 @@ export function SaveWorkflowFile(arg1:string):Promise<string>;
 export function ScreenOptions(arg1:string):Promise<Array<string>>;
 
 export function SessionStoreInfo(arg1:string):Promise<main.SessionStoreInfo>;
+
+export function SetDefaultProfile(arg1:string):Promise<main.DefaultBrowserStatus>;
 
 export function SetDeleteMode(arg1:string):Promise<void>;
 
@@ -403,6 +417,8 @@ export function TrayAvailable():Promise<boolean>;
 export function UnlockSyncWithPassword(arg1:string):Promise<void>;
 
 export function UnlockSyncWithRecoveryKey(arg1:string,arg2:string):Promise<void>;
+
+export function UnregisterDefaultBrowser():Promise<main.DefaultBrowserStatus>;
 
 export function UpdateInfo():Promise<main.UpdateInfo>;
 
