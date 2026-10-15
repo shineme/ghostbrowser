@@ -108,7 +108,7 @@ go test -run TestEnsureAgainstRealShop -v .
 - 内置设备库 + 自定义指纹库（`library.json`），下拉框联动并支持保存自定义值
 - **防护与启动选项**（环境编辑「防护」「启动」页，开源内核生效）：Canvas / WebGL 图像 / AudioContext / ClientRects 各自可选 噪声、真实、关闭；WebRTC、媒体设备（可自定义麦克风/扬声器/摄像头数量）、语音列表、WebGPU、Do Not Track；端口扫描保护（白名单端口）、每次启动随机指纹；窗口大小（自动/自定义宽高位置/最大化）、硬件加速、禁止图片/视频、静音、自定义启动参数（user-data-dir、remote-debugging、proxy-server、user-agent 等由程序接管）。定制内核下会提示哪些项不生效
 - **指纹附加项**（开源内核）：媒体设备 ID 别名——媒体设备选「真实」时可打开「设备 ID 别名」，网站看到的 deviceId 按环境种子 + 网站来源生成（同一环境同一网站永远一致，换网站 / 换种子就不同），getUserMedia、轨道 getSettings、setSinkId 等自动换回真实 ID，摄像头和麦克风照常可用；未授权时为空的 ID 保持为空；groupId 与 Chrome 一样每次加载重新加盐。WebGPU 关闭会移除 navigator.gpu 并加 --disable-blink-features=WebGPU；语音列表可关闭。环境编辑「防护」页可「重新生成指纹种子」（确认后立即保存，只换噪声种子，Cookie、登录状态和其他参数不变），并显示种子短 ID（前 8 位十六进制）
-- **终端**（侧栏「终端」）：一键打开 Claude Code（`claude`）、Codex CLI（`codex`）、Gemini CLI（`gemini`）或 Windows PowerShell 纯终端；自动检测 PATH 中是否已安装并显示版本，未安装时给出安装命令和官方安装指南。可选工作目录（文件夹选择或手动输入，留空为用户目录），可继承某个环境的时区（TZ）、语言（LANG / LC_ALL）和代理（HTTP_PROXY / HTTPS_PROXY / ALL_PROXY），也可自定义时区和语言；带账号密码或 SOCKS 的代理经本地中转变成 `http://127.0.0.1` 代理，中转在终端关闭时一起停止。新窗口可选 PowerShell 控制台或 Windows Terminal（已安装时）；记住上次的选择，列出从这里打开的终端并可关闭
+- **终端**（侧栏「终端」）：一键打开 Claude Code（`claude`）、Codex CLI（`codex`）、Gemini CLI（`gemini`）或 Windows PowerShell 纯终端；自动检测 PATH 中是否已安装并显示版本，未安装时给出安装命令和官方安装指南。可选工作目录（文件夹选择或手动输入，留空为用户目录），可继承某个环境的时区（TZ）、语言（LANG / LC_ALL）和代理（HTTP_PROXY / HTTPS_PROXY / ALL_PROXY），也可自定义时区和语言；带账号密码或 SOCKS 的代理经本地中转变成 `http://127.0.0.1` 代理，中转在终端关闭时一起停止。新窗口可选 PowerShell 控制台或 Windows Terminal（已安装时）；记住上次的选择，列出从这里打开的终端并可关闭。PowerShell 控制台窗口直接拥有自己的控制台输入输出（修复 0.8.3 及之前 PowerShell / Codex 等独立窗口一闪就关的问题）；窗口在启动 3 秒内退出时会提示退出码，不再无声消失
 
 ### 设备类型与双内核
 - 设备类型：台式机、笔记本、安卓手机、安卓平板、折叠屏、Chromebook、电视。设备库里有对应的真实机型（Galaxy S24/S23/A 系列、Pixel 6a~9 Pro、小米/Redmi/POCO、OnePlus、OPPO、vivo、Motorola、Sony；Galaxy Tab、Pixel Tablet、小米平板、联想、OnePlus Pad；Z Fold6 折叠/展开、Z Flip6、Pixel 9 Pro Fold；Acer/HP/ASUS/三星/联想 Chromebook；Chromecast、BRAVIA、Tizen、webOS 电视）
@@ -176,6 +176,7 @@ go test -run TestEnsureAgainstRealShop -v .
 
 ### 界面
 - 左侧边栏可收起为图标栏（侧栏底部按钮或 Ctrl+B），悬停显示名称和快捷键，数量变为圆点；状态会记住，下次启动保持；系统开启「减少动态效果」时不播放动画
+- 所有下拉菜单、弹出面板和悬停提示（启动按钮旁的 ▾ 网站快捷入口、「⋯」更多操作、筛选/排序、表单下拉、可输入下拉、排列窗口、同步器的窗口选择、RPA 添加步骤、导出、公告）统一浮在最上层：不会被表格、滚动区域或对话框裁剪遮挡，下方空间不够时自动向上展开并限制在窗口内；点击外部、按 Esc、窗口缩放或列表滚动时自动关闭；在对话框或抽屉里打开的菜单按 Esc 只关闭菜单
 
 ### 应用外壳（托盘 / 更新 / 快捷入口 / 公告）
 - **待重启**：环境运行中修改代理、指纹、内核、启动参数或语言时区后，环境列表、运行条和编辑抽屉显示「待重启」，一键重启生效；只改名称、分组、标签、备注不会提示

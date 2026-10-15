@@ -288,6 +288,58 @@ func mergeEnv(base []string, extra map[string]string, fold bool) []string {
 	return out
 }
 
+// winEnvBlock builds a CreateProcess UNICODE environment block: entries
+// sorted case-insensitively by name (as Windows expects), each NUL-terminated,
+// the block ending with an extra NUL. Entries without '=' are dropped;
+// later duplicates (case-insensitive) win.
+func winEnvBlock(env []string) []uint16 {
+	idx := map[string]int{}
+	var kept []string
+	var names []string
+	for _, kv := range env {
+		n, ok := envName(kv)
+		if !ok || strings.ContainsRune(kv, 0) {
+			continue
+		}
+		k := strings.ToUpper(n)
+		if j, dup := idx[k]; dup {
+			kept[j] = kv
+			continue
+		}
+		idx[k] = len(kept)
+		kept = append(kept, kv)
+		names = append(names, k)
+	}
+	order := make([]int, len(kept))
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(a, b int) bool { return names[order[a]] < names[order[b]] })
+	var out []uint16
+	for _, i := range order {
+		out = append(out, utf16.Encode([]rune(kept[i]))...)
+		out = append(out, 0)
+	}
+	if len(out) == 0 {
+		out = append(out, 0)
+	}
+	return append(out, 0)
+}
+
+// envName is the variable name of a "NAME=value" entry. Names may start with
+// '=' (cmd's per-drive "=C:=C:\dir" entries), so the separator is searched
+// from the second character.
+func envName(kv string) (string, bool) {
+	if len(kv) < 2 {
+		return "", false
+	}
+	i := strings.IndexByte(kv[1:], '=')
+	if i < 0 {
+		return "", false
+	}
+	return kv[:i+1], true
+}
+
 // resolveTerminalDir checks a typed working directory; "" = the home folder.
 func resolveTerminalDir(dir string) (string, error) {
 	dir = strings.Trim(strings.TrimSpace(dir), "\"")
@@ -425,9 +477,48 @@ type TerminalSession struct {
 	Started     int64  `json:"started"`
 }
 
+// termProc is a started terminal window process. On Windows it is created
+// with CreateProcess directly (terminal_windows.go), elsewhere it wraps an
+// exec.Cmd. wait blocks until the process exits and returns its exit code;
+// it is nil when the window is owned by another process (Windows Terminal).
+type termProc struct {
+	pid  int
+	wait func() (int, error)
+}
+
+// cmdProc wraps a started exec.Cmd.
+func cmdProc(cmd *exec.Cmd) *termProc {
+	return &termProc{pid: cmd.Process.Pid, wait: func() (int, error) {
+		err := cmd.Wait()
+		code := -1
+		if cmd.ProcessState != nil {
+			code = cmd.ProcessState.ExitCode()
+		}
+		return code, err
+	}}
+}
+
+// TerminalExit reports a terminal window that closed right after launch
+// (event "terminal:failed"), so the UI can say so instead of the window just vanishing.
+type TerminalExit struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Code    int    `json:"code"`
+	Millis  int64  `json:"millis"`
+	Message string `json:"message"`
+}
+
+// earlyExitWindow: a tracked terminal that ends sooner than this after launch
+// is reported as a failed launch.
+const earlyExitWindow = 3 * time.Second
+
+func earlyExitMessage(name string, code int, d time.Duration) string {
+	return fmt.Sprintf("%s 终端窗口启动后 %.1f 秒就退出了（退出码 %d）。请在 PowerShell 中手动运行该命令查看报错，或改用 Windows Terminal 打开。", name, d.Seconds(), code)
+}
+
 type termEntry struct {
 	s     TerminalSession
-	cmd   *exec.Cmd
+	proc  *termProc
 	relay *undetectable.Relay
 }
 
@@ -435,6 +526,7 @@ type termRegistry struct {
 	mu      sync.Mutex
 	m       map[string]*termEntry
 	onEvent func()
+	onFail  func(TerminalExit)
 }
 
 var terms = &termRegistry{m: map[string]*termEntry{}}
@@ -474,12 +566,26 @@ func (r *termRegistry) close(id string) error {
 	if e == nil {
 		return fmt.Errorf("终端已关闭")
 	}
-	if e.s.Tracked && e.cmd != nil && e.cmd.Process != nil {
-		killTree(e.cmd.Process.Pid)
+	if e.s.Tracked && e.proc != nil && e.proc.pid > 0 {
+		killTree(e.proc.pid)
 	}
 	r.drop(id)
 	r.notify()
 	return nil
+}
+
+// watch waits for a tracked window to close, then drops its entry (and relay).
+// A window gone within earlyExitWindow — and not closed by us — is reported.
+func (r *termRegistry) watch(sess TerminalSession, proc *termProc, started time.Time) {
+	code, _ := proc.wait()
+	d := time.Since(started)
+	if r.drop(sess.ID) == nil {
+		return // closed from GhostBrowser
+	}
+	r.notify()
+	if d < earlyExitWindow && r.onFail != nil {
+		r.onFail(TerminalExit{ID: sess.ID, Name: sess.Name, Code: code, Millis: d.Milliseconds(), Message: earlyExitMessage(sess.Name, code, d)})
+	}
 }
 
 func (r *termRegistry) closeAll() {
@@ -575,28 +681,24 @@ func (s *Store) launchTerminal(req TerminalRequest) (TerminalSession, error) {
 	if host != "wt" {
 		host = "console"
 	}
-	cmd, tracked, err := startTerminalWindow(host, dir, title, env, bin)
+	proc, tracked, err := startTerminalWindow(host, dir, title, env, bin)
 	if err != nil {
 		relay.Close()
-		return TerminalSession{}, err
+		return TerminalSession{}, fmt.Errorf("终端窗口启动失败：%w", err)
 	}
+	started := time.Now()
 	sess.ID = randHex(6)
 	sess.Tool, sess.Name, sess.Dir, sess.Host, sess.Tracked = def.id, def.name, dir, host, tracked
-	sess.Started = time.Now().Unix()
-	if cmd != nil && cmd.Process != nil {
-		sess.PID = cmd.Process.Pid
+	sess.Started = started.Unix()
+	if proc != nil {
+		sess.PID = proc.pid
 	}
-	e := &termEntry{s: sess, cmd: cmd, relay: relay}
+	e := &termEntry{s: sess, proc: proc, relay: relay}
 	terms.mu.Lock()
 	terms.m[sess.ID] = e
 	terms.mu.Unlock()
-	if tracked && cmd != nil {
-		go func() {
-			_ = cmd.Wait()
-			if terms.drop(sess.ID) != nil {
-				terms.notify()
-			}
-		}()
+	if tracked && proc != nil && proc.wait != nil {
+		go terms.watch(sess, proc, started)
 	}
 	return sess, nil
 }

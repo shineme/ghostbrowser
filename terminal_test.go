@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf16"
 
 	"ghostbrowser/internal/undetectable"
@@ -275,5 +276,61 @@ func TestTerminalWindowsCommandLine(t *testing.T) {
 	}
 	if winQuote(`a"b`) != `"a\"b"` || winQuote("") != `""` || winQuote("plain") != "plain" {
 		t.Fatal("winQuote")
+	}
+}
+
+func TestTerminalWinEnvBlock(t *testing.T) {
+	env := []string{"Path=C:\\Windows", "=C:=C:\\work", "tz=old", "LANG=zh_CN.UTF-8", "TZ=Asia/Tokyo", "bogus", "ALL_PROXY=http://127.0.0.1:1", "名字=值"}
+	b := winEnvBlock(env)
+	if len(b) < 2 || b[len(b)-1] != 0 || b[len(b)-2] != 0 {
+		t.Fatalf("block not double-NUL terminated: %v", b[max(0, len(b)-4):])
+	}
+	var got []string
+	for _, part := range strings.Split(string(utf16.Decode(b[:len(b)-2])), "\x00") {
+		got = append(got, part)
+	}
+	want := []string{"=C:=C:\\work", "ALL_PROXY=http://127.0.0.1:1", "LANG=zh_CN.UTF-8", "Path=C:\\Windows", "TZ=Asia/Tokyo", "名字=值"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("env block\n got %q\nwant %q", got, want)
+	}
+	// non-ASCII survives as UTF-16 (not bytes)
+	if !strings.Contains(string(utf16.Decode(b)), "名字=值") {
+		t.Fatal("utf-16")
+	}
+	if e := winEnvBlock(nil); len(e) != 2 || e[0] != 0 || e[1] != 0 {
+		t.Fatalf("empty block %v", e)
+	}
+	// merged overlay ends up in the block once
+	m := winEnvBlock(mergeEnv([]string{"HTTPS_PROXY=x", "Home=C:\\u"}, map[string]string{"https_proxy": "http://127.0.0.1:9", "HTTPS_PROXY": "http://127.0.0.1:9"}, true))
+	if s := string(utf16.Decode(m)); strings.Count(strings.ToUpper(s), "HTTPS_PROXY=") != 1 || !strings.Contains(s, "127.0.0.1:9") {
+		t.Fatalf("merged %q", s)
+	}
+}
+
+func TestTerminalEarlyExitReported(t *testing.T) {
+	r := &termRegistry{m: map[string]*termEntry{}}
+	var got []TerminalExit
+	r.onFail = func(x TerminalExit) { got = append(got, x) }
+	sess := TerminalSession{ID: "a1", Name: "Codex CLI", Tracked: true}
+	quick := &termProc{pid: 1, wait: func() (int, error) { return 1, nil }}
+	r.m["a1"] = &termEntry{s: sess, proc: quick}
+	r.watch(sess, quick, time.Now())
+	if len(got) != 1 || got[0].Code != 1 || got[0].ID != "a1" || !strings.Contains(got[0].Message, "退出码 1") {
+		t.Fatalf("early exit not reported: %+v", got)
+	}
+	if len(r.list()) != 0 {
+		t.Fatal("entry not dropped")
+	}
+	// a long-lived window that closes later is not an error
+	got = nil
+	r.m["b2"] = &termEntry{s: TerminalSession{ID: "b2"}, proc: quick}
+	r.watch(TerminalSession{ID: "b2"}, quick, time.Now().Add(-earlyExitWindow-time.Second))
+	if len(got) != 0 {
+		t.Fatal("late exit reported")
+	}
+	// closed from GhostBrowser (entry already dropped): silent
+	r.watch(TerminalSession{ID: "gone"}, quick, time.Now())
+	if len(got) != 0 {
+		t.Fatal("user close reported")
 	}
 }

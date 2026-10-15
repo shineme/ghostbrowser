@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
-import { Icon, Field, Toggle, Segmented, useToast, useConfirm, useExit } from './ui';
+import { Icon, Field, Toggle, Segmented, useToast, useConfirm, useExit, Floating, type Placement } from './ui';
 import {
   RI, RStep, RWorkflow, RIssue, DEF, STEP_DEFS, GROUPS, FieldDef, StepIcon, toneOf, typeLabel, summary, summaryBase, frameOf, frameText, newStep, flat, countSteps,
   updateStep, removeStep, moveStep, insertAfter, insertInto, cloneStep, findStep, siblingPos, varsBefore,
@@ -25,6 +25,7 @@ export const RpaEditor: React.FC<{ wf: RWorkflow | null; onClose: () => void; on
   const [issues, setIssues] = useState<RIssue[]>([]);
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState(false);
+  const addRef = useRef<HTMLDivElement>(null);
   const [out, close] = useExit(onClose);
   const lastField = useRef<{ k: string; el: HTMLInputElement | HTMLTextAreaElement | null }>({ k: '', el: null });
 
@@ -141,10 +142,10 @@ export const RpaEditor: React.FC<{ wf: RWorkflow | null; onClose: () => void; on
 
             <div className="re-steps-head">
               <span className="section-title" style={{ margin: 0, flex: 1 }}>步骤</span>
-              <div className="re-addwrap">
+              <div className="re-addwrap" ref={addRef}>
                 <button className="btn sm rec-btn" onClick={() => setRec(true)} title={cur ? `录制并插入到「${cur.name || typeLabel(cur.type)}」之后` : '录制并添加到末尾'}><span className="rec-dot-ic sm" /> 录制</button>
                 <button className="btn sm primary" onClick={() => setMenu(m => !m)}><Icon.plus s={13} /> 添加步骤</button>
-                {menu && <AddMenu onPick={add} onClose={() => setMenu(false)} hint={cur ? `插入到「${cur.name || typeLabel(cur.type)}」之后` : '添加到末尾'} />}
+                {menu && <AddMenu anchor={addRef} placement="bottom-end" onPick={add} onClose={() => setMenu(false)} hint={cur ? `插入到「${cur.name || typeLabel(cur.type)}」之后` : '添加到末尾'} />}
               </div>
             </div>
             {global.length > 0 && <div className="notice warn" style={{ marginBottom: 10 }}><Icon.alert /><span className="grow">{global.map(g => g.message).join('；')}</span></div>}
@@ -213,31 +214,24 @@ const StepNode: React.FC<{ s: RStep; ctx: Ctx }> = ({ s, ctx }) => {
 
 const Branch: React.FC<{ label: string; tone: string; parent: string; branch: 'children' | 'else'; list: RStep[]; ctx: Ctx }> = ({ label, tone, parent, branch, list, ctx }) => {
   const [menu, setMenu] = useState(false);
+  const addRef = useRef<HTMLDivElement>(null);
   return (
     <div className={`rs-branch ${tone}`}>
       <div className="rs-blabel"><span>{label}</span>{list.length === 0 && <em>空</em>}</div>
       <StepList list={list} ctx={ctx} />
-      <div className="re-addwrap">
+      <div className="re-addwrap" ref={addRef}>
         <button className="rs-add" onClick={() => setMenu(m => !m)}><Icon.plus s={12} /> 添加到「{label}」</button>
-        {menu && <AddMenu onPick={t => { ctx.addInto(parent, branch, t); setMenu(false); }} onClose={() => setMenu(false)} hint={`添加到「${label}」末尾`} />}
+        {menu && <AddMenu anchor={addRef} onPick={t => { ctx.addInto(parent, branch, t); setMenu(false); }} onClose={() => setMenu(false)} hint={`添加到「${label}」末尾`} />}
       </div>
     </div>
   );
 };
 
-const AddMenu: React.FC<{ onPick: (t: string) => void; onClose: () => void; hint: string }> = ({ onPick, onClose, hint }) => {
-  const ref = useRef<HTMLDivElement>(null);
+const AddMenu: React.FC<{ anchor: React.RefObject<HTMLElement | null>; placement?: Placement; onPick: (t: string) => void; onClose: () => void; hint: string }> = ({ anchor, placement = 'bottom-start', onPick, onClose, hint }) => {
   const [q, setQ] = useState('');
-  useEffect(() => {
-    const down = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node) && !(e.target as HTMLElement).closest?.('.re-addwrap')) onClose(); };
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
-    window.addEventListener('mousedown', down); window.addEventListener('keydown', key, true);
-    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('keydown', key, true); };
-  }, [onClose]);
-  useEffect(() => { ref.current?.scrollIntoView({ block: 'nearest' }); }, []);
   const hit = (d: typeof STEP_DEFS[0]) => !q || (d.label + d.desc + d.type).toLowerCase().includes(q.toLowerCase());
   return (
-    <div className="re-menu" ref={ref}>
+    <Floating open anchor={anchor} onClose={onClose} placement={placement} className="re-menu">
       <div className="re-menu-top"><Icon.search s={13} /><input autoFocus type="text" placeholder="搜索步骤" value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { const f = STEP_DEFS.find(hit); if (f) onPick(f.type); } }} /><span className="sub">{hint}</span></div>
       <div className="re-menu-body">
         {GROUPS.map(g => { const items = STEP_DEFS.filter(d => d.group === g && hit(d)); if (!items.length) return null; return <div key={g} className="re-mgroup">
@@ -249,7 +243,7 @@ const AddMenu: React.FC<{ onPick: (t: string) => void; onClose: () => void; hint
         </div>; })}
         {!STEP_DEFS.some(hit) && <div className="sub" style={{ padding: 16, textAlign: 'center' }}>没有匹配的步骤</div>}
       </div>
-    </div>
+    </Floating>
   );
 };
 
@@ -312,17 +306,12 @@ const ParamField: React.FC<{ f: FieldDef; v: string; set: (v: string) => void; o
 const PickField: React.FC<{ value: string; options: [string, string][]; onChange: (v: string) => void }> = ({ value, options, onChange }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const down = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
-    window.addEventListener('mousedown', down); return () => window.removeEventListener('mousedown', down);
-  }, [open]);
   return (
     <div className={`pick pickfield ${open ? 'open' : ''}`} ref={ref}>
       <button type="button" className="pick-btn" onClick={() => setOpen(o => !o)}><span className="pick-o">{options.find(o => o[0] === value)?.[1] || value}</span>
         <svg className="pick-c" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M7 10l5 5 5-5" /></svg></button>
-      {open && <div className="pick-menu left">{options.map(([v, l]) => <button type="button" key={v} className={v === value ? 'on' : ''} onClick={() => { onChange(v); setOpen(false); }}>
-        <span className="pick-tick">{v === value && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>}</span><span className="pick-o">{l}</span></button>)}</div>}
+      <Floating open={open} anchor={ref} onClose={() => setOpen(false)} matchWidth className="pick-menu field-menu">{options.map(([v, l]) => <button type="button" key={v} className={v === value ? 'on' : ''} onClick={() => { onChange(v); setOpen(false); }}>
+        <span className="pick-tick">{v === value && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>}</span><span className="pick-o">{l}</span></button>)}</Floating>
     </div>
   );
 };

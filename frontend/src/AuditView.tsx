@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api, Profile, Settings } from './api';
-import { Icon, Pick, Segmented, Avatar, useToast, useConfirm } from './ui';
+import { Icon, Pick, Floating, Segmented, Avatar, useToast, useConfirm } from './ui';
 
 type McpStatus = Awaited<ReturnType<typeof api.McpStatus>>;
 type AuditEntry = { id: string; time: number; source: string; action: string; target: string; name: string; ok: boolean; error?: string; detail?: string };
@@ -400,24 +400,17 @@ const Row: React.FC<{ e: AuditEntry; i: number; p?: Profile; px: Record<string, 
 const ExportMenu: React.FC<{ disabled?: boolean; onPick: (f: 'csv' | 'json') => void }> = ({ disabled, onPick }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const down = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    window.addEventListener('mousedown', down); window.addEventListener('keydown', key);
-    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('keydown', key); };
-  }, [open]);
   return (
     <div className={`pick au-export ${open ? 'open' : ''}`} ref={ref}>
       <button className="btn" disabled={disabled} onClick={() => setOpen(o => !o)}><Icon.download s={14} /> 导出
         <svg className="pick-c" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M7 10l5 5 5-5" /></svg></button>
-      {open && <div className="pick-menu right">
+      <Floating open={open} anchor={ref} onClose={() => setOpen(false)} placement="bottom-end" className="pick-menu au-export-menu">
         {([['csv', 'CSV 表格', 'Excel / WPS 可直接打开'], ['json', 'JSON', '便于程序处理']] as const).map(([v, l, h]) =>
           <button key={v} type="button" onClick={() => { setOpen(false); onPick(v); }}>
             <span className="pick-tick" /><span className="pick-o">{l}<small>{h}</small></span><span className="pick-n num">.{v}</span>
           </button>)}
         <div className="au-export-note">按当前筛选导出全部匹配记录</div>
-      </div>}
+      </Floating>
     </div>
   );
 };

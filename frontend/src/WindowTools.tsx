@@ -1,10 +1,9 @@
 // Window arrange + group-control syncer (群控同步器) for running profiles.
 // Lives in the profiles view's run strip: two buttons, an arrange popover with
 // a live layout preview, and the 多窗口同步器 dialog (SyncerDialog.tsx).
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useEffect, useRef, useState } from 'react';
 import { api, onEvent, Profile } from './api';
-import { Icon, Segmented, useToast } from './ui';
+import { Icon, Segmented, useToast, Floating, Tip } from './ui';
 import { SyncerDialog } from './SyncerDialog';
 
 type Mode = 'grid' | 'cascade' | 'stack';
@@ -23,17 +22,6 @@ const MODE_HINT: Record<Mode, string> = {
 const ACCENTS = ['#7c8cff', '#b07cff', '#4fe0d0', '#e58bff', '#3ee6a8', '#ffc857', '#60a5fa', '#ff8a9a'];
 const initials = (n: string) => (n.match(/[A-Za-z0-9\u4e00-\u9fa5]+/g) || [n]).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const errMsg = (e: any) => String(e?.message || e || '未知错误');
-
-/** Closes on outside mousedown / Escape. `refs` are the elements counted as inside. */
-const useDismiss = (open: boolean, close: () => void, refs: React.RefObject<HTMLElement | null>[]) => {
-  useEffect(() => {
-    if (!open) return;
-    const down = (e: MouseEvent) => { if (!refs.some(r => r.current?.contains(e.target as Node))) close(); };
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
-    window.addEventListener('mousedown', down); window.addEventListener('keydown', key);
-    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('keydown', key); };
-  }, [open]);
-};
 
 // ------------------------------------------------------------------ preview
 const LayoutPreview: React.FC<{ layout: Layout | null; names: string[]; mode: Mode }> = ({ layout, names, mode }) => {
@@ -62,19 +50,14 @@ const LayoutPreview: React.FC<{ layout: Layout | null; names: string[]; mode: Mo
 };
 
 // ------------------------------------------------------------------ arrange popover
-const ArrangePop: React.FC<{ anchor: HTMLElement; running: Profile[]; selected: string[]; onClose: () => void; popRef: React.RefObject<HTMLDivElement | null> }> = ({ anchor, running, selected, onClose, popRef }) => {
+const ArrangePop: React.FC<{ anchor: React.RefObject<HTMLElement | null>; running: Profile[]; selected: string[]; onClose: () => void }> = ({ anchor, running, selected, onClose }) => {
   const toast = useToast();
   const [mode, setMode] = useState<Mode>(() => (localStorage.getItem('gb.arrangeMode') as Mode) || 'grid');
   const [scope, setScope] = useState<'all' | 'sel'>(selected.length ? 'sel' : 'all');
   const [layout, setLayout] = useState<Layout | null>(null);
   const [busy, setBusy] = useState(false);
-  const [pos, setPos] = useState({ top: 0, left: 0 });
   const targets = scope === 'sel' && selected.length ? running.filter(p => selected.includes(p.id)) : running;
 
-  useLayoutEffect(() => {
-    const r = anchor.getBoundingClientRect(); const w = 348;
-    setPos({ top: r.bottom + 8, left: Math.max(12, Math.min(window.innerWidth - w - 12, r.right - w)) });
-  }, [anchor]);
   useEffect(() => { if (!selected.length && scope === 'sel') setScope('all'); }, [selected.length]);
   useEffect(() => {
     let live = true;
@@ -95,8 +78,8 @@ const ArrangePop: React.FC<{ anchor: HTMLElement; running: Profile[]; selected: 
     finally { setBusy(false); }
   };
 
-  return createPortal(
-    <div className="wt-pop" ref={popRef} style={pos}>
+  return (
+    <Floating open anchor={anchor} onClose={onClose} placement="bottom-end" gap={8} className="wt-pop">
       <div className="wt-pop-h"><span className="wt-glyph"><Icon.grid s={15} /></span><div><b>排列窗口</b><span>一键整理正在运行的浏览器窗口</span></div></div>
       <Segmented<Mode> className="compact block wt-seg" value={mode} onChange={setMode}
         items={[['grid', '网格', <Icon.grid />], ['cascade', '层叠', <Icon.layers />], ['stack', '重叠', <Icon.copy />]]} />
@@ -110,20 +93,18 @@ const ArrangePop: React.FC<{ anchor: HTMLElement; running: Profile[]; selected: 
         <button className="btn ghost sm" onClick={onClose}>取消</button>
         <button className="btn primary sm" disabled={busy || !targets.length} onClick={apply}>{busy ? '排列中…' : <><Icon.check s={13} /> 应用</>}</button>
       </div>
-    </div>, document.body);
+    </Floating>);
 };
 
 // ------------------------------------------------------------------ strip buttons
 export const WindowTools: React.FC<{ running: Profile[]; selected: string[]; bulk?: boolean }> = ({ running, selected }) => {
   const toast = useToast();
   const btnRef = useRef<HTMLButtonElement>(null);
-  const popRef = useRef<HTMLDivElement>(null);
   const [arr, setArr] = useState(false);
   const [panel, setPanel] = useState(false);
   const [st, setSt] = useState<SyncerState>({ running: false, master: '', masterName: '', followers: [], events: 0, lastEvent: '', startedAt: 0 });
   const userStop = useRef(false);
   const wasRunning = useRef(false);
-  useDismiss(arr, () => setArr(false), [btnRef, popRef]);
 
   useEffect(() => {
     const take = (s: SyncerState) => {
@@ -146,15 +127,15 @@ export const WindowTools: React.FC<{ running: Profile[]; selected: string[]; bul
 
   return (
     <div className="wt-tools">
-      <span className="wt-tip" data-tip={none ? '没有正在运行的环境' : ''}>
+      <Tip tip={none ? '没有正在运行的环境' : ''} placement="bottom-end" className="wt-tip">
         <button ref={btnRef} className={`btn sm ${arr ? 'on' : ''}`} disabled={none} onClick={() => setArr(o => !o)}><Icon.grid s={13} /> 排列窗口</button>
-      </span>
+      </Tip>
       {st.running
         ? <button className="wt-pill" onClick={() => setPanel(p => !p)} title="打开同步器"><i className="wt-pulse" />同步中 · <b className="num">{okN}</b> 台</button>
-        : <span className="wt-tip" data-tip={running.length < 2 ? '至少需要两个正在运行的环境' : ''}>
+        : <Tip tip={running.length < 2 ? '至少需要两个正在运行的环境' : ''} placement="bottom-end" className="wt-tip">
           <button className={`btn sm ${panel ? 'on' : ''}`} disabled={running.length < 2} onClick={() => setPanel(p => !p)}><Icon.bolt s={13} /> 同步器</button>
-        </span>}
-      {arr && btnRef.current && <ArrangePop anchor={btnRef.current} running={running} selected={selected} popRef={popRef} onClose={() => setArr(false)} />}
+        </Tip>}
+      {arr && <ArrangePop anchor={btnRef} running={running} selected={selected} onClose={() => setArr(false)} />}
       {panel && <SyncerDialog running={running} st={st} onClose={() => setPanel(false)} onStop={stop} />}
     </div>
   );

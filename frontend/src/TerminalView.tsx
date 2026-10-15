@@ -46,7 +46,14 @@ export function TerminalView({ profiles, proxyName }: { profiles: Profile[]; pro
     detect();
     api.TerminalInfo().then((i: Info) => { setInfo(i); setPr(p => ({ ...p, ...i.prefs, envMode: i.prefs.envMode || 'none', host: i.prefs.host || 'console' })); }).catch(() => setInfo({ prefs: pr, wt: false, home: '', os: 'windows' }));
     api.ListTerminals().then(l => setSessions(l || []));
-    return onEvent('terminal:changed', (l: TerminalSession[]) => setSessions(l || []));
+    const off1 = onEvent('terminal:changed', (l: TerminalSession[]) => setSessions(l || []));
+    // A window that closed within ~3 s of launch: say so instead of it silently vanishing.
+    const off2 = onEvent('terminal:failed', (x: { id: string; name: string; code: number; message: string }) => {
+      setSessions(l => l.filter(s => s.id !== x.id));
+      setLaunchErr(x.message || `${x.name} 终端窗口启动后立即退出（退出码 ${x.code}）`);
+      toast(`${x.name} 终端窗口已立即退出（退出码 ${x.code}）`, 'bad');
+    });
+    return () => { off1 && off1(); off2 && off2(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detect]);
 

@@ -22,7 +22,7 @@ func hasWindowsTerminal() bool { return false }
 
 // startTerminalWindow (Linux): opens the first terminal emulator found and
 // runs the CLI, then the user's shell. macOS is not supported yet.
-func startTerminalWindow(host, dir, title string, env map[string]string, bin string) (*exec.Cmd, bool, error) {
+func startTerminalWindow(host, dir, title string, env map[string]string, bin string) (*termProc, bool, error) {
 	if runtime.GOOS == "darwin" {
 		return nil, false, fmt.Errorf("终端启动器目前只支持 Windows 和 Linux")
 	}
@@ -55,5 +55,5 @@ func startTerminalWindow(host, dir, title string, env map[string]string, bin str
 	if err := cmd.Start(); err != nil {
 		return nil, false, err
 	}
-	return cmd, !strings.Contains(cmd.Path, "gnome-terminal"), nil
+	return cmdProc(cmd), !strings.Contains(cmd.Path, "gnome-terminal"), nil
 }

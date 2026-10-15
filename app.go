@@ -1340,6 +1340,7 @@ func (a *App) CheckTerminalDir(dir string) (string, error) { return resolveTermi
 func (a *App) LaunchTerminal(req TerminalRequest) (TerminalSession, error) {
 	if terms.onEvent == nil {
 		terms.onEvent = func() { wruntime.EventsEmit(a.ctx, "terminal:changed", terms.list()) }
+		terms.onFail = func(x TerminalExit) { wruntime.EventsEmit(a.ctx, "terminal:failed", x) }
 	}
 	st := a.store.GetSettings()
 	st.Terminal = &TerminalPrefs{Tool: req.Tool, Dir: req.Dir, EnvMode: req.EnvMode, ProfileID: req.ProfileID, TZ: req.TZ, Lang: req.Lang, Host: req.Host}

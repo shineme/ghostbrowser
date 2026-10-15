@@ -677,7 +677,12 @@ const M = {
       tz: req.envMode === 'profile' ? p?.fingerprint.timezone || '' : req.envMode === 'custom' ? req.tz : '', lang: req.envMode === 'profile' ? (p?.fingerprint.languages || [])[0] || '' : req.envMode === 'custom' ? req.lang : '',
       proxy: req.envMode === 'profile' && px ? `${px.type.toUpperCase()} ${px.host}:${px.port}` : '', relay: req.envMode === 'profile' && px && (px.user || px.type.startsWith('socks')) ? '127.0.0.1:' + (40000 + Math.floor(Math.random() * 9999)) : '',
       host: req.host || 'console', pid: 1000 + Math.floor(Math.random() * 30000), tracked: req.host !== 'wt', started: Date.now() / 1000 };
-    termMock.sessions.unshift(s); mockEmit('terminal:changed', [...termMock.sessions]); return s;
+    termMock.sessions.unshift(s); mockEmit('terminal:changed', [...termMock.sessions]);
+    if (location.hash.includes('termfail') && s.tracked) setTimeout(() => { // window that exits right away (terminal.go watch → terminal:failed)
+      termMock.sessions = termMock.sessions.filter(x => x.id !== s.id); mockEmit('terminal:changed', [...termMock.sessions]);
+      mockEmit('terminal:failed', { id: s.id, name: s.name, code: 1, millis: 900, message: `${s.name} 终端窗口启动后 0.9 秒就退出了（退出码 1）。请在 PowerShell 中手动运行该命令查看报错，或改用 Windows Terminal 打开。` });
+    }, 900);
+    return s;
   },
   ListTerminals: async (): Promise<TerminalSession[]> => [...termMock.sessions],
   CloseTerminal: async (id: string) => { await wait(300); termMock.sessions = termMock.sessions.filter(x => x.id !== id); mockEmit('terminal:changed', [...termMock.sessions]); },
@@ -737,7 +742,7 @@ const M = {
   PendingRestart: async (): Promise<string[]> => mock.running.map(r => r.profileId).filter(id => { const p = mock.profiles.find(x => x.id === id); return p && shellMock.launched[id] !== undefined && shellMock.launched[id] !== shellMock.key(p); }),
   RestartProfile: async (id: string): Promise<any> => { await wait(1400); const p = mock.profiles.find(x => x.id === id); if (p) shellMock.launched[id] = shellMock.key(p); return mock.running.find(r => r.profileId === id); },
   StartProfileAt: async (id: string, url: string): Promise<any> => { await wait(700); if (!/^https?:\/\//i.test(url)) throw '网址无效：只支持 http/https'; let r = mock.running.find(x => x.profileId === id); if (!r) { r = { profileId: id, pid: 1234, debugPort: 9222, wsUrl: '', startedAt: Date.now() / 1000 }; mock.running.push(r); const p = mock.profiles.find(x => x.id === id); if (p) shellMock.launched[id] = shellMock.key(p); } return r; },
-  AppVersion: async (): Promise<string> => '0.8.3',
+  AppVersion: async (): Promise<string> => '0.8.4',
   // ---- default browser ---- (#dbunsupported = non-Windows, #dbdefault = already the system browser, #dbpick = a link waiting for a profile)
   DefaultBrowserStatus: async (): Promise<any> => dbMock.status(),
   SetDefaultProfile: async (id: string): Promise<any> => { await wait(120); if (id && !mock.profiles.some(p => p.id === id)) throw new Error('环境不存在'); dbMock.profileId = id; const st = dbMock.status(); mockEmit('defaultbrowser:changed', st); return st; },
@@ -1186,7 +1191,7 @@ const recFinalize = (steps: any[], o: any) => {
 const shellMock: any = {
   key: (p: any) => JSON.stringify([p.proxyId, p.kernel || '', p.fingerprint?.timezone, p.fingerprint?.languages, p.fingerprint?.userAgent, p.fingerprint?.screenWidth]),
   launched: {} as Record<string, string>,
-  info: { current: '0.8.2', latest: '0.8.3', available: true, source: 'server', checkedAt: Date.now() / 1000 - 420, error: '',
+  info: { current: '0.8.3', latest: '0.8.4', available: true, source: 'server', checkedAt: Date.now() / 1000 - 420, error: '',
     notes: '## 新功能\n- **托盘常驻**：关闭窗口后环境和代理继续运行，可从托盘恢复\n- **待重启提示**：运行中修改代理或指纹后一键重启生效\n- 网站快捷入口与公告中心\n\n## 修复\n1. 修复云同步在弱网下偶尔重复上传的问题\n2. 修复部分 4K 屏幕下窗口排列错位\n\n详情见 [更新日志](https://example.com/changelog)' },
   prog: { phase: 'idle', got: 0, total: 0, pct: 0 },
   install() {

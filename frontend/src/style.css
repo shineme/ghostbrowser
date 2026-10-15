@@ -777,11 +777,11 @@ a { color: #aab6ff; }
 .au-export { position: relative; }
 .au-export .btn .pick-c { width: 14px; height: 14px; margin-left: -2px; transition: transform var(--t-med); }
 .au-export.open .btn .pick-c { transform: rotate(180deg); }
-.au-export .pick-menu { min-width: 230px; }
-.au-export .pick-menu button { height: 44px; }
-.au-export .pick-o { flex: 1; display: flex; flex-direction: column; line-height: 1.3; }
-.au-export .pick-o small { font-size: 11px; color: var(--txt-3); }
-.au-export .pick-tick { width: 2px; }
+.pick-menu.au-export-menu { min-width: 230px; }
+.au-export-menu button { height: 44px; }
+.au-export-menu .pick-o { flex: 1; display: flex; flex-direction: column; line-height: 1.3; }
+.au-export-menu .pick-o small { font-size: 11px; color: var(--txt-3); }
+.au-export-menu .pick-tick { width: 2px; }
 .au-export-note { font-size: 11px; color: var(--txt-3); padding: 6px 9px 4px; border-top: 1px solid var(--hair); margin-top: 4px; }
 .au-table { max-height: calc(100vh - 220px); min-height: 160px; overflow: auto; }
 .au-table table { table-layout: fixed; }
@@ -832,7 +832,6 @@ tbody tr.au-fail { background: linear-gradient(90deg, rgba(255,107,122,.06), tra
 .wt-tools .btn.sm { height: 32px; gap: 6px; }
 .wt-tools .btn.on { border-color: rgba(124,140,255,.45); background: rgba(124,140,255,.12); color: #fff; }
 .wt-tip { position: relative; display: inline-flex; }
-.wt-tip[data-tip]:not([data-tip=""]):hover::after { content: attr(data-tip); position: absolute; top: calc(100% + 6px); right: 0; white-space: nowrap; font-size: 11.5px; color: var(--txt-2); padding: 5px 9px; border-radius: 8px; background: rgba(20,23,32,.96); border: 1px solid var(--hair-2); z-index: 70; pointer-events: none; }
 .wt-pill { all: unset; box-sizing: border-box; height: 32px; display: inline-flex; align-items: center; gap: 7px; padding: 0 13px; border-radius: 999px; cursor: pointer; font-size: 12.5px; font-weight: 600; color: #d6dcff; white-space: nowrap;
   background: linear-gradient(135deg, rgba(124,140,255,.2), rgba(176,124,255,.14)); border: 1px solid rgba(124,140,255,.4); box-shadow: 0 0 18px -6px rgba(124,140,255,.8); transition: filter var(--t-fast); }
 .wt-pill:hover { filter: brightness(1.15); }
@@ -1039,7 +1038,6 @@ textarea.rpa-area { font-family: inherit; font-size: 13px; min-height: 64px; }
 .rs-add { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 8px; border: 1px dashed var(--hair-2); background: transparent; color: var(--txt-3); font: inherit; font-size: 12px; cursor: pointer; transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast); }
 .rs-add:hover { color: var(--txt); border-color: rgba(124,140,255,.5); background: rgba(124,140,255,.06); }
 .re-menu { position: absolute; z-index: 70; top: calc(100% + 6px); left: 0; width: 520px; border-radius: 14px; border: 1px solid var(--hair-2); background: rgba(20,23,32,.97); backdrop-filter: blur(20px); box-shadow: 0 24px 60px -18px rgba(0,0,0,.85); animation: rise var(--t-med) var(--ease-out); overflow: hidden; }
-.re-steps-head .re-menu { left: auto; right: 0; }
 .re-menu-top { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--hair); color: var(--txt-3); }
 .re-menu-top input { height: 30px; border: 0; background: transparent; box-shadow: none; padding: 0; flex: 1; min-width: 0; }
 .re-menu-top input:focus { box-shadow: none; background: transparent; }
@@ -1075,7 +1073,6 @@ input.is-bad, textarea.is-bad { border-color: rgba(255,107,122,.55); }
 .var-chip:active { transform: scale(.95); }
 .pickfield { width: 100%; }
 .pickfield .pick-btn { width: 100%; height: 38px; justify-content: space-between; font-size: 13px; color: var(--txt); background: rgba(0,0,0,.25); border-color: var(--hair-2); }
-.pickfield .pick-menu { width: 100%; }
 .rpa-issues { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px; border-radius: 8px; border: 1px solid rgba(255,107,122,.3); background: rgba(255,107,122,.08); color: #ffb3bc; font: inherit; font-size: 12.5px; cursor: pointer; }
 .rpa-issues:hover { background: rgba(255,107,122,.14); }
 .rpa-ok { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: #8ff2cb; }
@@ -1320,7 +1317,7 @@ input.mono, textarea.mono { font-family: "JBMono", Consolas, monospace; }
 /* ---- review: SelectField (form dropdown, replaces native select) ---- */
 .selfield .pick-btn { padding: 0 10px 0 12px; font-weight: 400; }
 .selfield .pick-btn .pick-o { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.selfield .pick-menu { max-height: 280px; }
+.pick-menu.sel-menu { max-height: 280px; }
 .selfield.disabled .pick-btn, .selfield .pick-btn:disabled { opacity: .5; cursor: not-allowed; }
 .selfield.disabled .pick-btn:hover { background: rgba(0,0,0,.25); color: var(--txt); }
 /* ---- chromium compat ---- */
@@ -1591,10 +1588,6 @@ input.mono, textarea.mono { font-family: "JBMono", Consolas, monospace; }
 .sd-spin.light { border-color: rgba(255,255,255,.35); border-top-color: #fff; }
 
 .sd-tip { position: relative; display: inline-flex; }
-.sd-tip[data-tip]:not([data-tip=""])::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translate(-50%, 4px); white-space: nowrap;
-  font-size: 11.5px; color: var(--txt); padding: 6px 10px; border-radius: 8px; background: rgba(28,32,44,.98); border: 1px solid var(--hair-2); box-shadow: 0 10px 24px -10px #000;
-  z-index: 8; pointer-events: none; opacity: 0; transition: opacity var(--t-fast), transform var(--t-med) var(--ease-out); }
-.sd-tip[data-tip]:not([data-tip=""]):hover::after { opacity: 1; transform: translate(-50%, 0); transition-delay: 120ms; }
 
 .sd-batch { display: grid; grid-template-columns: 172px 1fr; gap: 14px; align-items: start; }
 .sd-batch-l b { display: block; font-size: 13px; font-weight: 650; margin-top: 4px; }
@@ -1618,7 +1611,7 @@ input.mono, textarea.mono { font-family: "JBMono", Consolas, monospace; }
 @media (prefers-reduced-motion: reduce) {
   .modal.sd, .overlay.out .modal.sd, .sd-menu, .sd-livecard, .sd-lastev b, .sd-chip-dot, .sd-url.err input[type=text], .sd-act-ic, .sd-open svg { animation: none !important; }
   .sd-glyph.spin svg, .sd-live.on .sd-dot::after { animation: none; }
-  .sd-sw-track i, .sd-chev, .sd-tip::after { transition: none; }
+  .sd-sw-track i, .sd-chev { transition: none; }
   .sd-spin { animation-duration: 1.6s; }
 }
 
@@ -2333,7 +2326,6 @@ tbody tr .acts .btn.icon { width: 27px; } /* room for the share action */
 .site-t small { font-size: 11px; color: var(--txt-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .site-custom { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--hair); background: rgba(0,0,0,.16); color: var(--txt-3); }
 .site-custom .btn { flex: none; min-width: 54px; justify-content: center; }
-.site-pop.up { top: auto; bottom: calc(100% + 8px); }
 .panel.list th { white-space: nowrap; }
 .btn.sm.icon.restart-btn { width: 30px; padding: 0; justify-content: center; }
 .ann-h { padding-left: 16px; }
@@ -2426,3 +2418,19 @@ tr:hover .db-star, .db-star:focus-visible { opacity: .9; }
 .db-remember .chk { margin-top: 1px; flex: none; }
 .db-remember small { display: block; color: var(--txt-3); font-weight: 450; font-size: 11.5px; margin-top: 2px; line-height: 1.5; }
 .db-remember small svg { vertical-align: -1px; color: var(--warn); }
+
+/* ---- floating layer (ui.tsx <Floating> / <Tip>): portal + position:fixed ---- */
+.gb-float { position: fixed !important; z-index: 130 !important; margin: 0 !important; }
+.gb-float.pick-menu.up, .gb-float.ash-pop.up, .gb-float.re-menu.up, .gb-float.wt-pop.up, .gb-float.combo-list.up { animation-name: floatUp; }
+.gb-float.sd-menu.up { transform-origin: bottom center; }
+@keyframes floatUp { from { opacity: 0; transform: translateY(-6px); } }
+.gtip-wrap { position: relative; display: inline-flex; }
+.gtip-wrap.block { display: block; }
+.gtip-wrap.has-tip button:disabled { pointer-events: none; }
+.gb-float.gtip { z-index: 140 !important; white-space: nowrap; font-size: 11.5px; line-height: 1.4; color: var(--txt); padding: 6px 10px; border-radius: 8px;
+  background: rgba(28,32,44,.98); border: 1px solid var(--hair-2); box-shadow: 0 10px 24px -10px #000; pointer-events: none; animation: tipIn 160ms var(--ease-out); }
+@keyframes tipIn { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .gb-float { animation: none !important; } }
+.gb-float.re-menu { display: flex; flex-direction: column; }
+.gb-float.re-menu .re-menu-body { flex: 1 1 auto; min-height: 0; }
+.gb-float.wt-pop { overflow-y: auto; }

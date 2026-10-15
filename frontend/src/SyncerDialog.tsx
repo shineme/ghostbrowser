@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, Profile } from './api';
-import { Icon, useToast, useExit, CountUp, avatarStyle } from './ui';
+import { Icon, useToast, useExit, CountUp, avatarStyle, Floating, Tip as UITip } from './ui';
 import type { SyncerState } from './WindowTools';
 
 type Opts = { click: boolean; input: boolean; key: boolean; scroll: boolean; tabs: boolean; delayMin: number; delayMax: number };
@@ -56,27 +56,16 @@ const G = {
 };
 
 // ------------------------------------------------------------------ small parts
-const useOutside = (open: boolean, close: () => void, ref: React.RefObject<HTMLElement | null>) => {
-  useEffect(() => {
-    if (!open) return;
-    const down = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) close(); };
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
-    window.addEventListener('mousedown', down); window.addEventListener('keydown', key, true);
-    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('keydown', key, true); };
-  }, [open]);
-};
-
 const Ava: React.FC<{ p?: Profile; id: string; name: string; sm?: boolean }> = ({ p, id, name, sm }) =>
   <span className={`sd-ava ${sm ? 'sm' : ''}`} style={avatarStyle(p?.fingerprint?.noiseSeed || id)}>{initials(name)}</span>;
 
-/** Hover tooltip with the reason a control is disabled. */
+/** Hover tooltip with the reason a control is disabled (floating layer, never clipped by the dialog). */
 const Tip: React.FC<{ tip?: string; children: React.ReactNode; wide?: boolean }> = ({ tip, children, wide }) =>
-  <span className={`sd-tip ${wide ? 'wide' : ''}`} data-tip={tip || ''}>{children}</span>;
+  <UITip tip={tip} block={wide} className="sd-tip">{children}</UITip>;
 
 const MasterPick: React.FC<{ running: Profile[]; value: string; onChange: (id: string) => void; disabled?: string }> = ({ running, value, onChange, disabled }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  useOutside(open, () => setOpen(false), ref);
   const cur = running.find(p => p.id === value);
   return (
     <Tip tip={disabled} wide>
@@ -86,12 +75,12 @@ const MasterPick: React.FC<{ running: Profile[]; value: string; onChange: (id: s
             : <span className="sd-pick-ph">选择主控环境</span>}
           <span className="sd-chev">{G.chev(14)}</span>
         </button>
-        {open && <div className="sd-menu">
+        <Floating open={open} anchor={ref} onClose={() => setOpen(false)} matchWidth className="sd-menu">
           {running.map(p => <button type="button" key={p.id} className={p.id === value ? 'on' : ''} onClick={() => { onChange(p.id); setOpen(false); }}>
             <span className="radio" /><Ava p={p} id={p.id} name={p.name} sm /><span className="sd-o">{p.name}</span>
           </button>)}
           {!running.length && <div className="sd-menu-empty">没有正在运行的环境</div>}
-        </div>}
+        </Floating>
       </div>
     </Tip>
   );
@@ -100,7 +89,6 @@ const MasterPick: React.FC<{ running: Profile[]; value: string; onChange: (id: s
 const FollowPick: React.FC<{ running: Profile[]; master: string; value: string[]; onChange: (ids: string[]) => void; disabled?: string }> = ({ running, master, value, onChange, disabled }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  useOutside(open, () => setOpen(false), ref);
   const opts = running.filter(p => p.id !== master);
   const sel = opts.filter(p => value.includes(p.id));
   const toggle = (id: string) => onChange(value.includes(id) ? value.filter(x => x !== id) : [...value, id]);
@@ -114,14 +102,14 @@ const FollowPick: React.FC<{ running: Profile[]; master: string; value: string[]
             : <span className="sd-pick-ph">{opts.length ? '至少选择一个受控环境' : '没有其他正在运行的环境'}</span>}
           <span className="sd-chev">{G.chev(14)}</span>
         </button>
-        {open && <div className="sd-menu">
+        <Floating open={open} anchor={ref} onClose={() => setOpen(false)} matchWidth className="sd-menu">
           {opts.length > 1 && <div className="sd-menu-h"><span>受控环境 <em className="num">{sel.length}/{opts.length}</em></span>
             <button type="button" onClick={() => onChange(all ? [] : opts.map(p => p.id))}>{all ? '全不选' : '全选'}</button></div>}
           {opts.map(p => { const on = value.includes(p.id); return <button type="button" key={p.id} className={on ? 'on' : ''} onClick={() => toggle(p.id)}>
             <span className={`chk ${on ? 'on' : ''}`}><Icon.check s={11} /></span><Ava p={p} id={p.id} name={p.name} sm /><span className="sd-o">{p.name}</span>
           </button>; })}
           {!opts.length && <div className="sd-menu-empty">至少需要两个正在运行的环境</div>}
-        </div>}
+        </Floating>
       </div>
     </Tip>
   );

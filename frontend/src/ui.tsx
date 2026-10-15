@@ -155,19 +155,134 @@ export function Segmented<T extends string>({ items, value, onChange, className 
   );
 }
 
+// ---- floating layer (menus, popovers, tooltips) ----
+// Every dropdown renders through <Floating>: a portal on document.body with
+// position:fixed computed from its anchor's rect, so table panels, scroll
+// containers, sticky headers and modals never clip or cover it. It flips
+// upward when there is not enough room below, clamps to the viewport, and
+// closes on outside mousedown, Escape (topmost only), resize, or when the
+// anchor moves because something scrolled. z-index (.gb-float) sits above
+// tables, the run strip, the transfer dock and modals, so a menu opened inside
+// a modal is above that modal.
+export type Placement = 'bottom-start' | 'bottom-end' | 'bottom-center' | 'top-start' | 'top-end' | 'top-center';
+const floatStack: number[] = [];
+let floatSeq = 0;
+const VIEW_MARGIN = 8;
+
+/** Positions `el` next to `anchor` (pure DOM; also used by Tip). Returns 'up' when flipped. */
+export function placeFloating(el: HTMLElement, anchor: DOMRect, placement: Placement, gap: number, matchWidth: boolean | 'min'): boolean {
+  const vw = window.innerWidth, vh = window.innerHeight, M = VIEW_MARGIN;
+  if (matchWidth === true) el.style.width = `${anchor.width}px`;
+  else if (matchWidth === 'min') el.style.minWidth = `${anchor.width}px`;
+  el.style.maxHeight = '';
+  el.style.maxWidth = `${vw - 2 * M}px`;
+  const h = el.offsetHeight, w = el.offsetWidth;
+  const below = vh - anchor.bottom - gap - M, above = anchor.top - gap - M;
+  const wantUp = placement.startsWith('top');
+  const up = wantUp ? !(h > above && below > above) : h > below && above > below;
+  const avail = Math.max(80, up ? above : below);
+  const hh = Math.min(h, avail);
+  if (h > avail) el.style.maxHeight = `${avail}px`;
+  const top = Math.min(Math.max(M, up ? anchor.top - gap - hh : anchor.bottom + gap), vh - M - hh);
+  const align = placement.split('-')[1];
+  let left = align === 'end' ? anchor.right - w : align === 'center' ? anchor.left + anchor.width / 2 - w / 2 : anchor.left;
+  left = Math.min(Math.max(M, left), vw - w - M);
+  el.style.top = `${Math.round(top)}px`;
+  el.style.left = `${Math.round(left)}px`;
+  el.style.right = 'auto'; el.style.bottom = 'auto';
+  el.style.visibility = '';
+  el.classList.toggle('up', up);
+  return up;
+}
+
+export const Floating: React.FC<{
+  open: boolean; anchor: React.RefObject<HTMLElement | null>; onClose: () => void; children: React.ReactNode;
+  placement?: Placement; gap?: number; matchWidth?: boolean | 'min'; className?: string; style?: React.CSSProperties;
+  onMouseDown?: React.MouseEventHandler<HTMLDivElement>; floatRef?: React.MutableRefObject<HTMLDivElement | null>; role?: string;
+}> = ({ open, ...rest }) => open ? <FloatingBody {...rest} /> : null;
+
+const FloatingBody: React.FC<Omit<React.ComponentProps<typeof Floating>, 'open'>> = ({ anchor, onClose, children, placement = 'bottom-start', gap = 6, matchWidth = false, className = '', style, onMouseDown, floatRef, role }) => {
+  const el = useRef<HTMLDivElement | null>(null);
+  const seq = useRef(0);
+  if (!seq.current) seq.current = ++floatSeq;
+  const close = useRef(onClose); close.current = onClose;
+  const last = useRef<DOMRect | null>(null);
+  const place = useCallback(() => {
+    const a = anchor.current, f = el.current;
+    if (!a || !f) return;
+    const r = a.getBoundingClientRect();
+    last.current = r;
+    placeFloating(f, r, placement, gap, matchWidth);
+  }, [anchor, placement, gap, matchWidth]);
+  useLayoutEffect(() => { place(); });
+  useEffect(() => {
+    const me = seq.current;
+    floatStack.push(me);
+    const inside = (t: EventTarget | null) => {
+      const n = t as Node | null;
+      if (!n) return false;
+      if (el.current?.contains(n) || anchor.current?.contains(n)) return true;
+      const host = (n as HTMLElement).closest?.('[data-gb-float]') || (n.parentElement?.closest?.('[data-gb-float]') ?? null);
+      return !!host && Number(host.getAttribute('data-gb-float')) > me; // a menu opened from this one
+    };
+    const down = (e: MouseEvent) => { if (!inside(e.target)) close.current(); };
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || floatStack[floatStack.length - 1] !== me) return;
+      e.stopPropagation(); close.current(); // keep the modal underneath open
+    };
+    const resize = () => close.current();
+    const scroll = (e: Event) => {
+      if (el.current?.contains(e.target as Node)) return;
+      const a = anchor.current, p = last.current;
+      if (!a || !p) return;
+      const r = a.getBoundingClientRect();
+      if (Math.abs(r.top - p.top) > 1 || Math.abs(r.left - p.left) > 1) close.current();
+    };
+    document.addEventListener('mousedown', down, true);
+    window.addEventListener('keydown', key, true);
+    window.addEventListener('resize', resize);
+    window.addEventListener('scroll', scroll, true);
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => place()) : null;
+    if (ro && el.current) ro.observe(el.current);
+    return () => {
+      const i = floatStack.lastIndexOf(me); if (i >= 0) floatStack.splice(i, 1);
+      document.removeEventListener('mousedown', down, true);
+      window.removeEventListener('keydown', key, true);
+      window.removeEventListener('resize', resize);
+      window.removeEventListener('scroll', scroll, true);
+      ro?.disconnect();
+    };
+  }, [anchor, place]);
+  return createPortal(<div ref={n => { el.current = n; if (floatRef) floatRef.current = n; }} data-gb-float={seq.current} role={role}
+    className={`gb-float ${className}`} style={{ ...style, position: 'fixed', top: 0, left: 0, right: 'auto', bottom: 'auto', visibility: 'hidden' }} onMouseDown={onMouseDown}>
+    {children}
+  </div>, document.body);
+};
+
+/** Hover tooltip rendered in the floating layer (never clipped by its container).
+ * Works over disabled buttons (they stop taking pointer events inside the wrapper). */
+export const Tip: React.FC<{ tip?: string; children: React.ReactNode; placement?: Placement; className?: string; block?: boolean }> = ({ tip, children, placement = 'top-center', className = '', block }) => {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [show, setShow] = useState(false);
+  const t = useRef<any>(0);
+  const tipEl = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => { if (show && tipEl.current && ref.current) placeFloating(tipEl.current, ref.current.getBoundingClientRect(), placement, 7, false); });
+  useEffect(() => () => clearTimeout(t.current), []);
+  useEffect(() => { if (!tip) setShow(false); }, [tip]);
+  const enter = () => { if (!tip) return; clearTimeout(t.current); t.current = setTimeout(() => setShow(true), 120); };
+  const leave = () => { clearTimeout(t.current); setShow(false); };
+  return <span ref={ref} className={`gtip-wrap ${tip ? 'has-tip' : ''} ${block ? 'block' : ''} ${className}`} onMouseEnter={enter} onMouseLeave={leave} onMouseDown={leave}>
+    {children}
+    {show && tip && createPortal(<div ref={tipEl} className="gb-float gtip" role="tooltip" style={{ position: 'fixed', top: 0, left: 0, visibility: 'hidden' }}>{tip}</div>, document.body)}
+  </span>;
+};
+
 /** Compact filter pill with a popover list: replaces native <select> in toolbars. */
 export function Pick<T extends string>({ label, value, options, onChange, icon, align = 'left' }: {
   label: string; value: T; options: [T, string, number?][]; onChange: (v: T) => void; icon?: React.ReactNode; align?: 'left' | 'right';
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const down = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    window.addEventListener('mousedown', down); window.addEventListener('keydown', key);
-    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('keydown', key); };
-  }, [open]);
   const cur = options.find(o => o[0] === value);
   const active = options.length > 0 && value !== options[0][0];
   return (
@@ -176,12 +291,12 @@ export function Pick<T extends string>({ label, value, options, onChange, icon, 
         {icon}<span className="pick-l">{label}</span>{active && <span className="pick-v">{cur?.[1]}</span>}
         <svg className="pick-c" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M7 10l5 5 5-5" /></svg>
       </button>
-      {open && <div className={`pick-menu ${align}`}>
+      <Floating open={open} anchor={ref} onClose={() => setOpen(false)} placement={align === 'right' ? 'bottom-end' : 'bottom-start'} className="pick-menu">
         {options.map(([v, l, n]) => <button type="button" key={v} className={v === value ? 'on' : ''} onClick={() => { onChange(v); setOpen(false); }}>
           <span className="pick-tick">{v === value && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>}</span>
           <span className="pick-o">{l}</span>{n != null && <span className="pick-n num">{n}</span>}
         </button>)}
-      </div>}
+      </Floating>
     </div>
   );
 }
@@ -190,32 +305,17 @@ export function Pick<T extends string>({ label, value, options, onChange, icon, 
  * Rendered in a portal with fixed position so table panels never clip it. */
 export type MoreItem = { label: string; icon?: React.ReactNode; onClick: () => void; danger?: boolean; disabled?: boolean; hint?: string } | 'sep' | null | false;
 export const MoreMenu: React.FC<{ items: MoreItem[]; title?: string }> = ({ items, title = '更多' }) => {
-  const [pos, setPos] = useState<{ top?: number; bottom?: number; right: number; up: boolean } | null>(null);
+  const [open, setOpen] = useState(false);
   const btn = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!pos) return;
-    const down = (e: MouseEvent) => { if (!menu.current?.contains(e.target as Node) && !btn.current?.contains(e.target as Node)) setPos(null); };
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setPos(null); };
-    const close = () => setPos(null);
-    window.addEventListener('mousedown', down); window.addEventListener('keydown', key); window.addEventListener('resize', close); window.addEventListener('scroll', close, true);
-    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('keydown', key); window.removeEventListener('resize', close); window.removeEventListener('scroll', close, true); };
-  }, [pos]);
-  const toggle = () => {
-    if (pos) return setPos(null);
-    const r = btn.current!.getBoundingClientRect();
-    const up = window.innerHeight - r.bottom < 220;
-    setPos(up ? { bottom: window.innerHeight - r.top + 6, right: window.innerWidth - r.right, up } : { top: r.bottom + 6, right: window.innerWidth - r.right, up });
-  };
   const list = items.filter(Boolean) as Exclude<MoreItem, null | false>[];
   return <>
-    <button ref={btn} type="button" className={`btn ghost icon more-btn ${pos ? 'on' : ''}`} title={title} aria-label={title} onClick={toggle}><Icon.more s={15} /></button>
-    {pos && createPortal(<div ref={menu} className={`pick-menu more-menu ${pos.up ? 'up' : ''}`} style={{ position: 'fixed', top: pos.top ?? 'auto', bottom: pos.bottom ?? 'auto', right: pos.right, left: 'auto' }}>
+    <button ref={btn} type="button" className={`btn ghost icon more-btn ${open ? 'on' : ''}`} title={title} aria-label={title} onClick={() => setOpen(o => !o)}><Icon.more s={15} /></button>
+    <Floating open={open} anchor={btn} onClose={() => setOpen(false)} placement="bottom-end" className="pick-menu more-menu" role="menu">
       {list.map((it, i) => it === 'sep' ? <div key={i} className="more-sep" /> :
-        <button type="button" key={i} className={it.danger ? 'danger' : ''} disabled={it.disabled} title={it.hint} onClick={() => { setPos(null); it.onClick(); }}>
+        <button type="button" key={i} role="menuitem" className={it.danger ? 'danger' : ''} disabled={it.disabled} title={it.hint} onClick={() => { setOpen(false); it.onClick(); }}>
           <span className="more-ic">{it.icon}</span><span className="pick-o">{it.label}</span>
         </button>)}
-    </div>, document.body)}
+    </Floating>
   </>;
 };
 
@@ -224,20 +324,13 @@ export const MoreMenu: React.FC<{ items: MoreItem[]; title?: string }> = ({ item
 export function SelectField<T extends string>({ value, options, onChange, disabled }: { value: T; options: [T, string][]; onChange: (v: T) => void; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const down = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    window.addEventListener('mousedown', down); window.addEventListener('keydown', key);
-    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('keydown', key); };
-  }, [open]);
   const cur = options.find(o => o[0] === value);
   return (
     <div className={`pick pickfield selfield ${open ? 'open' : ''} ${disabled ? 'disabled' : ''}`} ref={ref}>
       <button type="button" className="pick-btn" disabled={disabled} onClick={() => setOpen(o => !o)}><span className="pick-o">{cur ? cur[1] : value}</span>
         <svg className="pick-c" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M7 10l5 5 5-5" /></svg></button>
-      {open && <div className="pick-menu left">{options.map(([v, l]) => <button type="button" key={v} className={v === value ? 'on' : ''} title={l} onClick={() => { onChange(v); setOpen(false); }}>
-        <span className="pick-tick">{v === value && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>}</span><span className="pick-o">{l}</span></button>)}</div>}
+      <Floating open={open} anchor={ref} onClose={() => setOpen(false)} matchWidth className="pick-menu field-menu sel-menu">{options.map(([v, l]) => <button type="button" key={v} className={v === value ? 'on' : ''} title={l} onClick={() => { onChange(v); setOpen(false); }}>
+        <span className="pick-tick">{v === value && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>}</span><span className="pick-o">{l}</span></button>)}</Floating>
     </div>
   );
 }

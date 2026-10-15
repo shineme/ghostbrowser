@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api, onEvent, Profile, Settings } from './api';
-import { Icon, Field, Toggle, useToast, useExit } from './ui';
+import { Icon, Field, Toggle, useToast, useExit, Floating } from './ui';
 
 const A = api as any;
 
@@ -135,17 +135,6 @@ const agoShort = (t: number) => {
   return m < 1 ? '刚刚' : m < 60 ? `${m} 分钟前` : m < 1440 ? `${Math.floor(m / 60)} 小时前` : `${Math.floor(m / 1440)} 天前`;
 };
 
-// click-outside for popovers
-function useOutside(ref: React.RefObject<HTMLElement | null>, on: boolean, close: () => void) {
-  useEffect(() => {
-    if (!on) return;
-    const d = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) close(); };
-    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
-    document.addEventListener('mousedown', d); window.addEventListener('keydown', k);
-    return () => { document.removeEventListener('mousedown', d); window.removeEventListener('keydown', k); };
-  }, [on, close, ref]);
-}
-
 // ---------- announcements ----------
 
 const LEVEL: Record<string, [string, string]> = { info: ['通知', 'cy'], warn: ['重要', 'warn'], critical: ['紧急', 'fail'] };
@@ -156,7 +145,6 @@ const AnnouncementBell: React.FC = () => {
   const [expanded, setExpanded] = useState<string>('');
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
-  useOutside(ref, open, close);
   const list = state?.catalog.announcements || [];
   const read = new Set(state?.read || []);
   const unread = list.filter(a => !read.has(a.id));
@@ -173,7 +161,7 @@ const AnnouncementBell: React.FC = () => {
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
         {unread.length > 0 && <span className="ash-dot num">{unread.length > 9 ? '9+' : unread.length}</span>}
       </button>
-      {open && <div className="ash-pop ann-pop">
+      <Floating open={open} anchor={ref} onClose={close} placement="bottom-end" gap={8} className="ash-pop ann-pop">
         <div className="ash-pop-head">
           <b>公告</b>
           {unread.length > 0 && <span className="badge cy">{unread.length} 条未读</span>}
@@ -201,7 +189,7 @@ const AnnouncementBell: React.FC = () => {
           })}
         </div>
         {state && <div className="ash-pop-foot">{state.fetchedAt ? `更新于 ${agoShort(state.fetchedAt)}` : '尚未从服务器获取'}{state.offline && state.error ? ` · ${state.error}` : ''}</div>}
-      </div>}
+      </Floating>
     </div>
   );
 };
@@ -307,10 +295,8 @@ export const SiteLaunch: React.FC<{ profile: Profile; running: boolean; onLaunch
   const [q, setQ] = useState('');
   const [custom, setCustom] = useState('');
   const [busy, setBusy] = useState('');
-  const [up, setUp] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
-  useOutside(ref, open, close);
   const groups = state?.catalog.groups || [];
   const cur = groups.find(x => x.id === g) || groups[0];
   const sites = useMemo(() => {
@@ -329,10 +315,10 @@ export const SiteLaunch: React.FC<{ profile: Profile; running: boolean; onLaunch
   };
   return (
     <div className="ash-pop-wrap" ref={ref}>
-      <button className={`btn sm ${running ? '' : 'go'} site-caret ${open ? 'on' : ''}`} title={running ? '在此环境打开网站' : '启动并打开网站'} onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setUp(r.bottom + 470 > window.innerHeight && r.top > 470); setOpen(o => !o); if (!state?.fetchedAt && !loading) refresh(); }}>
+      <button className={`btn sm ${running ? '' : 'go'} site-caret ${open ? 'on' : ''}`} title={running ? '在此环境打开网站' : '启动并打开网站'} onClick={() => { setOpen(o => !o); if (!state?.fetchedAt && !loading) refresh(); }}>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="m6 9 6 6 6-6" /></svg>
       </button>
-      {open && <div className={`ash-pop site-pop ${up ? 'up' : ''}`}>
+      <Floating open={open} anchor={ref} onClose={close} placement="bottom-end" gap={8} className="ash-pop site-pop">
         <div className="ash-pop-head">
           <b>网站快捷入口</b><span className="sub ellip">{running ? `在「${profile.name}」中新标签页打开` : `启动「${profile.name}」并直接打开`}</span>
           <span className="spacer" />
@@ -354,7 +340,7 @@ export const SiteLaunch: React.FC<{ profile: Profile; running: boolean; onLaunch
           <Icon.globe s={14} /><input type="text" placeholder="或输入网址，例如 example.com" value={custom} onChange={e => setCustom(e.target.value)} />
           <button className="btn sm primary" disabled={!custom.trim() || !!busy}>{busy === '_custom' ? <ThinkingOrb state="connecting" size={20} theme="dark" /> : '打开'}</button>
         </form>
-      </div>}
+      </Floating>
     </div>
   );
 };
