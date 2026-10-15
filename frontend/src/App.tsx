@@ -8,6 +8,7 @@ import { TrashModal, useTrashCount } from './TrashView';
 import { Icon, Field, flag, ago, useToast, useConfirm, useExit, ToastHost, WindowControls, useMaximised, StatCard, Avatar, CC, CountUp, OsIcon, Ambient, Splash, useSpotlight, Pick, Segmented, DevIcon, MoreMenu } from './ui';
 import { DEVICE_TYPES, devType, devName, osName as osNameOf, needsOpen } from './devices';
 import { ProfileDrawer } from './ProfileDrawer';
+import { useSubs, groupKey, groupOptions, isCore, protoOf } from './Subscriptions';
 import { ProxyView } from './ProxyView';
 import { SettingsView } from './SettingsView';
 import { CloudView, syncState } from './CloudView';
@@ -57,6 +58,8 @@ function Shell() {
   }), [reload]);
   // share: ended shares removed in the background; jump to 云端同步 → 设备与密钥
   useEffect(() => onEvent('shares:changed', () => { reload(); toast('有分享已撤销或过期，本机副本已删除'); }), [reload]);
+  // 订阅 → 「去设置下载」内核: open settings and scroll to the core card
+  useEffect(() => { const f = (e: any) => { setTab('settings'); setTimeout(() => document.getElementById(e.detail || '')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300); }; window.addEventListener('gb:goto-settings', f); return () => window.removeEventListener('gb:goto-settings', f); }, []);
   useEffect(() => { const f = (e: any) => { setTab('cloud'); setTimeout(() => window.dispatchEvent(new CustomEvent('gb:cloud-tab', { detail: e.detail })), 60); }; window.addEventListener('gb:goto-cloud', f); return () => window.removeEventListener('gb:goto-cloud', f); }, []);
   useEffect(() => onEvent('profile:exit', (id: string) => { setRunning(s => { const n = new Set(s); n.delete(id); return n; }); }), []);
   // default browser: a link launched a profile, or failed to open
@@ -427,9 +430,11 @@ const AssignModal: React.FC<{ ids: string[]; proxies: Proxy[]; profiles: Profile
   const [onlyFree, setOnlyFree] = useState(false);
   const [pick, setPick] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<'order' | 'random' | 'one'>('order');
+  const [group, setGroup] = useState('*');
+  const [subs] = useSubs();
   const [out, close] = useExit(onClose);
   const used = useMemo(() => new Set(profiles.filter(p => !ids.includes(p.id)).map(p => p.proxyId).filter(Boolean)), [profiles, ids]);
-  const shown = proxies.filter(p => (!onlyOk || p.status === 'ok') && (!onlyFree || !used.has(p.id)) && (!q || `${p.name} ${p.host} ${p.ip} ${p.country} ${p.tag}`.toLowerCase().includes(q.toLowerCase())));
+  const shown = proxies.filter(p => (group === '*' || groupKey(p) === group) && (!onlyOk || p.status === 'ok') && (!onlyFree || !used.has(p.id)) && (!q || `${p.name} ${p.host} ${p.ip} ${p.country} ${p.tag} ${p.subName || ''}`.toLowerCase().includes(q.toLowerCase())));
   const toggle = (id: string) => setPick(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const go = async (direct = false) => {
     try { const n = await api.AssignProxies(ids, direct ? [] : shown.filter(p => pick.has(p.id)).map(p => p.id), mode); toast(direct ? `${n} 个环境改为直连` : `已为 ${n} 个环境分配代理`); onDone(); close(); }
@@ -449,17 +454,19 @@ const AssignModal: React.FC<{ ids: string[]; proxies: Proxy[]; profiles: Profile
           <div className="assign-filters">
             <button className={`chip-tg ${onlyOk ? 'on' : ''}`} onClick={() => setOnlyOk(v => !v)}>仅可用</button>
             <button className={`chip-tg ${onlyFree ? 'on' : ''}`} onClick={() => setOnlyFree(v => !v)}>仅未被占用</button>
+            {(subs.length > 0 || proxies.some(p => p.subId)) && <><span className="spacer" /><Pick label="分组" value={group} onChange={g => { setGroup(g); if (g !== '*') setPick(new Set(proxies.filter(p => groupKey(p) === g && (!onlyOk || p.status === 'ok') && (!onlyFree || !used.has(p.id))).map(p => p.id))); }} icon={<Icon.layers />} options={groupOptions(proxies, subs)} align="right" /></>}
           </div>
           <div className="assign-list">
             {shown.map(p => <div key={p.id} className={`assign-row ${pick.has(p.id) ? 'on' : ''}`} onClick={() => toggle(p.id)}>
               <Chk on={pick.has(p.id)} onClick={() => {}} />
               <CC cc={p.country} /><span className="nm" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+              <span className={`px-pick-proto ${isCore(p) ? 'core' : ''}`}>{protoOf(p)}</span>
               <span className="sub num">{p.ip || `${p.host}:${p.port}`}</span>
               {used.has(p.id) && <span className="badge warn">已被使用</span>}
             </div>)}
             {shown.length === 0 && <div className="sub" style={{ padding: 16, textAlign: 'center' }}>没有符合条件的代理</div>}
           </div>
-          <Field label="分配方式" hint={mode === 'order' ? '第 1 个环境用第 1 个代理，依次轮流' : mode === 'random' ? '随机分配，代理数量足够时不重复' : '所有环境都用第一个选中的代理'}>
+          <Field label="分配方式" hint={mode === 'order' ? (group !== '*' && group ? '按所选分组的节点依次轮流：第 1 个环境用第 1 个节点' : '第 1 个环境用第 1 个代理，依次轮流') : mode === 'random' ? '随机分配，代理数量足够时不重复' : '所有环境都用第一个选中的代理'}>
             <Segmented className="block" items={[['order', '顺序轮流'], ['random', '随机'], ['one', '统一一个']]} value={mode} onChange={setMode} />
           </Field>
           {nPick > 0 && nPick < ids.length && mode !== 'one' && <div className="sub" style={{ color: '#ffd98a' }}>⚠ 代理数（{nPick}）少于环境数（{ids.length}），会有环境共用同一个代理。</div>}

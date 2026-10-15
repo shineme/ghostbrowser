@@ -58,6 +58,7 @@ func main() {
 		OnShutdown: func(_ context.Context) {
 			stopTray()
 			runReg.stopAll()
+			coreMgr.StopAll() // mihomo core (core.go)
 			globalAuto.Drain(90 * time.Second)
 			globalAuto.FlushGlobal()
 		},

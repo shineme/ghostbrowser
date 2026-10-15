@@ -88,6 +88,15 @@ type Proxy struct {
 	Tag            string `json:"tag"`                      // batch label set on import, searchable
 	RotateOnLaunch bool   `json:"rotateOnLaunch,omitempty"` // call ChangeIP before each launch
 	Guessed        bool   `json:"typeGuessed,omitempty"`    // protocol inferred; the first check confirms it
+	// subscription nodes (subscription.go): Type/Protocol is vless, ss, hysteria2…
+	// for nodes that run through the mihomo core (core.go)
+	SubID    string `json:"subId,omitempty"`    // owning subscription, "" = manual
+	SubName  string `json:"subName,omitempty"`  // group label (subscription name)
+	NodeKey  string `json:"nodeKey,omitempty"`  // stable hash of type+server+port+credential
+	RawNode  string `json:"rawNode,omitempty"`  // the Clash proxy map as JSON (core config)
+	Protocol string `json:"protocol,omitempty"` // http | https | socks5 | vless | vmess | ss | trojan | hysteria2 | tuic | anytls…
+	Gone     bool   `json:"gone,omitempty"`     // left the source but a profile still uses it
+	CoreOf   string `json:"-"`                  // set on the local listener proxy that stands in for a core node
 	// last check result
 	IP       string  `json:"ip"`
 	Country  string  `json:"country"`

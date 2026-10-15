@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api, onEvent, Proxy, Profile } from './api';
-import { Icon, Field, Toggle, ago, useToast, useConfirm, useExit, CC, Latency, StatCard, Pick, Segmented } from './ui';
+import { Icon, Field, Toggle, ago, useToast, useConfirm, useExit, CC, Latency, StatCard, Pick, Segmented, SelectField, Tip } from './ui';
 import { COUNTRIES } from './locales';
 import { MihomoModal } from './MihomoModal';
+import { SubsPanel, useSubs, groupOptions, groupKey, ProtoChip, isCore } from './Subscriptions';
 
 const cname = (cc?: string) => (cc && COUNTRIES.find(c => c.cc === cc.toUpperCase())?.name) || cc || '';
 const IPTYPE: Record<string, [string, string]> = { residential: ['住宅', 'ok'], hosting: ['机房', 'warn'], mobile: ['移动', 'cy'] };
@@ -24,6 +25,10 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [live, setLive] = useState<Record<string, Proxy>>({});
   const [mihomo, setMihomo] = useState(false);
+  const [view, setView] = useState<'list' | 'subs'>('list');
+  const [group, setGroup] = useState('*'); // '*' = all, '' = manual, else subscription ID
+  const [subs, reloadSubs] = useSubs();
+  useEffect(() => onEvent('subs:updated', () => reload()), [reload]);
 
   // Rows update one by one while a batch check runs.
   useEffect(() => onEvent('proxy:checked', (p: Proxy) => {
@@ -47,11 +52,17 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
   }, []);
 
   const countries = useMemo(() => [...new Set(all.filter(p => p.country).map(p => p.country))].sort(), [all]);
+  const subOrder = useMemo(() => { const m: Record<string, number> = { '': 0 }; subs.forEach((x, i) => { m[x.id] = i + 1; }); return m; }, [subs]);
   const list = useMemo(() => {
     const s = q.toLowerCase();
-    return all.filter(p => (status === 'all' || (p.status || 'unknown') === status) && (!country || p.country === country) &&
-      (!s || [p.name, p.host, p.ip, p.country, cname(p.country), p.city, p.region, p.isp, p.tag].some(v => (v || '').toLowerCase().includes(s))));
-  }, [all, q, status, country]);
+    const out = all.filter(p => (group === '*' || groupKey(p) === group) && (status === 'all' || (p.status || 'unknown') === status) && (!country || p.country === country) &&
+      (!s || [p.name, p.host, p.ip, p.country, cname(p.country), p.city, p.region, p.isp, p.tag, p.subName, p.protocol].some(v => (v || '').toLowerCase().includes(s))));
+    // grouped: manual proxies first, then each subscription in the order it was added (source order kept by name sort)
+    return out.sort((a, b) => ((subOrder[groupKey(a)] ?? 999) - (subOrder[groupKey(b)] ?? 999)));
+  }, [all, q, status, country, group, subOrder]);
+  const grouped = group === '*' && all.some(p => p.subId);
+  const groupCount = useMemo(() => { const m: Record<string, number> = {}; list.forEach(p => { const k = groupKey(p); m[k] = (m[k] || 0) + 1; }); return m; }, [list]);
+  const groupName = (k: string) => k ? (subs.find(x => x.id === k)?.name || all.find(p => p.subId === k)?.subName || '订阅') : '手动添加';
   const target = sel.size ? [...sel].filter(id => all.some(p => p.id === id)) : list.map(p => p.id);
   const scope = sel.size ? `所选 ${target.length} 个` : (list.length === all.length ? '全部' : `筛选出的 ${list.length} 个`);
 
@@ -84,15 +95,17 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
   const toggle = (id: string) => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const allSel = list.length > 0 && list.every(p => sel.has(p.id));
 
+  const tabs = <div className="px-tabs"><Segmented className="compact" value={view} onChange={setView} items={[['list', '代理列表', <Icon.globe s={14} />], ['subs', subs.length ? `订阅 · ${subs.length}` : '订阅', <Icon.link s={14} />]]} /></div>;
+  if (view === 'subs') return <>{tabs}<SubsPanel subs={subs} proxies={all} profiles={profiles} reload={reload} reloadSubs={reloadSubs} onShowGroup={id => { setGroup(id); setStatus('all'); setCountry(''); setQ(''); setSel(new Set()); setView('list'); }} /></>;
   if (proxies.length === 0) return (
-    <div className="empty">
+    <>{tabs}<div className="empty">
       <div className="halo"><ThinkingOrb state="searching" size={64} theme="dark" /></div>
       <h3>还没有代理</h3>
       <div>直接 <b>Ctrl+V</b> 粘贴一批代理，或拖入 .txt / .csv 文件。格式、协议、国家和延迟都会自动识别。</div>
-      <div className="actions"><button className="btn" onClick={() => setMihomo(true)}><Icon.server s={15} /> Clash / Mihomo</button><button className="btn primary" onClick={() => setImportText('')}><Icon.upload s={15} /> 批量导入</button></div>
+      <div className="actions"><button className="btn" onClick={() => setMihomo(true)}><Icon.server s={15} /> Clash / Mihomo</button><button className="btn" onClick={() => setView('subs')}><Icon.link s={15} /> 添加订阅</button><button className="btn primary" onClick={() => setImportText('')}><Icon.upload s={15} /> 批量导入</button></div>
       {importText !== null && <ImportModal initial={importText} onClose={() => setImportText(null)} onDone={(ids, check) => { reload(); if (check) runCheck(ids, '导入检测'); }} />}
       {mihomo && <MihomoModal onClose={() => setMihomo(false)} onAdded={reload} />}
-    </div>
+    </div></>
   );
 
   const okCount = all.filter(p => p.status === 'ok').length;
@@ -104,8 +117,10 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
   const ipCount: Record<string, number> = {};
   all.forEach(p => { if (p.ip) ipCount[p.ip] = (ipCount[p.ip] || 0) + 1; });
 
+  const needCore = all.filter(p => isCore(p) && p.error === '需要内核').length;
   return (
     <>
+      {tabs}
       <div className="stat-row">
         <StatCard l="代理总数" n={all.length} ic="globe" pct={100} />
         <StatCard l="可用" n={okCount} of={all.length} ic="check" tone="ok" pct={okCount / all.length * 100} />
@@ -117,8 +132,14 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
         <span className="sub grow">{hit.length ? `影响 ${hit.length} 个环境：${hit.slice(0, 6).map(p => p.name).join('、')}${hit.length > 6 ? ' 等' : ''}` : '没有环境在使用它们'}{health ? ` · 自动检测于 ${ago(health.at)}` : ''}</span>
         {status !== 'fail' && <button className="btn sm" onClick={() => setStatus('fail')}>只看不可用</button>}
       </div>}
+      {needCore > 0 && <div className="notice warn">
+        <Icon.cpu /><b>{needCore} 个节点需要代理内核</b>
+        <span className="sub grow">VLESS / SS / Trojan / Hysteria2 等协议要先下载 mihomo 内核，浏览器才能使用</span>
+        <button className="btn sm" onClick={() => window.dispatchEvent(new CustomEvent('gb:goto-settings', { detail: 'settings-core' }))}>去设置下载</button>
+      </div>}
       <div className="toolbar" style={{ flexWrap: 'wrap' }}>
         <div className="search"><Icon.search /><input type="text" placeholder="搜索名称 / IP / 国家 / 城市 / ISP / 标签" value={q} onChange={e => setQ(e.target.value)} /></div>
+        {(subs.length > 0 || all.some(p => p.subId)) && <Pick label="分组" value={group} onChange={g => { setGroup(g); setSel(new Set()); }} icon={<Icon.layers />} options={groupOptions(all, subs)} />}
         <Pick label="状态" value={status} onChange={setStatus as any} icon={<Icon.check />}
           options={[['all', '全部状态', all.length], ['ok', '可用', all.filter(p => p.status === 'ok').length], ['fail', '不可用', all.filter(p => p.status === 'fail').length], ['unknown', '未检测', all.filter(p => !p.status || p.status === 'unknown').length]]} />
         <Pick label="国家" value={country} onChange={setCountry} icon={<Icon.globe />}
@@ -139,17 +160,24 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
             <th>名称</th><th>类型</th><th>出口 IP</th><th>位置</th><th>IP 类型 / ISP</th><th>延迟</th><th>速度</th><th>状态</th><th style={{ textAlign: 'right' }}>操作</th>
           </tr></thead>
           <tbody>
-            {list.map((p, i) => <tr key={p.id} className={'rise' + (sel.has(p.id) ? ' sel' : '')} style={{ ['--i' as any]: Math.min(i, 20) }}>
+            {list.map((p, i) => <React.Fragment key={p.id}>
+              {grouped && (i === 0 || groupKey(list[i - 1]) !== groupKey(p)) && <tr className="grp-row"><td colSpan={10}><div className="grp-head">
+                <Icon.layers s={13} /><b>{groupName(groupKey(p))}</b><span className="sub num">{groupCount[groupKey(p)]} 个</span>
+                <span className="spacer" />
+                <button className="btn sm ghost" disabled={!!bulk} onClick={() => runCheck(list.filter(x => groupKey(x) === groupKey(p)).map(x => x.id), '检测')} title="检测这个分组的全部节点"><Icon.refresh s={12} /> 检测本组</button>
+                <button className="btn sm ghost" onClick={() => setGroup(groupKey(p))}>只看本组</button>
+              </div></td></tr>}
+              <tr className={'rise' + (sel.has(p.id) ? ' sel' : '')} style={{ ['--i' as any]: Math.min(i, 20) }}>
               <td><input type="checkbox" checked={sel.has(p.id)} onChange={() => toggle(p.id)} /></td>
-              <td><div className="nm">{p.name}</div><div className="sub num">{p.host}:{p.port}{p.user ? ' · 带认证' : ''}{p.tag ? <span className="tag" style={{ marginLeft: 6 }}>{p.tag}</span> : null}</div></td>
-              <td><span className="tag num" style={{ textTransform: 'uppercase' }} title={p.typeGuessed ? '协议是按端口推测的，检测后自动确认' : ''}>{p.type}{p.typeGuessed ? '?' : ''}</span></td>
+              <td><div className="nm" title={p.name}>{p.name}{p.gone && <Tip tip="订阅更新后这个节点已不在订阅里；因为还有环境在用，暂时保留"><span className="badge fail gone-badge">已失效</span></Tip>}</div><div className="sub num">{p.host}:{p.port}{p.user ? ' · 带认证' : ''}{p.subId && !grouped && group === '*' ? <span className="tag grp-chip" style={{ marginLeft: 6 }}>{p.subName}</span> : null}{p.tag ? <span className="tag" style={{ marginLeft: 6 }}>{p.tag}</span> : null}</div></td>
+              <td><ProtoChip p={p} /></td>
               <td className="sub num">{p.ip || '—'}{p.ip && ipCount[p.ip] > 1 && <div className="ip-dup" title="多个代理的出口是同一个 IP">⚠ {ipCount[p.ip]} 个代理同一出口</div>}{users[p.id] > 1 && <div className="ip-dup" title="多个环境共用这个代理，容易被平台关联">⚠ {users[p.id]} 个环境在用</div>}</td>
               <td>{p.country ? <div title={p.timezone}><CC cc={p.country} /><span>{cname(p.country)}</span><div className="sub">{[p.region, p.city].filter(Boolean).join(' · ')}</div></div> : <span className="sub">—</span>}</td>
               <td>{p.ipType ? <><span className={`badge ${IPTYPE[p.ipType]?.[1] || ''}`}>{IPTYPE[p.ipType]?.[0] || p.ipType}</span><div className="sub" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.isp}>{p.isp}</div></> : <span className="sub">—</span>}</td>
               <td title={p.connectMs ? `首次连接 ${p.connectMs} ms（含握手）` : ''}><Latency ms={p.status === 'ok' ? p.latency : 0} /></td>
               <td><span className={`lat ${speedTone(p.speedKbps)}`}><span className="num" style={{ fontSize: 12 }}>{speedText(p.speedKbps)}</span></span></td>
-              <td><span className={`badge ${p.status || 'unknown'}`} title={p.error || ''}><i className="d" />{p.status === 'ok' ? '可用' : p.status === 'fail' ? '不可用' : '未检测'}</span>
-                <div className="sub" style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.error}>{p.status === 'fail' ? p.error : ago(p.checkedAt)}</div></td>
+              <td><span className={`badge ${p.status || 'unknown'}`} title={p.error || ''}><i className="d" />{p.status === 'ok' ? '可用' : p.status === 'fail' ? '不可用' : p.error === '需要内核' ? '需要内核' : '未检测'}</span>
+                <div className="sub" style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.error}>{p.status === 'fail' ? p.error : p.error === '需要内核' ? '未安装内核' : ago(p.checkedAt)}</div></td>
               <td><div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                 {busy.has(p.id) ? <span style={{ width: 26, display: 'grid', placeItems: 'center' }}><ThinkingOrb state="searching" size={20} theme="dark" /></span>
                   : <>
@@ -160,7 +188,7 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
                 <button className="btn ghost icon" title="编辑" onClick={() => setEditing(p)}><Icon.edit s={15} /></button>
                 <button className="btn ghost icon danger" onClick={() => delMany([p.id], '这个代理')}><Icon.trash s={15} /></button>
               </div></td>
-            </tr>)}
+            </tr></React.Fragment>)}
           </tbody>
         </table>
         {list.length === 0 && <div className="sub" style={{ padding: 24, textAlign: 'center' }}>没有符合筛选条件的代理</div>}
@@ -217,7 +245,7 @@ const ImportModal: React.FC<{ initial: string; onClose: () => void; onDone: (ids
         <div className="dhead"><div className="glyph"><Icon.upload s={18} /></div><div><h3>批量导入代理</h3><div className="sub">粘贴或拖入文件，格式、协议自动识别；导入后自动检测国家、IP 类型和延迟</div></div><div style={{ marginLeft: 'auto' }}><button className="btn ghost icon" onClick={() => close()}><Icon.x /></button></div></div>
         <div className="dbody">
           <div className="grid3">
-            <Field label="协议（行内未写时）"><select value={type} onChange={e => setType(e.target.value)}><option value="auto">自动识别</option><option value="http">HTTP</option><option value="https">HTTPS</option><option value="socks5">SOCKS5</option></select></Field>
+            <Field label="协议（行内未写时）"><SelectField value={type} onChange={setType} options={[['auto', '自动识别'], ['http', 'HTTP'], ['https', 'HTTPS'], ['socks5', 'SOCKS5']]} /></Field>
             <Field label="批次标签（可选）" hint="用于搜索，名称会变成 标签 #序号"><input type="text" value={tag} onChange={e => setTag(e.target.value)} placeholder="如 Smartproxy-US" /></Field>
             <div style={{ paddingTop: 18 }}>
               <Toggle on={check} onChange={setCheck} label="导入后立即检测" />
@@ -274,14 +302,15 @@ const ProxyEditModal: React.FC<{ p: Proxy; onClose: () => void; onSaved: () => v
             <Field label="名称"><input type="text" value={v.name} onChange={e => set({ name: e.target.value })} /></Field>
             <Field label="标签"><input type="text" value={v.tag || ''} onChange={e => set({ tag: e.target.value })} /></Field>
           </div>
-          <div className="grid2">
+          {p.subId && <div className="notice" style={{ margin: '0 0 10px' }}><Icon.link /><span className="grow sub">这个节点来自订阅「{p.subName}」，地址和账号随订阅更新；这里只改名称、标签和换 IP 设置会在下次更新时被订阅里的名称覆盖。</span></div>}
+          {!isCore(p) && <><div className="grid2">
             <Field label="类型"><Segmented className="block" items={[['http', 'HTTP'], ['https', 'HTTPS'], ['socks5', 'SOCKS5']]} value={v.type as any} onChange={t => set({ type: t, typeGuessed: false })} /></Field>
             <Field label="主机:端口"><div className="row"><input type="text" value={v.host} onChange={e => set({ host: e.target.value })} /><input type="number" style={{ width: 90, flex: 'none' }} value={v.port} onChange={e => set({ port: +e.target.value })} /></div></Field>
           </div>
           <div className="grid2">
             <Field label="用户名"><input type="text" value={v.user || ''} onChange={e => set({ user: e.target.value })} /></Field>
             <Field label="密码"><input type="password" value={v.pass || ''} onChange={e => set({ pass: e.target.value })} /></Field>
-          </div>
+          </div></>}
           <Field label="换 IP 链接" hint="服务商提供的 API 地址，打开它就会更换出口 IP"><input type="text" value={v.changeIpUrl || ''} onChange={e => set({ changeIpUrl: e.target.value })} placeholder="https://..." /></Field>
           <Toggle on={!!v.rotateOnLaunch} onChange={x => set({ rotateOnLaunch: x })} label="每次启动环境前自动换 IP" hint="需要填写换 IP 链接；换 IP 失败不会阻止启动" />
         </div>

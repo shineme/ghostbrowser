@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Combo, SearchSelect, FontPicker, CountrySelect, LanguagePicker, TimezoneSelect, countryOfTz } from './locales';
 import { api, Profile, Proxy, Fingerprint } from './api';
+import { ProxyPicker } from './Subscriptions';
 import { Field, Toggle, Icon, flag, useToast, useConfirm, useExit, Segmented, Avatar, DevIcon, SelectField } from './ui';
 import { CookieModal } from './CookieModal';
 import { ExtIcon, Ext } from './ExtensionsView';
@@ -221,7 +222,7 @@ export const ProfileDrawer: React.FC<{
               <SelectField value={p.storage || 'local'} onChange={v => setP({ ...p, storage: v })} options={[['local', '本地 — 只存在这台电脑'], ['cloud', '云端 — 同步到你的 VPS']]} />
             </Field>
             <Field label="代理">
-              <SelectField value={p.proxyId || ''} onChange={v => setP({ ...p, proxyId: v })} options={[['', '不使用代理（直连）'] as [string, string], ...[...extraProxies.filter(x => !proxies.some(y => y.id === x.id)), ...proxies].map(px => [px.id, `${flag(px.country)} · ${px.name} · ${px.type}${px.status === 'ok' ? ` · ${px.city || px.ip}` : ''}`] as [string, string])]} />
+              <ProxyPicker value={p.proxyId || ''} onChange={v => setP({ ...p, proxyId: v })} proxies={[...extraProxies.filter(x => !proxies.some(y => y.id === x.id)), ...proxies]} />
               <div className="combo-row" style={{ marginTop: 6 }}>
                 <input type="text" value={pxText} onChange={e => setPxText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') quickProxy(); }} placeholder="或直接粘贴一个代理，自动识别格式并检测，如 user:pass@1.2.3.4:8080" />
                 <button type="button" className="btn sm combo-btn" disabled={pxBusy || !pxText.trim()} onClick={quickProxy}>{pxBusy ? '检测中…' : '识别并使用'}</button>

@@ -94,13 +94,9 @@ func (s *Store) launchChromium(p *Profile, st Settings) (*RunState, error) {
 	if kernel == "" {
 		return nil, fmt.Errorf("没有找到开源内核：请在「设置 → 开源内核」选择 chrome.exe（Chromium、Chrome 或你自己编译的内核）")
 	}
-	var px *Proxy
-	if p.InlineProxy != nil {
-		px = p.InlineProxy
-	} else if p.ProxyID != "" {
-		if pr, ok := s.GetProxy(p.ProxyID); ok {
-			px = pr
-		}
+	px, err := s.launchProxy(p) // core nodes: local mihomo listener
+	if err != nil {
+		return nil, err
 	}
 	fp, err := s.matchFP(p.Fingerprint, px)
 	if err != nil {

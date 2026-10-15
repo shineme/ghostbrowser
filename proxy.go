@@ -572,6 +572,9 @@ func probe(p Proxy) (Proxy, error) {
 // it also tries the other one and keeps whichever works.
 // A Proxy with Type "none" checks the direct connection.
 func CheckProxy(p Proxy) Proxy {
+	if p.needsCore() { // vless / ss / hysteria2…: probe through the local mihomo listener
+		return withCore(p, CheckProxy)
+	}
 	p.Checked = time.Now().Unix()
 	if p.Guessed && p.Type != "none" {
 		if t := sniffProto(p.Host, p.Port); t != "" {
@@ -619,6 +622,9 @@ func sniffProto(host string, port int) string {
 
 // SpeedTestProxy downloads a few MB through the proxy and records the speed.
 func SpeedTestProxy(p Proxy) Proxy {
+	if p.needsCore() {
+		return withCore(p, SpeedTestProxy)
+	}
 	cl := p.client(25 * time.Second)
 	p.SpeedAt = time.Now().Unix()
 	start := time.Now()

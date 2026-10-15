@@ -7,6 +7,7 @@ import { SessionScopeChips } from './SessionStore';
 import { FirefoxSettingsCard, FoxIcon, useFirefoxInfo } from './FirefoxKernel';
 import { AppShellSettings } from './AppShell';
 import { DefaultBrowserCard } from './DefaultBrowser';
+import { CoreCard } from './Subscriptions';
 
 const mb = (b: number) => b ? `${(b / 1048576).toFixed(b > 1e8 ? 0 : 1)} MB` : '';
 
@@ -94,6 +95,7 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
         <div className="sub" style={{ marginTop: 12 }}>指纹通过 CDP 注入，不依赖扩展，Chrome 137 以后的正式版也能用。支持 Chrome 110 及以上，推荐 120 以上的 Chromium 或 Chrome for Testing。UA 里的大版本自动跟随内核。需要保持 GhostBrowser 运行。</div>
       </div>
 
+      <CoreCard />
       <FirefoxSettingsCard index={2} value={(s as any).firefoxPath || ''} onChange={v => set({ firefoxPath: v } as any)} onInstalled={async path => { const out = await api.SaveSettings({ ...s, firefoxPath: path } as any); setS(out); onSaved(out); }} />
 
       <div className="panel pad setting-card spot rise" style={{ ['--i' as any]: 2 }}>

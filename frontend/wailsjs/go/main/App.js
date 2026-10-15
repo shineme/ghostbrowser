@@ -14,6 +14,10 @@ export function AddExtensionFromURL(arg1) {
   return window['go']['main']['App']['AddExtensionFromURL'](arg1);
 }
 
+export function AddSubscription(arg1, arg2) {
+  return window['go']['main']['App']['AddSubscription'](arg1, arg2);
+}
+
 export function AppVersion() {
   return window['go']['main']['App']['AppVersion']();
 }
@@ -122,6 +126,10 @@ export function CookieInfo(arg1) {
   return window['go']['main']['App']['CookieInfo'](arg1);
 }
 
+export function CoreStatus() {
+  return window['go']['main']['App']['CoreStatus']();
+}
+
 export function CreateGroup(arg1) {
   return window['go']['main']['App']['CreateGroup'](arg1);
 }
@@ -182,6 +190,10 @@ export function DeleteProxy(arg1) {
   return window['go']['main']['App']['DeleteProxy'](arg1);
 }
 
+export function DeleteSubscription(arg1, arg2) {
+  return window['go']['main']['App']['DeleteSubscription'](arg1, arg2);
+}
+
 export function DeleteWorkflow(arg1) {
   return window['go']['main']['App']['DeleteWorkflow'](arg1);
 }
@@ -202,8 +214,16 @@ export function DismissLink(arg1) {
   return window['go']['main']['App']['DismissLink'](arg1);
 }
 
+export function DownloadCore() {
+  return window['go']['main']['App']['DownloadCore']();
+}
+
 export function DuplicateWorkflow(arg1) {
   return window['go']['main']['App']['DuplicateWorkflow'](arg1);
+}
+
+export function EditSubscription(arg1) {
+  return window['go']['main']['App']['EditSubscription'](arg1);
 }
 
 export function EmptyTrash() {
@@ -386,6 +406,10 @@ export function ListProxies() {
   return window['go']['main']['App']['ListProxies']();
 }
 
+export function ListSubscriptions() {
+  return window['go']['main']['App']['ListSubscriptions']();
+}
+
 export function ListTags() {
   return window['go']['main']['App']['ListTags']();
 }
@@ -502,6 +526,10 @@ export function PickChromium() {
   return window['go']['main']['App']['PickChromium']();
 }
 
+export function PickCorePath() {
+  return window['go']['main']['App']['PickCorePath']();
+}
+
 export function PickFirefox() {
   return window['go']['main']['App']['PickFirefox']();
 }
@@ -520,6 +548,10 @@ export function PickTerminalDir(arg1) {
 
 export function PreviewProxies(arg1, arg2) {
   return window['go']['main']['App']['PreviewProxies'](arg1, arg2);
+}
+
+export function PreviewSubscription(arg1, arg2) {
+  return window['go']['main']['App']['PreviewSubscription'](arg1, arg2);
 }
 
 export function PullProfile(arg1) {
@@ -690,6 +722,10 @@ export function SessionStoreInfo(arg1) {
   return window['go']['main']['App']['SessionStoreInfo'](arg1);
 }
 
+export function SetCorePath(arg1) {
+  return window['go']['main']['App']['SetCorePath'](arg1);
+}
+
 export function SetDefaultProfile(arg1) {
   return window['go']['main']['App']['SetDefaultProfile'](arg1);
 }
@@ -748,6 +784,10 @@ export function StartRecording(arg1, arg2) {
 
 export function StartSync(arg1, arg2) {
   return window['go']['main']['App']['StartSync'](arg1, arg2);
+}
+
+export function StopCore() {
+  return window['go']['main']['App']['StopCore']();
 }
 
 export function StopMcp() {
@@ -838,12 +878,20 @@ export function UnregisterDefaultBrowser() {
   return window['go']['main']['App']['UnregisterDefaultBrowser']();
 }
 
+export function UpdateAllSubscriptions() {
+  return window['go']['main']['App']['UpdateAllSubscriptions']();
+}
+
 export function UpdateInfo() {
   return window['go']['main']['App']['UpdateInfo']();
 }
 
 export function UpdateProgress() {
   return window['go']['main']['App']['UpdateProgress']();
+}
+
+export function UpdateSubscription(arg1) {
+  return window['go']['main']['App']['UpdateSubscription'](arg1);
 }
 
 export function UseUndetectableKit() {

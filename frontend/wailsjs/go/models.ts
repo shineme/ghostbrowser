@@ -555,6 +555,40 @@ export namespace main {
 	        this.staged = source["staged"];
 	    }
 	}
+	export class CoreStatus {
+	    installed: boolean;
+	    path: string;
+	    version: string;
+	    managed: boolean;
+	    running: boolean;
+	    pid: number;
+	    listeners: number;
+	    leases: number;
+	    error: string;
+	    downloading: boolean;
+	    progress: number;
+	    dir: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CoreStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.installed = source["installed"];
+	        this.path = source["path"];
+	        this.version = source["version"];
+	        this.managed = source["managed"];
+	        this.running = source["running"];
+	        this.pid = source["pid"];
+	        this.listeners = source["listeners"];
+	        this.leases = source["leases"];
+	        this.error = source["error"];
+	        this.downloading = source["downloading"];
+	        this.progress = source["progress"];
+	        this.dir = source["dir"];
+	    }
+	}
 	export class DefaultBrowserStatus {
 	    supported: boolean;
 	    registered: boolean;
@@ -1390,6 +1424,12 @@ export namespace main {
 	    tag: string;
 	    rotateOnLaunch?: boolean;
 	    typeGuessed?: boolean;
+	    subId?: string;
+	    subName?: string;
+	    nodeKey?: string;
+	    rawNode?: string;
+	    protocol?: string;
+	    gone?: boolean;
 	    ip: string;
 	    country: string;
 	    city: string;
@@ -1424,6 +1464,12 @@ export namespace main {
 	        this.tag = source["tag"];
 	        this.rotateOnLaunch = source["rotateOnLaunch"];
 	        this.typeGuessed = source["typeGuessed"];
+	        this.subId = source["subId"];
+	        this.subName = source["subName"];
+	        this.nodeKey = source["nodeKey"];
+	        this.rawNode = source["rawNode"];
+	        this.protocol = source["protocol"];
+	        this.gone = source["gone"];
 	        this.ip = source["ip"];
 	        this.country = source["country"];
 	        this.city = source["city"];
@@ -2391,6 +2437,102 @@ export namespace main {
 	        this.mode = source["mode"];
 	        this.days = source["days"];
 	        this.note = source["note"];
+	    }
+	}
+	export class SubPreview {
+	    name: string;
+	    format: string;
+	    count: number;
+	    coreCount: number;
+	    skipped: number;
+	    protocols: Record<string, number>;
+	    interval: number;
+	    upload: number;
+	    download: number;
+	    total: number;
+	    expire: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SubPreview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.format = source["format"];
+	        this.count = source["count"];
+	        this.coreCount = source["coreCount"];
+	        this.skipped = source["skipped"];
+	        this.protocols = source["protocols"];
+	        this.interval = source["interval"];
+	        this.upload = source["upload"];
+	        this.download = source["download"];
+	        this.total = source["total"];
+	        this.expire = source["expire"];
+	    }
+	}
+	export class SubRefreshResult {
+	    added: number;
+	    updated: number;
+	    gone: number;
+	    removed: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SubRefreshResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.added = source["added"];
+	        this.updated = source["updated"];
+	        this.gone = source["gone"];
+	        this.removed = source["removed"];
+	    }
+	}
+	export class Subscription {
+	    id: string;
+	    name: string;
+	    url: string;
+	    ua: string;
+	    autoUpdateHours: number;
+	    enabled: boolean;
+	    createdAt: number;
+	    lastUpdated: number;
+	    lastAttempt: number;
+	    lastError: string;
+	    nodeCount: number;
+	    skipped: number;
+	    format: string;
+	    protocols: Record<string, number>;
+	    upload: number;
+	    download: number;
+	    total: number;
+	    expire: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Subscription(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.url = source["url"];
+	        this.ua = source["ua"];
+	        this.autoUpdateHours = source["autoUpdateHours"];
+	        this.enabled = source["enabled"];
+	        this.createdAt = source["createdAt"];
+	        this.lastUpdated = source["lastUpdated"];
+	        this.lastAttempt = source["lastAttempt"];
+	        this.lastError = source["lastError"];
+	        this.nodeCount = source["nodeCount"];
+	        this.skipped = source["skipped"];
+	        this.format = source["format"];
+	        this.protocols = source["protocols"];
+	        this.upload = source["upload"];
+	        this.download = source["download"];
+	        this.total = source["total"];
+	        this.expire = source["expire"];
 	    }
 	}
 	export class SyncItem {

@@ -59,6 +59,7 @@ func (a *App) startup(ctx context.Context) {
 		a.auto.WatchGlobal()
 	}()
 	go a.proxyHealthLoop()
+	go a.subscriptionLoop() // proxy subscriptions: auto-update (subscription.go)
 	a.appShellStartup()
 	a.linksStartup() // default browser: route queued links once everything is up
 }
@@ -395,7 +396,9 @@ func (a *App) CheckProxyDraft(p Proxy) Proxy { return CheckProxy(p) }
 // CheckProxies checks the given proxies (all when ids is empty), 16 at a time,
 // emitting "proxy:checked" as each one finishes.
 func (a *App) CheckProxies(ids []string) []Proxy {
-	runPool(a.pickProxies(ids), 16, func(p Proxy) {
+	list := a.pickProxies(ids)
+	defer coreBatch(list)() // core nodes: one mihomo reload for the whole batch
+	runPool(list, 16, func(p Proxy) {
 		r := CheckProxy(p)
 		if cur, ok := a.store.GetProxy(p.ID); ok { // keep edits made meanwhile
 			r.Name, r.Tag, r.ChangeIP, r.Speed, r.SpeedAt, r.RotateOnLaunch = cur.Name, cur.Tag, cur.ChangeIP, cur.Speed, cur.SpeedAt, cur.RotateOnLaunch
@@ -409,7 +412,9 @@ func (a *App) CheckAllProxies() []Proxy { return a.CheckProxies(nil) }
 
 // SpeedTestProxies measures download speed through each proxy, 4 at a time.
 func (a *App) SpeedTestProxies(ids []string) []Proxy {
-	runPool(a.pickProxies(ids), 4, func(p Proxy) {
+	list := a.pickProxies(ids)
+	defer coreBatch(list)()
+	runPool(list, 4, func(p Proxy) {
 		r := SpeedTestProxy(p)
 		if cur, ok := a.store.GetProxy(p.ID); ok {
 			c := *cur

@@ -461,6 +461,7 @@ func winCommandLine(exe string, args []string) string {
 
 // TerminalSession is one terminal window GhostBrowser opened.
 type TerminalSession struct {
+	coreLease   string // core lease held while the window is open (core.go)
 	ID          string `json:"id"`
 	Tool        string `json:"tool"`
 	Name        string `json:"name"`
@@ -555,6 +556,7 @@ func (r *termRegistry) drop(id string) *termEntry {
 	r.mu.Unlock()
 	if e != nil {
 		e.relay.Close()
+		coreMgr.Release(e.s.coreLease)
 	}
 	return e
 }
@@ -612,6 +614,13 @@ func (s *Store) buildTerminalEnv(req TerminalRequest) (env map[string]string, pl
 				px = pr
 			}
 		}
+		if px != nil && px.needsCore() { // vless / ss / … : through a local mihomo listener
+			lease := "term:" + randHex(6)
+			if px, err = resolveLaunchProxy(lease, px); err != nil {
+				return nil, plan, sess, err
+			}
+			sess.coreLease = lease
+		}
 		fp := p.Fingerprint
 		if needsGeo(fp) {
 			if m, e := s.matchFP(fp, px); e == nil {
@@ -654,6 +663,12 @@ func (s *Store) launchTerminal(req TerminalRequest) (TerminalSession, error) {
 	if err != nil {
 		return TerminalSession{}, err
 	}
+	ok = false
+	defer func() {
+		if !ok {
+			coreMgr.Release(sess.coreLease)
+		}
+	}()
 	bin := ""
 	if def.id != "shell" {
 		if lookPathIn(def.bin, os.Getenv("PATH")) == "" {
@@ -700,6 +715,7 @@ func (s *Store) launchTerminal(req TerminalRequest) (TerminalSession, error) {
 	if tracked && proc != nil && proc.wait != nil {
 		go terms.watch(sess, proc, started)
 	}
+	ok = true
 	return sess, nil
 }
 

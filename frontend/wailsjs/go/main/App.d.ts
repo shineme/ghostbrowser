@@ -8,6 +8,8 @@ export function AddExtensionByID(arg1:string):Promise<main.Extension>;
 
 export function AddExtensionFromURL(arg1:string):Promise<main.Extension>;
 
+export function AddSubscription(arg1:string,arg2:string):Promise<main.Subscription>;
+
 export function AppVersion():Promise<string>;
 
 export function ApproveCloudDevice(arg1:string):Promise<void>;
@@ -62,6 +64,8 @@ export function CloudOnly():Promise<main.CloudOnlyList>;
 
 export function CookieInfo(arg1:string):Promise<main.CookieInfo>;
 
+export function CoreStatus():Promise<main.CoreStatus>;
+
 export function CreateGroup(arg1:string):Promise<main.GroupInfo>;
 
 export function CreateNativeProfile(arg1:string,arg2:string):Promise<main.Profile>;
@@ -92,6 +96,8 @@ export function DeleteProxies(arg1:Array<string>):Promise<void>;
 
 export function DeleteProxy(arg1:string):Promise<void>;
 
+export function DeleteSubscription(arg1:string,arg2:boolean):Promise<void>;
+
 export function DeleteWorkflow(arg1:string):Promise<void>;
 
 export function DevicePresets(arg1:string):Promise<Array<main.DevicePreset>>;
@@ -102,7 +108,11 @@ export function DeviceTypes():Promise<Array<main.DeviceTypeInfo>>;
 
 export function DismissLink(arg1:string):Promise<void>;
 
+export function DownloadCore():Promise<main.CoreStatus>;
+
 export function DuplicateWorkflow(arg1:string):Promise<main.Workflow>;
+
+export function EditSubscription(arg1:main.Subscription):Promise<main.Subscription>;
 
 export function EmptyTrash():Promise<number>;
 
@@ -194,6 +204,8 @@ export function ListProfiles():Promise<Array<main.Profile>>;
 
 export function ListProxies():Promise<Array<main.Proxy>>;
 
+export function ListSubscriptions():Promise<Array<main.Subscription>>;
+
 export function ListTags():Promise<Array<main.TagInfo>>;
 
 export function ListTerminals():Promise<Array<main.TerminalSession>>;
@@ -252,6 +264,8 @@ export function PendingSyncPrompt():Promise<main.SyncPrompt>;
 
 export function PickChromium():Promise<string>;
 
+export function PickCorePath():Promise<string>;
+
 export function PickFirefox():Promise<string>;
 
 export function PickFolder():Promise<string>;
@@ -261,6 +275,8 @@ export function PickKernel():Promise<string>;
 export function PickTerminalDir(arg1:string):Promise<string>;
 
 export function PreviewProxies(arg1:string,arg2:string):Promise<Array<main.ProxyPreview>>;
+
+export function PreviewSubscription(arg1:string,arg2:string):Promise<main.SubPreview>;
 
 export function PullProfile(arg1:string):Promise<void>;
 
@@ -346,6 +362,8 @@ export function ScreenOptions(arg1:string):Promise<Array<string>>;
 
 export function SessionStoreInfo(arg1:string):Promise<main.SessionStoreInfo>;
 
+export function SetCorePath(arg1:string):Promise<main.CoreStatus>;
+
 export function SetDefaultProfile(arg1:string):Promise<main.DefaultBrowserStatus>;
 
 export function SetDeleteMode(arg1:string):Promise<void>;
@@ -375,6 +393,8 @@ export function StartProfileAt(arg1:string,arg2:string):Promise<main.RunState>;
 export function StartRecording(arg1:string,arg2:main.RecordOptions):Promise<main.RecordState>;
 
 export function StartSync(arg1:string,arg2:Array<string>):Promise<main.SyncerState>;
+
+export function StopCore():Promise<main.CoreStatus>;
 
 export function StopMcp():Promise<main.McpStatus>;
 
@@ -420,9 +440,13 @@ export function UnlockSyncWithRecoveryKey(arg1:string,arg2:string):Promise<void>
 
 export function UnregisterDefaultBrowser():Promise<main.DefaultBrowserStatus>;
 
+export function UpdateAllSubscriptions():Promise<Array<main.Subscription>>;
+
 export function UpdateInfo():Promise<main.UpdateInfo>;
 
 export function UpdateProgress():Promise<main.UpdateProgress>;
+
+export function UpdateSubscription(arg1:string):Promise<main.SubRefreshResult>;
 
 export function UseUndetectableKit():Promise<main.Settings>;
 

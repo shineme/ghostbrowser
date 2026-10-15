@@ -230,13 +230,9 @@ func (s *Store) launchFirefox(p *Profile, st Settings) (*RunState, error) {
 	if kernel == "" {
 		return nil, fmt.Errorf("没有找到 Firefox：请在「设置 → Firefox 内核」选择 firefox.exe，或一键安装官方 Firefox（下载页 %s）", firefoxDownloadPage)
 	}
-	var px *Proxy
-	if p.InlineProxy != nil {
-		px = p.InlineProxy
-	} else if p.ProxyID != "" {
-		if pr, ok := s.GetProxy(p.ProxyID); ok {
-			px = pr
-		}
+	px, err := s.launchProxy(p) // core nodes: local mihomo listener
+	if err != nil {
+		return nil, err
 	}
 	fp, err := s.matchFP(normalizeFirefoxFP(p.Fingerprint), px)
 	if err != nil {

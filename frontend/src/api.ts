@@ -11,6 +11,9 @@ export type Profile = Omit<Plain<main.Profile>, 'fingerprint' | 'inlineProxy'> &
 export type Settings = Plain<main.Settings>;
 export type RunState = Plain<main.RunState>;
 export type NativePreset = Plain<main.NativePreset>;
+export type Subscription = Plain<main.Subscription>;
+export type SubPreview = Plain<main.SubPreview>;
+export type CoreStatus = Plain<main.CoreStatus>;
 
 const inWails = typeof (window as any).go !== 'undefined';
 
@@ -60,6 +63,27 @@ const mock = {
   running: [] as any[],
   settings: { kernelPath: '', kernelMode: 'undetectable', undetectableKit: 'undetectable-kit', profilesDir: 'C:\\Users\\me\\AppData\\Roaming\\GhostBrowser\\profiles', apiPort: 25325, apiEnabled: true, defaultOS: 'windows', syncServer: '', syncToken: '', syncPassword: '', deviceName: 'DESKTOP-01', deviceId: 'abc', theme: 'dark', syncPromptSecs: 3, syncPromptAction: 'pull' } as any,
 };
+// ---- proxy subscriptions + mihomo core ---- (preview data: synthetic nodes; #nosubs = none, #nocore = core not installed)
+const subMock = (() => {
+  const now = Date.now() / 1000;
+  const subs: any[] = location.hash.includes('nosubs') ? [] : [
+    { id: 'sub-a', name: '机场 A（精选）', url: 'https://sub.example-airport.com/api/v1/client/subscribe?token=demo', ua: 'clash-verge/v1.7', autoUpdateHours: 24, enabled: true, createdAt: now - 86400 * 9, lastUpdated: now - 3600 * 5, lastAttempt: now - 3600 * 5, lastError: '', nodeCount: 0, skipped: 2, format: 'clash', protocols: {}, upload: 3.2e9, download: 41.7e9, total: 200 * 2 ** 30, expire: now + 86400 * 23 },
+    { id: 'sub-b', name: 'Open Traffic', url: 'https://sub.example-traffic.net/sub/demo', ua: 'clash-verge/v1.7', autoUpdateHours: 12, enabled: true, createdAt: now - 86400 * 2, lastUpdated: now - 3600 * 30, lastAttempt: now - 600, lastError: '下载订阅失败：连接超时', nodeCount: 0, skipped: 0, format: 'clash', protocols: {}, upload: 2.02e9, download: 10.6e9, total: 0, expire: 0 },
+  ];
+  const mk = (sub: any, i: number, name: string, protocol: string, cc: string, ok: boolean) => ({ id: `${sub.id}-n${i}`, name, type: protocol === 'https' ? 'https' : protocol, protocol, host: `198.51.100.${i + 10}`, port: 443 + i, user: '', pass: '', changeIpUrl: '', tag: '', subId: sub.id, subName: sub.name, nodeKey: `k${i}`, rawNode: protocol === 'http' || protocol === 'socks5' ? '' : '{"type":"' + protocol + '"}', gone: false,
+    ip: ok ? `203.0.113.${i + 20}` : '', country: ok ? cc : '', city: ok ? ({ US: 'Los Angeles', JP: 'Tokyo', SG: 'Singapore', HK: 'Hong Kong', DE: 'Frankfurt' } as any)[cc] : '', timezone: '', lat: 0, lon: 0, latency: ok ? 60 + i * 23 % 300 : 0, status: ok ? 'ok' : 'unknown', isp: ok ? 'HostHatch' : '', ipType: ok ? 'hosting' : '', checkedAt: ok ? now - 1800 : 0 });
+  const nodes: any[] = [];
+  if (subs[0]) {
+    [['🇺🇸 美国 原生IP 01', 'vless', 'US'], ['🇯🇵 日本 Reality 02', 'vless', 'JP'], ['🇸🇬 新加坡 SS 03', 'ss', 'SG'], ['🇭🇰 香港 Hysteria2 04', 'hysteria2', 'HK'], ['🇺🇸 美国 Trojan 05', 'trojan', 'US'], ['🇩🇪 德国 AnyTLS 06', 'anytls', 'DE'], ['🇯🇵 日本 VMess 07', 'vmess', 'JP'], ['🇺🇸 美国 HTTPS 08', 'https', 'US'], ['🇺🇸 美国 HTTP 09', 'http', 'US'], ['🇸🇬 新加坡 SOCKS5 10', 'socks5', 'SG']].forEach(([n, p, cc], i) => nodes.push(mk(subs[0], i, n, p, cc, i % 3 !== 2)));
+    nodes[4].gone = true;
+  }
+  if (subs[1]) ['CF-01-直连-美国', 'CF-02-直连-美国', 'CF-03-直连-日本', 'CF-04-直连-新加坡'].forEach((n, i) => nodes.push(mk(subs[1], 20 + i, n, 'vless', ['US', 'US', 'JP', 'SG'][i], i === 0)));
+  const recount = () => subs.forEach(s => { const mine = nodes.filter(n => n.subId === s.id); s.nodeCount = mine.length; s.protocols = {}; mine.forEach(n => { s.protocols[n.protocol] = (s.protocols[n.protocol] || 0) + 1; }); });
+  recount();
+  const core: any = { installed: !location.hash.includes('nocore'), path: location.hash.includes('nocore') ? '' : 'C:\\Users\\me\\AppData\\Roaming\\GhostBrowser\\core\\mihomo.exe', version: location.hash.includes('nocore') ? '' : 'v1.19.32', managed: true, running: false, pid: 0, listeners: 0, leases: 0, error: '', downloading: false, progress: 0, dir: '' };
+  if (!core.installed) nodes.forEach(n => { if (n.rawNode) { n.status = 'unknown'; n.error = '需要内核'; n.ip = ''; n.country = ''; } });
+  return { subs, nodes, recount, core };
+})();
 ['Shopify-Store-A', 'FB-Ads-01', 'FB-Ads-02', 'Amazon-Seller-EU', 'TikTok-Shop', 'Gmail-Warmup'].forEach((n, i) => {
   mock.profiles.push({ id: rid(), name: n, group: i < 3 ? '广告投放' : '电商', tags: i % 2 ? ['养号'] : ['主力'], notes: '', storage: i % 3 === 0 ? 'cloud' : 'local', proxyId: i % 2 ? 'px2' : 'px1', startUrls: [], cookies: '', fingerprint: mockFP(i === 3 ? 'macos' : 'windows'), createdAt: Date.now() / 1000 - i * 3600, lastRun: i < 4 ? Date.now() / 1000 - i * 5000 : 0, cloudVersion: i % 3 === 0 ? 3 : 0, syncedAt: 0 });
 });
@@ -349,7 +373,7 @@ const M = {
   CheckProxyDraft: async (p: any) => { await wait(900); return { ...p, status: 'ok', ip: p.host, country: 'US', city: 'Ashburn', timezone: 'America/New_York', latency: 150 }; },
   CheckAllProxies: async () => { await wait(1400); return mock.proxies; },
   MatchGeo: async (proxyId: string, _inline: any) => { await wait(700); const px = mock.proxies.find(x => x.id === proxyId); return { ok: true, error: '', stale: false, direct: !px, ip: px?.ip || '73.12.4.9', country: px?.country || 'US', region: px?.region || 'California', city: px?.city || 'Los Angeles', isp: px?.isp || 'Comcast Cable', ipType: px?.ipType || 'residential', timezone: px?.timezone || 'America/Los_Angeles', languages: ['en-US', 'en'], lat: 34.0522, lon: -118.2437, latency: px?.latency || 160 } as any; },
-  CheckProxies: async (ids: string[]) => { await wait(1200); for (const p of mock.proxies) if (!ids.length || ids.includes(p.id)) Object.assign(p, { status: 'ok', latency: 120 + Math.round(Math.random() * 300), connectMs: 600, ip: p.host, country: p.country || 'US', city: 'Los Angeles', region: 'California', isp: 'Comcast Cable', ipType: 'residential', checkedAt: Date.now() / 1000 }); return mock.proxies; },
+  CheckProxies: async (ids: string[]) => { await wait(1200); for (const p of mock.proxies) if ((!ids.length || ids.includes(p.id)) && !(p.rawNode && !subMock.core.installed)) Object.assign(p, { status: 'ok', latency: 120 + Math.round(Math.random() * 300), connectMs: 600, ip: p.host, country: p.country || 'US', city: 'Los Angeles', region: 'California', isp: 'Comcast Cable', ipType: 'residential', checkedAt: Date.now() / 1000 }); return mock.proxies; },
   SpeedTestProxies: async (ids: string[]) => { await wait(1500); for (const p of mock.proxies) if (!ids.length || ids.includes(p.id)) Object.assign(p, { speedKbps: 8000 + Math.round(Math.random() * 40000), speedAt: Date.now() / 1000 }); return mock.proxies; },
   DeleteProxies: async (ids: string[]) => { mock.proxies = mock.proxies.filter(p => !ids.includes(p.id)); },
   PreviewProxies: async (text: string, def: string) => text.split('\n').map((raw, i) => ({ raw: raw.trim(), line: i + 1 })).filter(x => x.raw && !x.raw.startsWith('#')).map(({ raw, line }) => {
@@ -742,7 +766,43 @@ const M = {
   PendingRestart: async (): Promise<string[]> => mock.running.map(r => r.profileId).filter(id => { const p = mock.profiles.find(x => x.id === id); return p && shellMock.launched[id] !== undefined && shellMock.launched[id] !== shellMock.key(p); }),
   RestartProfile: async (id: string): Promise<any> => { await wait(1400); const p = mock.profiles.find(x => x.id === id); if (p) shellMock.launched[id] = shellMock.key(p); return mock.running.find(r => r.profileId === id); },
   StartProfileAt: async (id: string, url: string): Promise<any> => { await wait(700); if (!/^https?:\/\//i.test(url)) throw '网址无效：只支持 http/https'; let r = mock.running.find(x => x.profileId === id); if (!r) { r = { profileId: id, pid: 1234, debugPort: 9222, wsUrl: '', startedAt: Date.now() / 1000 }; mock.running.push(r); const p = mock.profiles.find(x => x.id === id); if (p) shellMock.launched[id] = shellMock.key(p); } return r; },
-  AppVersion: async (): Promise<string> => '0.8.5',
+  AppVersion: async (): Promise<string> => '0.8.6',
+  // ---- proxy subscriptions ---- (#subbad = preview fails)
+  ListSubscriptions: async (): Promise<Subscription[]> => subMock.subs.map(x => ({ ...x })),
+  PreviewSubscription: async (url: string, _ua: string): Promise<SubPreview> => {
+    await wait(900);
+    if (location.hash.includes('subbad') || /expired/.test(url)) throw '订阅服务器返回 HTTP 403';
+    return { name: '新机场（Pro）', format: 'clash', count: 128, coreCount: 112, skipped: 3, protocols: { vless: 54, ss: 21, hysteria2: 19, trojan: 10, http: 16, anytls: 5, vmess: 3 }, interval: 12, upload: 0, download: 1.3e9, total: 100 * 2 ** 30, expire: Date.now() / 1000 + 86400 * 61 } as any;
+  },
+  AddSubscription: async (url: string, name: string): Promise<Subscription> => {
+    await wait(700);
+    if (subMock.subs.some(x => x.url === url)) throw '这个订阅已经添加过了';
+    const s: any = { id: rid(), name: name || '新机场（Pro）', url, ua: 'clash-verge/v1.7', autoUpdateHours: 12, enabled: true, createdAt: Date.now() / 1000, lastUpdated: Date.now() / 1000, lastAttempt: Date.now() / 1000, lastError: '', nodeCount: 0, skipped: 3, format: 'clash', protocols: {}, upload: 0, download: 1.3e9, total: 100 * 2 ** 30, expire: Date.now() / 1000 + 86400 * 61 };
+    subMock.subs.push(s);
+    ['vless', 'ss', 'hysteria2', 'trojan', 'http', 'vless'].forEach((p, i) => { const n: any = { id: rid(), name: `🇺🇸 新节点 ${i + 1}`, type: p, protocol: p, host: `192.0.2.${i + 50}`, port: 8443, user: '', pass: '', changeIpUrl: '', tag: '', subId: s.id, subName: s.name, nodeKey: rid(), rawNode: p === 'http' ? '' : '{}', status: 'unknown', checkedAt: 0 }; subMock.nodes.push(n); mock.proxies.push(n); });
+    subMock.recount(); mockEmit('subs:updated', subMock.subs.map(x => ({ ...x }))); return { ...s };
+  },
+  UpdateSubscription: async (id: string): Promise<any> => { await wait(1100); const s = subMock.subs.find(x => x.id === id); if (!s) throw '订阅不存在'; s.lastUpdated = s.lastAttempt = Date.now() / 1000; s.lastError = ''; mockEmit('subs:updated', subMock.subs.map(x => ({ ...x }))); return { added: 0, updated: s.nodeCount, gone: id === 'sub-a' ? 1 : 0, removed: 0 }; },
+  UpdateAllSubscriptions: async (): Promise<Subscription[]> => { await wait(1500); subMock.subs.forEach(s => { if (s.enabled) { s.lastUpdated = s.lastAttempt = Date.now() / 1000; s.lastError = ''; } }); return subMock.subs.map(x => ({ ...x })); },
+  EditSubscription: async (sub: any): Promise<Subscription> => { const s = subMock.subs.find(x => x.id === sub.id); if (!s) throw '订阅不存在'; Object.assign(s, { name: sub.name, url: sub.url, ua: sub.ua || 'clash-verge/v1.7', autoUpdateHours: sub.autoUpdateHours, enabled: sub.enabled }); mock.proxies.forEach(p => { if (p.subId === s.id) p.subName = s.name; }); mockEmit('subs:updated', subMock.subs.map(x => ({ ...x }))); return { ...s }; },
+  DeleteSubscription: async (id: string, deleteNodes: boolean): Promise<void> => {
+    await wait(300); const i = subMock.subs.findIndex(x => x.id === id); if (i < 0) throw '订阅不存在'; subMock.subs.splice(i, 1);
+    if (deleteNodes) { const gone = new Set(mock.proxies.filter(p => p.subId === id).map(p => p.id)); mock.proxies = mock.proxies.filter(p => !gone.has(p.id)); mock.profiles.forEach(p => { if (gone.has(p.proxyId)) p.proxyId = ''; }); }
+    else mock.proxies.forEach(p => { if (p.subId === id) { p.subId = ''; p.subName = ''; p.tag = p.tag || '订阅'; } });
+    mockEmit('subs:updated', subMock.subs.map(x => ({ ...x })));
+  },
+  // ---- mihomo core ----
+  CoreStatus: async (): Promise<CoreStatus> => ({ ...subMock.core }),
+  DownloadCore: async (): Promise<CoreStatus> => {
+    const c = subMock.core; c.downloading = true;
+    for (let p = 0; p <= 100; p += 12.5) { c.progress = p; mockEmit('core:status', { ...c }); await wait(220); }
+    Object.assign(c, { downloading: false, progress: 100, installed: true, version: 'v1.19.32', managed: true, path: 'C:\\Users\\me\\AppData\\Roaming\\GhostBrowser\\core\\mihomo.exe' });
+    mock.proxies.forEach(p => { if (p.error === '需要内核') p.error = ''; });
+    return { ...c };
+  },
+  SetCorePath: async (path: string): Promise<CoreStatus> => { await wait(300); if (path && !/mihomo|clash/i.test(path)) throw '不是 mihomo 内核（-v 输出：' + path.split(/[\\/]/).pop() + '）'; Object.assign(subMock.core, path ? { path, managed: false, installed: true, version: 'v1.19.30' } : { managed: true }); return { ...subMock.core }; },
+  PickCorePath: async (): Promise<string> => 'D:\\Tools\\verge-mihomo.exe',
+  StopCore: async (): Promise<CoreStatus> => { Object.assign(subMock.core, { running: false, listeners: 0, leases: 0 }); return { ...subMock.core }; },
   // ---- default browser ---- (#dbunsupported = non-Windows, #dbdefault = already the system browser, #dbpick = a link waiting for a profile)
   DefaultBrowserStatus: async (): Promise<any> => dbMock.status(),
   SetDefaultProfile: async (id: string): Promise<any> => { await wait(120); if (id && !mock.profiles.some(p => p.id === id)) throw new Error('环境不存在'); dbMock.profileId = id; const st = dbMock.status(); mockEmit('defaultbrowser:changed', st); return st; },
@@ -1191,7 +1251,7 @@ const recFinalize = (steps: any[], o: any) => {
 const shellMock: any = {
   key: (p: any) => JSON.stringify([p.proxyId, p.kernel || '', p.fingerprint?.timezone, p.fingerprint?.languages, p.fingerprint?.userAgent, p.fingerprint?.screenWidth]),
   launched: {} as Record<string, string>,
-  info: { current: '0.8.4', latest: '0.8.5', available: true, source: 'server', checkedAt: Date.now() / 1000 - 420, error: '',
+  info: { current: '0.8.5', latest: '0.8.6', available: true, source: 'server', checkedAt: Date.now() / 1000 - 420, error: '',
     notes: '## 新功能\n- **托盘常驻**：关闭窗口后环境和代理继续运行，可从托盘恢复\n- **待重启提示**：运行中修改代理或指纹后一键重启生效\n- 网站快捷入口与公告中心\n\n## 修复\n1. 修复云同步在弱网下偶尔重复上传的问题\n2. 修复部分 4K 屏幕下窗口排列错位\n\n详情见 [更新日志](https://example.com/changelog)' },
   prog: { phase: 'idle', got: 0, total: 0, pct: 0 },
   install() {
@@ -1220,6 +1280,9 @@ const shellMock: any = {
       ] } };
   },
 };
+mock.proxies.push(...subMock.nodes);
+if (mock.profiles[2] && subMock.nodes[0]) mock.profiles[2].proxyId = subMock.nodes[0].id;
+if (mock.profiles[5] && subMock.nodes[4]) mock.profiles[5].proxyId = subMock.nodes[4].id;
 mock.running.forEach(r => { const p = mock.profiles.find(x => x.id === r.profileId); if (p) shellMock.launched[r.profileId] = shellMock.key(p); });
 // preview: the second running profile had its proxy changed while running -> 待重启
 if (mock.running[1]) shellMock.launched[mock.running[1].profileId] = 'stale';

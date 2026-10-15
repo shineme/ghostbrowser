@@ -34,6 +34,9 @@ type globalPayload struct {
 	Settings Settings      `json:"settings"`
 	Proxies  []Proxy       `json:"proxies"`
 	Library  fpLibraryData `json:"library"`
+	// Proxy subscriptions (v0.8.6+). nil when the payload came from an older
+	// version: the pull then keeps this computer's list.
+	Subs []Subscription `json:"subs"`
 }
 
 func (l *fpLibrary) snapshot() fpLibraryData {
@@ -76,7 +79,7 @@ func (s *Store) globalPayload() globalPayload {
 	st.DefaultProfileID = "" // device-local (default browser profile)
 	px := s.ListProxies()
 	sort.Slice(px, func(i, j int) bool { return px[i].ID < px[j].ID })
-	return globalPayload{Format: 1, Device: st.DeviceName, SavedAt: time.Now().Unix(), Settings: st, Proxies: px, Library: userLib.snapshot()}
+	return globalPayload{Format: 1, Device: st.DeviceName, SavedAt: time.Now().Unix(), Settings: st, Proxies: px, Library: userLib.snapshot(), Subs: s.ListSubscriptions()}
 }
 
 // globalHash covers what the user edits. Per-device fields and proxy check
@@ -90,16 +93,34 @@ func globalHash(g globalPayload) string {
 		Port                 int
 		User, Pass, Change   string
 		Tag                  string
+		Sub, Node            string `json:",omitempty"`
+		Gone                 bool   `json:",omitempty"`
 	}
 	keys := make([]pxKey, 0, len(g.Proxies))
 	for _, p := range g.Proxies {
-		keys = append(keys, pxKey{p.ID, p.Name, p.Type, p.Host, p.Port, p.User, p.Pass, p.ChangeIP, p.Tag})
+		keys = append(keys, pxKey{p.ID, p.Name, p.Type, p.Host, p.Port, p.User, p.Pass, p.ChangeIP, p.Tag, p.SubID, p.NodeKey, p.Gone})
+	}
+	// Subscriptions: what the user edits, not refresh results (counts, traffic, errors).
+	type subKey struct {
+		ID, Name, URL, UA string
+		Hours             int
+		Enabled           bool
+	}
+	subs := make([]subKey, 0, len(g.Subs))
+	for _, x := range g.Subs {
+		subs = append(subs, subKey{x.ID, x.Name, x.URL, x.UA, x.AutoUpdateHours, x.Enabled})
+	}
+	sort.Slice(subs, func(i, j int) bool { return subs[i].ID < subs[j].ID })
+	var sk any
+	if len(subs) > 0 { // keeps the hash of payloads without subscriptions unchanged
+		sk = subs
 	}
 	b, _ := json.Marshal(struct {
-		S Settings
-		P []pxKey
-		L fpLibraryData
-	}{st, keys, g.Library})
+		S  Settings
+		P  []pxKey
+		L  fpLibraryData
+		SB any `json:",omitempty"`
+	}{st, keys, g.Library, sk})
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
 }
@@ -240,6 +261,13 @@ func (s *Store) PullGlobal() (err error) {
 	for i := range g.Proxies {
 		p := g.Proxies[i]
 		s.Proxies[p.ID] = &p
+	}
+	if g.Subs != nil {
+		s.Subs = map[string]*Subscription{}
+		for i := range g.Subs {
+			x := g.Subs[i]
+			s.Subs[x.ID] = &x
+		}
 	}
 	s.mu.Unlock()
 	if e = userLib.replace(g.Library); e != nil {

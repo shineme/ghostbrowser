@@ -130,7 +130,12 @@ func (s *Store) liveExit(px *Proxy, maxAge time.Duration) GeoMatch {
 		fresh := CheckProxy(target)
 		if fresh.Status == "ok" {
 			cur = fresh
-			if target.ID != "" {
+			if target.CoreOf != "" { // local mihomo listener: store the result on the node
+				if saved, ok := s.GetProxy(target.CoreOf); ok {
+					mergeCheck(saved, fresh)
+					s.PutProxy(*saved)
+				}
+			} else if target.ID != "" {
 				if saved, ok := s.GetProxy(target.ID); ok {
 					keep := *saved
 					fresh.Name, fresh.Tag, fresh.ChangeIP, fresh.Speed, fresh.SpeedAt = keep.Name, keep.Tag, keep.ChangeIP, keep.Speed, keep.SpeedAt

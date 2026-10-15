@@ -225,11 +225,9 @@ func (s *Store) nativeSpec(p *Profile, st Settings) (*undetectable.Spec, error) 
 	if !ok {
 		return nil, fmt.Errorf("未知模板 %q", n.TemplateKey)
 	}
-	var px *Proxy
-	if p.InlineProxy != nil {
-		px = p.InlineProxy
-	} else if p.ProxyID != "" {
-		px, _ = s.GetProxy(p.ProxyID)
+	px, err := s.launchProxy(p) // core nodes: local mihomo listener
+	if err != nil {
+		return nil, err
 	}
 	fp, err := s.matchFP(p.Fingerprint, px)
 	if err != nil {

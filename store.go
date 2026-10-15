@@ -22,6 +22,7 @@ type Store struct {
 	Global   GlobalSyncState
 	CloudDel cloudDeleteState // cloud-aware deletion: local-only markers, queued cloud deletes
 	Trash    map[string]*Profile // recycle bin (最近删除), see trash.go
+	Subs     map[string]*Subscription // proxy subscriptions, see subscription.go
 
 	onTransfer func(TransferEvent)
 	bodyCap    atomic.Int64 // largest upload body the sync server accepted after a 413
@@ -98,6 +99,7 @@ type diskData struct {
 	Global   GlobalSyncState `json:"globalSync"`
 	CloudDel cloudDeleteState `json:"cloudDelete"`
 	Trash    []*Profile       `json:"trash,omitempty"`
+	Subs     []*Subscription  `json:"subscriptions,omitempty"`
 }
 
 func (s *Store) file() string { return filepath.Join(s.dir, "data.json") }
@@ -120,6 +122,12 @@ func (s *Store) load() {
 	s.Settings = d.Settings
 	s.Global = d.Global
 	s.CloudDel = d.CloudDel
+	for _, x := range d.Subs {
+		if s.Subs == nil {
+			s.Subs = map[string]*Subscription{}
+		}
+		s.Subs[x.ID] = x
+	}
 	for _, p := range d.Trash {
 		if s.Trash == nil {
 			s.Trash = map[string]*Profile{}
@@ -138,6 +146,9 @@ func (s *Store) saveLocked() {
 	}
 	for _, p := range s.Trash {
 		d.Trash = append(d.Trash, p)
+	}
+	for _, x := range s.Subs {
+		d.Subs = append(d.Subs, x)
 	}
 	b, _ := json.MarshalIndent(d, "", "  ")
 	tmp := s.file() + ".tmp"

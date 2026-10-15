@@ -34,6 +34,9 @@ func (r *runRegistry) remove(id string) {
 	delete(r.m, id)
 	cb := r.onExit
 	r.mu.Unlock()
+	if ok {
+		coreMgr.Release("profile:" + id) // mihomo listener of a core node (core.go)
+	}
 	if ok && e.cleanup != nil {
 		e.cleanup()
 	}

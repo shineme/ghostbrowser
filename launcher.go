@@ -82,6 +82,8 @@ func (s *Store) Launch(id string) (*RunState, error) {
 	}
 	if err == nil {
 		launchCfg.launched(s, id) // 待重启: remember the launch config
+	} else if _, running := runReg.get(id); !running {
+		coreMgr.Release("profile:" + id)
 	}
 	return rs, err
 }
