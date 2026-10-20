@@ -236,6 +236,7 @@ func (s *Store) nativeSpec(p *Profile, st Settings) (*undetectable.Spec, error) 
 	if fp.OS != "windows" {
 		return nil, fmt.Errorf("当前本地原生模板只验证过 Windows，请使用 Windows 配置")
 	}
+	s.noteFpExpect(p, fp, "")
 	version := uaChromeVersion.FindStringSubmatch(fp.UserAgent)
 	if len(version) < 2 {
 		return nil, fmt.Errorf("User-Agent 必须包含完整 Chrome 版本号，如 153.0.8010.36")

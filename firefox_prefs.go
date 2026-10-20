@@ -170,6 +170,7 @@ func firefoxPrefs(fp Fingerprint, px *ffProxy, startURLs []string) ffPrefs {
 	if px != nil {
 		p.set("network.proxy.type", 1)
 		p.set("network.proxy.no_proxies_on", "")
+		p.set("network.proxy.allow_hijacking_localhost", false) // 127.0.0.1 (内置自检) stays local
 		p.set("network.proxy.failover_direct", false)
 		p.set("network.proxy.socks_remote_dns", true)
 		p.set("network.trr.mode", 5) // no DNS-over-HTTPS around the proxy

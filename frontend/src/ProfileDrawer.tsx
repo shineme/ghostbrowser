@@ -6,6 +6,7 @@ import { Field, Toggle, Icon, flag, useToast, useConfirm, useExit, Segmented, Av
 import { CookieModal } from './CookieModal';
 import { ExtIcon, Ext } from './ExtensionsView';
 import { GuardPane, LaunchPane, seedShort } from './FpControls';
+import { FpCheckProfilePane } from './FpCheck';
 import { KernelMissingNotice } from './KernelInstall';
 import { FoxIcon, FirefoxMissingNotice, FirefoxFpPane, FirefoxFontPane, FirefoxGuardPane, FirefoxLaunchPane, useFirefoxInfo, ffVersionLabel } from './FirefoxKernel';
 import { DEVICE_TYPES, TRUST, devType, osName, osVerLabel, needsOpen, uaOSOf } from './devices';
@@ -339,7 +340,7 @@ export const ProfileDrawer: React.FC<{
           </div>}
 
           {tab === 'guard' && <div className="tabpane">{firefox ? <FirefoxGuardPane fp={fp as any} setFP={setFP as any} /> : <GuardPane fp={fp as any} setFP={setFP as any} open={openKernel} onRegenSeed={regenSeed} />}</div>}
-          {tab === 'launch' && <div className="tabpane">{firefox ? <FirefoxLaunchPane fp={fp as any} setFP={setFP as any} /> : <LaunchPane fp={fp as any} setFP={setFP as any} open={openKernel} />}</div>}
+          {tab === 'launch' && <div className="tabpane"><FpCheckProfilePane p={p} setP={setP as any} />{firefox ? <FirefoxLaunchPane fp={fp as any} setFP={setFP as any} /> : <LaunchPane fp={fp as any} setFP={setFP as any} open={openKernel} />}</div>}
         </div>
 
         <div className="dfoot">

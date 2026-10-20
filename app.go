@@ -289,7 +289,13 @@ func (a *App) DevicePresets(osName string) []DevicePreset { return DevicePresets
 
 // ---------- run ----------
 
+// StartProfile is the app window's start (may open the fingerprint check page).
 func (a *App) StartProfile(id string) (*RunState, error) {
+	return a.startProfile(id, LaunchOpts{UI: true})
+}
+
+// startProfile: RPA runs and the recorder pass LaunchOpts{} (no check page).
+func (a *App) startProfile(id string, o LaunchOpts) (*RunState, error) {
 	if _, ok := runReg.get(id); ok {
 		rs, _ := runReg.get(id)
 		return rs, nil
@@ -301,7 +307,7 @@ func (a *App) StartProfile(id string) (*RunState, error) {
 		a.store.auditNamed("ui", "profile.start", id, "", err, "")
 		return nil, err
 	}
-	rs, err := a.store.Launch(id)
+	rs, err := a.store.LaunchWith(id, o)
 	a.store.auditProfile("ui", "profile.start", id, err, "")
 	return rs, err
 }
@@ -815,7 +821,7 @@ func (a *App) rpa() *rpaService {
 				return rs.WSURL, true
 			},
 			start: func(id string) (string, error) {
-				rs, err := a.StartProfile(id)
+				rs, err := a.startProfile(id, LaunchOpts{})
 				if err != nil {
 					return "", err
 				}
@@ -1124,7 +1130,7 @@ func (a *App) StartRecording(profileID string, opts RecordOptions) (RecordState,
 		return RecordState{}, fmt.Errorf("这个环境正在运行自动化流程，请等它结束再录制")
 	}
 	release := func() { a.rpa().release(profileID) }
-	rs, err := a.StartProfile(profileID)
+	rs, err := a.startProfile(profileID, LaunchOpts{})
 	if err != nil {
 		release()
 		return RecordState{}, fmt.Errorf("启动浏览器失败：%v", err)

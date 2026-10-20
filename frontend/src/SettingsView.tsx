@@ -8,6 +8,7 @@ import { FirefoxSettingsCard, FoxIcon, useFirefoxInfo } from './FirefoxKernel';
 import { AppShellSettings } from './AppShell';
 import { DefaultBrowserCard } from './DefaultBrowser';
 import { CoreCard } from './Subscriptions';
+import { FpCheckSettingsCard } from './FpCheck';
 
 const mb = (b: number) => b ? `${(b / 1048576).toFixed(b > 1e8 ? 0 : 1)} MB` : '';
 
@@ -138,6 +139,8 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
         <Field label="本机设备名"><input type="text" value={s.deviceName} onChange={e => set({ deviceName: e.target.value })} /></Field>
         <button className="btn" onClick={test} disabled={testing}><Icon.refresh s={14} /> {testing ? '测试中…' : '测试连接'}</button>
       </div>
+
+      <FpCheckSettingsCard s={s} set={set} index={4} />
 
       <AppShellSettings s={s} set={set} index={4} />
 

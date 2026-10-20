@@ -152,6 +152,12 @@ type Profile struct {
 	SharedFrom   string `json:"sharedFrom,omitempty"`
 	ShareMode    string `json:"shareMode,omitempty"` // session | config
 	ShareExpires int64  `json:"shareExpires,omitempty"`
+	// 启动时打开指纹检测页 (fpcheck.go): per-profile override of the global setting.
+	FpCheck     string `json:"fpCheck,omitempty"`     // "" = 跟随全局 | on | off
+	FpCheckSite string `json:"fpCheckSite,omitempty"` // "" = global site | site key | builtin | custom
+	FpCheckURL  string `json:"fpCheckUrl,omitempty"`  // custom site
+	FpCheckFreq string `json:"fpCheckFreq,omitempty"` // "" = 跟随全局 | once | every
+	FpCheckAt   int64  `json:"fpCheckAt,omitempty"`   // when the check page was opened (仅首次启动)
 }
 
 // needsOpenKernel: the custom kernel only carries Windows desktop templates.
@@ -216,6 +222,11 @@ type Settings struct {
 	// default browser: profile that opens external links (http/https/file)
 	// when GhostBrowser is the system browser. Device-local: never synced.
 	DefaultProfileID string `json:"defaultProfileId,omitempty"`
+	// 启动时打开指纹检测页 (fpcheck.go), synced with the other settings.
+	FpCheckOn   bool   `json:"fpCheckOn,omitempty"`
+	FpCheckSite string `json:"fpCheckSite,omitempty"` // site key ("" = browserscan) | builtin | custom
+	FpCheckURL  string `json:"fpCheckUrl,omitempty"`  // custom site
+	FpCheckOnce bool   `json:"fpCheckOnce,omitempty"` // only on a profile's first launch
 }
 
 type RunState struct {

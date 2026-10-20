@@ -355,7 +355,7 @@ const M = {
     ? [{ vendor: 'Google Inc. (Apple)', renderer: 'ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)' }, { vendor: 'Google Inc. (Apple)', renderer: 'ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)' }]
     : [{ vendor: 'Google Inc. (NVIDIA)', renderer: 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002504) Direct3D11 vs_5_0 ps_5_0, D3D11)' }, { vendor: 'Google Inc. (Intel)', renderer: 'ANGLE (Intel, Intel(R) Iris(R) Xe Graphics (0x00009A49) Direct3D11 vs_5_0 ps_5_0, D3D11)' }],
   ScreenOptions: async (os: string) => os === 'macos' ? ['1440x900@2', '1512x982@2', '1728x1117@2'] : ['1920x1080@1', '1366x768@1', '1536x864@1.25', '2560x1440@1'],
-  StartProfile: async (id: string) => { await wait(600); if (!inWails && location.hash.includes('nokernel') && !mock.settings.chromiumPath) throw '没有找到开源内核：请在「设置 → 开源内核」选择 chrome.exe（Chromium、Chrome 或你自己编译的内核）'; const r = { profileId: id, pid: 1234, debugPort: 9222, wsUrl: 'ws://127.0.0.1:9222/devtools/browser/x', startedAt: Date.now() / 1000 }; mock.running.push(r); return r; },
+  StartProfile: async (id: string) => { await wait(600); if (!inWails && location.hash.includes('nokernel') && !mock.settings.chromiumPath) throw '没有找到开源内核：请在「设置 → 开源内核」选择 chrome.exe（Chromium、Chrome 或你自己编译的内核）'; const r = { profileId: id, pid: 1234, debugPort: 9222, wsUrl: 'ws://127.0.0.1:9222/devtools/browser/x', startedAt: Date.now() / 1000 }; mock.running.push(r); const fp: any = mock.profiles.find((x: any) => x.id === id); if (fp) { const st: any = mock.settings; const on = fp.fpCheck === 'on' || (fp.fpCheck !== 'off' && st.fpCheckOn); const once = fp.fpCheckFreq === 'once' || (fp.fpCheckFreq !== 'every' && st.fpCheckOnce); if (on && once && !fp.fpCheckAt) fp.fpCheckAt = Math.floor(Date.now() / 1000); } return r; },
   StopProfile: async (id: string) => { mock.running = mock.running.filter(r => r.profileId !== id); },
   Running: async () => [...mock.running],
   ExportCookies: async (_id: string, format: string) => {
@@ -412,6 +412,16 @@ const M = {
   StopProfiles: async (_ids: string[]) => {},
   PushProfiles: async (ids: string[]): Promise<any> => { await wait(900); return { ok: ids.length, failed: 0, errors: [] }; },
   FocusProfile: async (_id: string) => {},
+  // 启动时打开指纹检测页
+  FpCheckSites: async (): Promise<{ key: string; name: string; url: string; note: string }[]> => [
+    { key: 'browserscan', name: 'BrowserScan', url: 'https://www.browserscan.net/', note: '综合指纹 + 机器人检测' },
+    { key: 'pixelscan', name: 'Pixelscan', url: 'https://pixelscan.net/', note: '一致性检测（IP / 时区 / 语言 / UA）' },
+    { key: 'creepjs', name: 'CreepJS', url: 'https://abrahamjuliot.github.io/creepjs/', note: '严格的篡改与谎言检测' },
+    { key: 'browserleaks', name: 'BrowserLeaks', url: 'https://browserleaks.com/', note: '分项检测：WebRTC、Canvas、字体…' },
+    { key: 'iphey', name: 'iphey', url: 'https://iphey.com/', note: 'IP 与指纹可信度' },
+    { key: 'whoer', name: 'whoer', url: 'https://whoer.net/', note: 'IP 匿名度、DNS、时区' },
+    { key: 'builtin', name: '内置自检', url: '', note: '本机页面：对比浏览器实际暴露的值与环境配置' },
+  ],
   // ---- mcp / audit ----
   McpStatus: async (): Promise<any> => mcpMockStatus(),
   StartMcp: async (port: number): Promise<any> => { await wait(500); if (port > 0) mcpMock.port = port; if (mcpMock.port < 1024) { mcpMock.running = false; mcpMock.error = `listen tcp 127.0.0.1:${mcpMock.port}: bind: An attempt was made to access a socket in a way forbidden by its access permissions.`; auditPush('ui', 'mcp.start', '', '', mcpMock.error, `port ${mcpMock.port}`); throw mcpMock.error; } Object.assign(mcpMock, { running: true, enabled: true, error: '', startedAt: Date.now() }); auditPush('ui', 'mcp.start', '', '', '', `port ${mcpMock.port}`); return mcpMockStatus(); },
@@ -766,7 +776,7 @@ const M = {
   PendingRestart: async (): Promise<string[]> => mock.running.map(r => r.profileId).filter(id => { const p = mock.profiles.find(x => x.id === id); return p && shellMock.launched[id] !== undefined && shellMock.launched[id] !== shellMock.key(p); }),
   RestartProfile: async (id: string): Promise<any> => { await wait(1400); const p = mock.profiles.find(x => x.id === id); if (p) shellMock.launched[id] = shellMock.key(p); return mock.running.find(r => r.profileId === id); },
   StartProfileAt: async (id: string, url: string): Promise<any> => { await wait(700); if (!/^https?:\/\//i.test(url)) throw '网址无效：只支持 http/https'; let r = mock.running.find(x => x.profileId === id); if (!r) { r = { profileId: id, pid: 1234, debugPort: 9222, wsUrl: '', startedAt: Date.now() / 1000 }; mock.running.push(r); const p = mock.profiles.find(x => x.id === id); if (p) shellMock.launched[id] = shellMock.key(p); } return r; },
-  AppVersion: async (): Promise<string> => '0.8.6',
+  AppVersion: async (): Promise<string> => '0.8.7',
   // ---- proxy subscriptions ---- (#subbad = preview fails)
   ListSubscriptions: async (): Promise<Subscription[]> => subMock.subs.map(x => ({ ...x })),
   PreviewSubscription: async (url: string, _ua: string): Promise<SubPreview> => {
@@ -1251,7 +1261,7 @@ const recFinalize = (steps: any[], o: any) => {
 const shellMock: any = {
   key: (p: any) => JSON.stringify([p.proxyId, p.kernel || '', p.fingerprint?.timezone, p.fingerprint?.languages, p.fingerprint?.userAgent, p.fingerprint?.screenWidth]),
   launched: {} as Record<string, string>,
-  info: { current: '0.8.5', latest: '0.8.6', available: true, source: 'server', checkedAt: Date.now() / 1000 - 420, error: '',
+  info: { current: '0.8.6', latest: '0.8.7', available: true, source: 'server', checkedAt: Date.now() / 1000 - 420, error: '',
     notes: '## 新功能\n- **托盘常驻**：关闭窗口后环境和代理继续运行，可从托盘恢复\n- **待重启提示**：运行中修改代理或指纹后一键重启生效\n- 网站快捷入口与公告中心\n\n## 修复\n1. 修复云同步在弱网下偶尔重复上传的问题\n2. 修复部分 4K 屏幕下窗口排列错位\n\n详情见 [更新日志](https://example.com/changelog)' },
   prog: { phase: 'idle', got: 0, total: 0, pct: 0 },
   install() {

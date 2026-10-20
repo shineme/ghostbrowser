@@ -2474,3 +2474,12 @@ tr.grp-row:hover td { background: rgba(255,255,255,.03); }
 .assign-row .px-pick-proto { margin-left: 4px; }
 td.nowrap, .nowrap { white-space: nowrap; }
 .core-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0 14px; }
+
+/* 指纹检测页 (FpCheck.tsx) */
+.fpc-opts { margin: -4px 0 6px; padding-left: 2px; }
+.fpc-opts .seg.compact, .fpc-grid .seg.compact { margin-bottom: 0; }
+.fpc-grid { margin-top: 2px; }
+.fpc-grid .field { margin-bottom: 8px; }
+.fpc-reset { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px dashed var(--hair); border-radius: 10px; margin-top: 4px; }
+.fpc-note { margin: 6px 0 18px; }
+.fpc-note, #fpcheck-card > .sub, .fpc-reset .sub { color: var(--txt-3); font-size: 12px; line-height: 1.55; }

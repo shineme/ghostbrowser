@@ -239,6 +239,7 @@ func (s *Store) launchFirefox(p *Profile, st Settings) (*RunState, error) {
 		return nil, err
 	}
 	fp = normalizeFirefoxFP(fp)
+	s.noteFpExpect(p, fp, "firefox")
 
 	var relay *undetectable.Relay
 	cfg, needsRelay := firefoxProxyFor(px)
@@ -342,10 +343,17 @@ func (s *Store) launchFirefox(p *Profile, st Settings) (*RunState, error) {
 		}
 	}
 	// Start pages (prefs open them on a normal start; BiDi also covers a restored session).
-	if urls := cleanStartURLs(p.StartURLs); len(urls) > 0 {
+	urls := cleanStartURLs(p.StartURLs)
+	check := fpCheckTakeFirefox(p.ID)
+	blank := len(urls) == 0 || (len(urls) == 1 && urls[0] == "about:blank")
+	if len(urls) > 0 && !(blank && check != "") {
 		if ctx, err := c.firstContext(); err == nil {
 			go func() { _ = c.Navigate(ctx, urls[0]) }()
 		}
+	}
+	// 指纹检测页: an extra, focused tab after the start pages (the blank first tab when there are none).
+	if check != "" {
+		go firefoxOpenCheck(c, check, blank)
 	}
 	go run.keepSnapshot(device)
 	return rs, nil

@@ -111,6 +111,7 @@ func (s *Store) launchChromium(p *Profile, st Settings) (*RunState, error) {
 		return nil, err
 	}
 	alignUAMajor(&fp, majorOf(kernelVersion(kernel)))
+	s.noteFpExpect(p, fp, "chromium")
 
 	userDir := s.ProfileDir(p.ID)
 	_ = os.MkdirAll(userDir, 0o755)

@@ -1113,6 +1113,24 @@ export namespace main {
 	        this.downloadUrl = source["downloadUrl"];
 	    }
 	}
+	export class FpCheckSite {
+	    key: string;
+	    name: string;
+	    url: string;
+	    note: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FpCheckSite(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.name = source["name"];
+	        this.url = source["url"];
+	        this.note = source["note"];
+	    }
+	}
 	
 	export class GroupInfo {
 	    name: string;
@@ -1517,6 +1535,11 @@ export namespace main {
 	    sharedFrom?: string;
 	    shareMode?: string;
 	    shareExpires?: number;
+	    fpCheck?: string;
+	    fpCheckSite?: string;
+	    fpCheckUrl?: string;
+	    fpCheckFreq?: string;
+	    fpCheckAt?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Profile(source);
@@ -1552,6 +1575,11 @@ export namespace main {
 	        this.sharedFrom = source["sharedFrom"];
 	        this.shareMode = source["shareMode"];
 	        this.shareExpires = source["shareExpires"];
+	        this.fpCheck = source["fpCheck"];
+	        this.fpCheckSite = source["fpCheckSite"];
+	        this.fpCheckUrl = source["fpCheckUrl"];
+	        this.fpCheckFreq = source["fpCheckFreq"];
+	        this.fpCheckAt = source["fpCheckAt"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -2241,6 +2269,10 @@ export namespace main {
 	    updateGithub?: string;
 	    catalogUrl?: string;
 	    defaultProfileId?: string;
+	    fpCheckOn?: boolean;
+	    fpCheckSite?: string;
+	    fpCheckUrl?: string;
+	    fpCheckOnce?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -2283,6 +2315,10 @@ export namespace main {
 	        this.updateGithub = source["updateGithub"];
 	        this.catalogUrl = source["catalogUrl"];
 	        this.defaultProfileId = source["defaultProfileId"];
+	        this.fpCheckOn = source["fpCheckOn"];
+	        this.fpCheckSite = source["fpCheckSite"];
+	        this.fpCheckUrl = source["fpCheckUrl"];
+	        this.fpCheckOnce = source["fpCheckOnce"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -2968,6 +3004,11 @@ export namespace main {
 	    sharedFrom?: string;
 	    shareMode?: string;
 	    shareExpires?: number;
+	    fpCheck?: string;
+	    fpCheckSite?: string;
+	    fpCheckUrl?: string;
+	    fpCheckFreq?: string;
+	    fpCheckAt?: number;
 	    size: number;
 	    expiresAt: number;
 	    hasData: boolean;
@@ -3008,6 +3049,11 @@ export namespace main {
 	        this.sharedFrom = source["sharedFrom"];
 	        this.shareMode = source["shareMode"];
 	        this.shareExpires = source["shareExpires"];
+	        this.fpCheck = source["fpCheck"];
+	        this.fpCheckSite = source["fpCheckSite"];
+	        this.fpCheckUrl = source["fpCheckUrl"];
+	        this.fpCheckFreq = source["fpCheckFreq"];
+	        this.fpCheckAt = source["fpCheckAt"];
 	        this.size = source["size"];
 	        this.expiresAt = source["expiresAt"];
 	        this.hasData = source["hasData"];

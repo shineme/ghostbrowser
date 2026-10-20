@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func defaultKernelPath(st Settings) string {
@@ -49,8 +50,13 @@ func resolveFP(fp Fingerprint, px *Proxy) Fingerprint {
 	return fp
 }
 
-// Launch starts the browser kernel for a profile and returns the run state.
-func (s *Store) Launch(id string) (*RunState, error) {
+// Launch starts the browser kernel for a profile (automation callers: local
+// API, MCP, default browser) and returns the run state.
+func (s *Store) Launch(id string) (*RunState, error) { return s.LaunchWith(id, LaunchOpts{}) }
+
+// LaunchWith starts a profile with per-launch flags (LaunchOpts.UI: the
+// fingerprint check page may open as an extra tab).
+func (s *Store) LaunchWith(id string, o LaunchOpts) (*RunState, error) {
 	s.launchMu.Lock()
 	defer s.launchMu.Unlock()
 	if rs, ok := runReg.get(id); ok {
@@ -65,6 +71,20 @@ func (s *Store) Launch(id string) (*RunState, error) {
 	if site != "" { // 网站快捷入口: open this site instead of the start pages (this launch only)
 		p.StartURLs = []string{site}
 	}
+	check := resolveFpCheck(s.GetSettings(), *p, o)
+	checkURL := check.URL
+	if check.Builtin {
+		if u, e := fpCheckBuiltinURL(p.ID); e == nil {
+			checkURL = u
+		}
+	}
+	if checkURL != "" { // 指纹检测页: one extra tab after the start pages (this launch only)
+		if p.useFirefox() {
+			fpCheckSetFirefox(p.ID, checkURL)
+		} else {
+			p.StartURLs = withCheckURL(p.StartURLs, checkURL)
+		}
+	}
 	var rs *RunState
 	var err error
 	if p.useFirefox() {
@@ -74,9 +94,13 @@ func (s *Store) Launch(id string) (*RunState, error) {
 	} else {
 		rs, err = s.launchUndetectable(p, s.GetSettings())
 	}
-	if site != "" { // the launchers save the profile (LastRun); keep its own start pages
+	fpCheckSetFirefox(id, "")
+	if site != "" || checkURL != "" { // the launchers save the profile (LastRun); keep its own start pages
 		if cur, ok := s.GetProfile(id); ok {
 			cur.StartURLs = orig
+			if err == nil && checkURL != "" && check.Once {
+				cur.FpCheckAt = time.Now().Unix()
+			}
 			s.PutProfile(*cur)
 		}
 	}

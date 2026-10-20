@@ -302,6 +302,10 @@ export function ForgetCloudDevice(arg1) {
   return window['go']['main']['App']['ForgetCloudDevice'](arg1);
 }
 
+export function FpCheckSites() {
+  return window['go']['main']['App']['FpCheckSites']();
+}
+
 export function GPUOptions(arg1) {
   return window['go']['main']['App']['GPUOptions'](arg1);
 }

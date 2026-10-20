@@ -152,6 +152,8 @@ export function FocusProfile(arg1:string):Promise<void>;
 
 export function ForgetCloudDevice(arg1:string):Promise<void>;
 
+export function FpCheckSites():Promise<Array<main.FpCheckSite>>;
+
 export function GPUOptions(arg1:string):Promise<Array<Record<string, string>>>;
 
 export function GetCatalog():Promise<main.CatalogState>;
