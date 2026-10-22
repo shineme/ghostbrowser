@@ -172,6 +172,9 @@ go test -run TestEnsureAgainstRealShop -v .
 - 全局数据同步：设置、代理列表（含凭据、标签、换 IP 链接）、自定义指纹库
 - **历史版本**：「云同步 → 历史版本」可以恢复服务器保留的任意版本，恢复后会作为最新版本上传，其他电脑也会同步到这个版本
 - **同步日志**：最近 300 次同步的时间、流量、耗时和错误，失败的可以一键重试
+- **修复云端（v0.8.8）**：拉取时提示「云端缺少该环境的部分数据分块」说明服务器上丢了这个环境引用的数据块（v0.8.7 及更早的 `ghostsync.php` 存在数据块被误清理的问题，见下文）。在**上传它的那台设备**上点 环境列表 更多 → 修复云端（强制重新上传），或「云同步 → 全部环境」每行的 ⋯ → 修复云端：客户端重新向服务器确认缺少哪些块、全部补传，并提交一个新版本（即使本机没有改动），其他设备再拉取即可。同一菜单的「检查云端完整性」会下载并解密清单逐块核对（旧服务端也可用）。「重新上传全局数据」用于强制重传设置 / 代理 / 指纹库这条全局记录
+- 普通上传也更稳：提交时服务器发现有数据块不在（409 `chunk_missing`），客户端会补传缺的块并自动重试一次提交
+- 错误提示：服务器返回网页而不是 JSON 时（nginx / CDN 的错误页），错误里会带上请求的方法和接口（如 `POST /api/chunks/get`），并提示「服务器前端（nginx/CDN）替换了错误页，真实错误被隐藏」；宝塔请在网站配置里把 `fastcgi_intercept_errors` 改为 `off`，或删掉 `error_page 404 ...` 这类行后重载 nginx
 - **删除环境可选「只删本地」或「同时删云端」**（单个和批量删除共用一个确认框，记住上次的选择；未配置同步时不显示选项）：
   - 只删本地：删除本机的环境和数据目录，云端副本保留且**不会再被自动下载回来**；「云同步 → 仅云端」列出这些环境（标记「仅云端（已在本机删除）」，其他设备上传了新版本时显示「云端有更新」），可「恢复到本机」或「删除云端」
   - 同时删云端：服务器删除该环境的数据、全部历史版本和增量块引用，只留一条不含数据的删除记录（墓碑，名称 / 时间 / 设备，默认保留 90 天）。其他设备在启动对比、立即同步、启动该环境前会看到墓碑并自动删除本机副本（提示「环境 X 已在 某设备 删除，已同步删除本机副本」）；正在运行的会在浏览器关闭后再删除；旧设备的上传会被服务器拒绝（HTTP 410），不会把环境“复活”
@@ -232,6 +235,7 @@ curl -H "X-API-Key: gb_xxx" "http://127.0.0.1:25325/profile/start?profile=<环�
 - 多用户：在 `GHOST_USERS` 里加 `'令牌' => '名字'`，每个用户的数据目录相互独立
 - 防暴力破解：同一个 IP 15 分钟内输错令牌 10 次，封禁 15 分钟（`GHOST_MAX_FAILS`）
 - 版本保留：默认 3 个（`GHOST_KEEP_VERSIONS`，最多 50）；不再被引用的数据块 2 天后自动清理
+- **v0.8.8 必须更新 `ghostsync.php`**：v0.8.7 及更早的服务端在上传清单时把刚收到的数据块列表（refs）删掉了，服务器因此认为这些块“没人引用”，超过 2 天的块会在下一次清理（每 6 小时随提交触发，或删除环境时立即触发）被删除，表现为拉取时 `chunks/get` 404。新版：保留块列表；`chunks/missing` 报告“已存在”的块会刷新时间；清理时把正在上传中的块列表也算作引用；任何保留版本没有块列表（旧服务端上传的）时暂停清理，直到这些环境重新上传；提交前逐个确认块都在，否则拒绝提交（409 `chunk_missing`），云端不会再出现指向缺失数据的版本；缺块返回 409 JSON（不再是会被 nginx `error_page` 换成网页的 404）；新增 `GET /api/profiles/{id}/check`，管理页「云端数据」列标出缺块的环境
 - 每次请求最大约 12 MB，PHP 默认的 `post_max_size = 8M` 也能用（客户端会自动按服务器上限缩小批次）
 - 上传/拉取有实时进度：右下角传输面板显示阶段（扫描、上传、提交、下载、还原）、已传/总量、实时速度与速度曲线、预计剩余时间，以及增量同步省下的流量；环境列表和云同步列表的状态列也会变成进度条（事件 `sync:progress`，绑定 `Transfers()`）
 - 前面有 nginx / CDN 时，它们的上传上限 PHP 看不到：收到 HTTP 413 后客户端会自动对半拆包重试，并记住更小的批次。单个分块约 4 MB，所以 nginx 至少要设 `client_max_body_size 8m;`，建议 `64m`（nginx 默认只有 1m）
@@ -247,9 +251,14 @@ curl -H "X-API-Key: gb_xxx" "http://127.0.0.1:25325/profile/start?profile=<环�
     GET  /api/profiles/{id}/blob[?version=N]
     GET  /api/profiles/{id}/history
     POST /api/profiles/{id}/delete          {"force": false} -> {ok, state: deleted|already|absent, version}; 423 if another device holds the lease
-    POST /api/chunks/missing                {"ids": [...]} -> {"missing": [...]}
+    GET  /api/profiles/{id}/check           {refs, chunks, missing, sample}: chunk health of the current version (feature "chunkcheck")
+    POST /api/chunks/missing                {"ids": [...]} -> {"missing": [...]}; refreshes the mtime of every chunk reported present
     PUT  /api/chunks                        framed: (64-hex id, uint32 BE length, GBC1 data)*
-    POST /api/chunks/get                    {"ids": [...]} -> framed, same layout
+    POST /api/chunks/get                    {"ids": [...]} -> framed, same layout; 409 {error, code:"chunk_missing", missing:[...], count} if any is gone
+Commit refuses (409 code "chunk_missing", same body) when a chunk named in the pending refs is not stored, so a committed manifest never
+points at absent chunks; the client then re-checks, uploads what is missing and commits once more. PUT blob keeps the pending refs.
+Chunk GC (every 6 h on commit, forced on delete) treats tmp/*.refs as live and skips chunks younger than 48 h; it does nothing while
+any kept version lacks refs/<sha>.txt (uploaded through ghostsync.php <= 0.8.7).
 All requests carry Authorization: Bearer <token> (and X-Ghost-Token for hosts that strip it).
 Upload, refs, commit and unlock also send X-Device-ID and X-Lock-Token.
 Deletion leaves a tombstone: the index entry keeps id/name, its version is bumped, data/history/refs are released (blob and chunk GC), and

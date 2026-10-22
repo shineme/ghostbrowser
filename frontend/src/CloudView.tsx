@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api, onEvent, Profile, Settings } from './api';
 import { InlineTransfer } from './Transfers';
-import { Icon, useToast, useConfirm, useExit, Avatar, ago, Segmented } from './ui';
+import { Icon, useToast, useConfirm, useExit, Avatar, ago, Segmented, MoreMenu } from './ui';
 import { DeleteModal, DelTarget } from './DeleteModal';
 import { SharingView } from './SharingView'; // share
 import { DevicesCard } from './DevicesCard';
@@ -11,7 +11,7 @@ import { RecoveryCard } from './RecoveryKeyModal';
 type CloudOnlyItem = { id: string; name: string; version: number; updatedAt: number; deviceName: string; size: number; lockedBy: string; localDeleted: boolean; deletedVersion: number; deletedAt: number; cloudNewer: boolean; pendingDelete: boolean; pendingError?: string };
 
 const size = (b?: number) => b == null || b < 0 ? '—' : b >= 1 << 30 ? `${(b / (1 << 30)).toFixed(1)} GB` : b >= 1 << 20 ? `${(b / (1 << 20)).toFixed(1)} MB` : b >= 1024 ? `${Math.round(b / 1024)} KB` : `${b} B`;
-const ACTION: Record<string, string> = { push: '上传', pull: '拉取', restore: '恢复版本', 'push-global': '上传全局数据', 'pull-global': '拉取全局数据' };
+const ACTION: Record<string, string> = { push: '上传', pull: '拉取', restore: '恢复版本', 'push-global': '上传全局数据', 'pull-global': '拉取全局数据', repair: '修复云端' };
 
 type Info = { features: string[]; keepVersions: number; maxBody: number; usedBytes: number; freeBytes: number; user: string; protocol: number };
 type LogRow = { time: number; id: string; name: string; action: string; ok: boolean; error: string; bytes: number; ms: number; version: number };
@@ -60,6 +60,22 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
   const run = async (p: Profile, f: () => Promise<any>, ok: string) => { mark(p.id, true); try { await f(); toast(ok); reload(); } catch (e: any) { toast(String(e?.message || e), 'bad'); } finally { mark(p.id, false); loadLog(); } };
   const [syncing, setSyncing] = useState(false);
   const syncAll = async () => { setSyncing(true); try { const r: any = await api.SyncNow(); toast(r.error ? `同步失败：${r.error}` : (r.message || '同步完成'), r.error || r.failed ? 'bad' : undefined); reload(); } catch (e: any) { toast(String(e?.message || e), 'bad'); } finally { setSyncing(false); loadLog(); loadInfo(); } };
+  const ask = useConfirm();
+  const repair = async (p: Profile) => {
+    if (!await ask({ title: `修复「${p.name}」的云端数据？`, body: '用本机的这份环境数据强制重新上传：先检查服务器缺少哪些数据分块，全部补传后提交一个新的云端版本（即使本机没有改动）。请在上传它的那台设备上操作；拉取时提示「云端缺少数据分块」就用这个。', ok: '修复云端' })) return;
+    mark(p.id, true);
+    try { const r: any = await api.RepairCloud(p.id); toast(r?.message || '已修复', 'ok'); reload(); }
+    catch (e: any) { toast(String(e?.message || e), 'bad'); }
+    finally { mark(p.id, false); loadLog(); }
+  };
+  const check = async (p: Profile) => {
+    mark(p.id, true);
+    try { const r: any = await api.CheckCloud(p.id); toast(r?.message || '检查完成', r?.missing ? 'bad' : 'ok'); }
+    catch (e: any) { toast(String(e?.message || e), 'bad'); }
+    finally { mark(p.id, false); }
+  };
+  const [gBusy, setGBusy] = useState(false);
+  const repairGlobal = async () => { setGBusy(true); try { const r: any = await api.RepairGlobal(); toast(r?.message || '全局数据已重新上传', 'ok'); } catch (e: any) { toast(String(e?.message || e), 'bad'); } finally { setGBusy(false); loadLog(); } };
   const retry = async (r: LogRow) => { try { await api.RetrySync(r.id, r.action); toast('重试成功', 'ok'); reload(); } catch (e: any) { toast(String(e?.message || e), 'bad'); } finally { loadLog(); } };
 
   if (!configured) return (
@@ -98,6 +114,7 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
         <div className="sub" style={{ color: 'var(--txt-3)' }}>{cloud.length} 个云端 · {profiles.length - cloud.length} 个本地 · 自动同步{settings!.autoSyncOff ? '已关闭' : '已开启'}{' · 登录状态：'}{(settings as any).syncSessionStorage === false ? '仅 Cookie' : 'Cookie + LocalStorage + IndexedDB'}</div>
         <div style={{ flex: 1 }} />
         {tab === 'only' && only?.some(i => i.pendingDelete) && <button className="btn sm ghost" onClick={retryDeletes}><Icon.refresh s={13} /> 重试云端删除</button>}
+        {tab === 'list' && <button className="btn sm ghost" onClick={repairGlobal} disabled={gBusy} title="把本机的设置、代理和指纹库强制重新上传为新的云端版本"><Icon.upload s={13} /> {gBusy ? '上传中…' : '重新上传全局数据'}</button>}
         {tab === 'log' && log.length > 0 && <button className="btn sm ghost" onClick={async () => { await api.ClearSyncLog(); loadLog(); }}><Icon.trash s={13} /> 清空日志</button>}
         <button className="btn sm" onClick={syncAll} disabled={syncing}><Icon.refresh s={14} /> {syncing ? '同步中…' : '立即同步（服务器优先）'}</button>
       </div>
@@ -148,6 +165,10 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
                     <button className="btn sm" onClick={() => run(p, () => api.PushProfile(p.id), `已上传 ${p.name}`)}><Icon.upload s={13} /> 上传</button>
                     {p.storage === 'cloud' && <button className="btn sm" onClick={() => run(p, () => api.PullProfile(p.id), `已拉取 ${p.name}`)}><Icon.download s={13} /> 拉取</button>}
                     {p.storage === 'cloud' && has('history') && <button className="btn sm ghost" onClick={() => setHist(p)}><Icon.layers s={13} /> 历史版本</button>}
+                    {p.storage === 'cloud' && has('chunks') && <MoreMenu title="云端数据" items={[
+                      { label: '检查云端完整性', icon: <Icon.shield s={14} />, onClick: () => check(p) },
+                      { label: '修复云端（强制重新上传）', icon: <Icon.upload s={14} />, onClick: () => repair(p) },
+                    ]} />}
                   </>}
                 </div></td>
               </tr>;

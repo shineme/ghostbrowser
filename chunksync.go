@@ -416,17 +416,38 @@ func (c *syncClient) getChunks(key []byte, ids []string, fn func(id string, data
 
 // ---------------------------------------------------------------- push
 
+// chunkedUpload is what buildChunked produced: the encrypted manifest, the
+// chunk list for the server's garbage collector, and a way to send again the
+// chunks a commit reports missing.
+type chunkedUpload struct {
+	enc      []byte
+	refs     []string
+	sent     int64
+	files    []manifestFile
+	uploaded int // chunks uploaded (the server lacked them)
+	// reupload asks the server again which chunks it lacks and uploads them.
+	reupload func() (int, error)
+}
+
+// testHookAfterMissing runs between the missing check and the chunk upload
+// (tests use it to reproduce the server's garbage collector racing a push).
+var testHookAfterMissing func()
+
+// testHookCommitRetry runs when a commit answered chunk_missing and the push
+// uploads the missing chunks again.
+var testHookCommitRetry func()
+
 // buildChunked uploads the chunks the server is missing and returns the
 // encrypted manifest plus the chunk list for the server's garbage collector.
-func (s *Store) buildChunked(dir, root string, archived *Profile, password string, t *transfer) ([]byte, []string, int64, []manifestFile, error) {
+func (s *Store) buildChunked(dir, root string, archived *Profile, password string, t *transfer) (*chunkedUpload, error) {
 	key, e := profileChunkKey(archived)
 	if e != nil {
-		return nil, nil, 0, nil, e
+		return nil, e
 	}
 	cache := loadSyncCache(root, archived.ID)
 	files, locs, total, e := scanProfile(dir, key, cache)
 	if e != nil {
-		return nil, nil, 0, nil, e
+		return nil, e
 	}
 	ids := make([]string, 0, len(locs))
 	for id := range locs {
@@ -435,7 +456,10 @@ func (s *Store) buildChunked(dir, root string, archived *Profile, password strin
 	c := s.sync()
 	miss, e := c.missingChunks(ids)
 	if e != nil {
-		return nil, nil, 0, nil, e
+		return nil, e
+	}
+	if testHookAfterMissing != nil {
+		testHookAfterMissing()
 	}
 	var upPlain int64
 	for _, id := range miss {
@@ -450,7 +474,7 @@ func (s *Store) buildChunked(dir, root string, archived *Profile, password strin
 	if si, err := s.ServerInfo(false); err == nil && si.MaxBody > 0 && si.MaxBody-(1<<20) < limit {
 		limit = si.MaxBody - (1 << 20)
 		if limit < chunkSize+(256<<10) {
-			return nil, nil, 0, nil, fmt.Errorf("服务器单次上传上限只有 %d MB，至少需要 8 MB：请调大 PHP post_max_size / upload_max_filesize", si.MaxBody>>20)
+			return nil, fmt.Errorf("服务器单次上传上限只有 %d MB，至少需要 8 MB：请调大 PHP post_max_size / upload_max_filesize", si.MaxBody>>20)
 		}
 	}
 	if learned := s.bodyCap.Load(); learned > 0 && learned < limit {
@@ -500,47 +524,50 @@ func (s *Store) buildChunked(dir, root string, archived *Profile, password strin
 		t.set(donePlain)
 		return nil
 	}
-	var batch []piece
-	var batchLen int64
-	flush := func() error {
-		if len(batch) == 0 {
-			return nil
-		}
-		e := send(batch)
-		batch, batchLen = nil, 0
-		return e
-	}
-	for _, id := range miss {
-		l, ok := locs[id]
-		if !ok {
-			return nil, nil, 0, nil, fmt.Errorf("server asked for an unknown chunk")
-		}
-		data, e := readLoc(l)
-		if e != nil {
-			return nil, nil, 0, nil, e
-		}
-		if chunkID(key, data) != id {
-			return nil, nil, 0, nil, fmt.Errorf("%s changed during sync; close the browser and try again", filepath.Base(l.path))
-		}
-		blob, e := sealChunk(key, data)
-		if e != nil {
-			return nil, nil, 0, nil, e
-		}
-		if batchLen+int64(68+len(blob)) > limit {
-			if e = flush(); e != nil {
-				return nil, nil, 0, nil, e
+	upload := func(miss []string) error {
+		var batch []piece
+		var batchLen int64
+		flush := func() error {
+			if len(batch) == 0 {
+				return nil
 			}
+			e := send(batch)
+			batch, batchLen = nil, 0
+			return e
 		}
-		batch = append(batch, piece{id, blob, int64(len(data))})
-		batchLen += int64(68 + len(blob))
+		for _, id := range miss {
+			l, ok := locs[id]
+			if !ok {
+				return fmt.Errorf("server asked for an unknown chunk")
+			}
+			data, e := readLoc(l)
+			if e != nil {
+				return e
+			}
+			if chunkID(key, data) != id {
+				return fmt.Errorf("%s changed during sync; close the browser and try again", filepath.Base(l.path))
+			}
+			blob, e := sealChunk(key, data)
+			if e != nil {
+				return e
+			}
+			if batchLen+int64(68+len(blob)) > limit {
+				if e = flush(); e != nil {
+					return e
+				}
+			}
+			batch = append(batch, piece{id, blob, int64(len(data))})
+			batchLen += int64(68 + len(blob))
+		}
+		return flush()
 	}
-	if e = flush(); e != nil {
-		return nil, nil, 0, nil, e
+	if e = upload(miss); e != nil {
+		return nil, e
 	}
 	m := syncManifest{Format: "GBM1", Profile: *archived, ChunkKey: archived.ChunkKey, Files: files, Total: total}
 	raw, e := json.Marshal(m)
 	if e != nil {
-		return nil, nil, 0, nil, e
+		return nil, e
 	}
 	var z bytes.Buffer
 	zw, _ := flate.NewWriter(&z, flate.DefaultCompression)
@@ -548,9 +575,27 @@ func (s *Store) buildChunked(dir, root string, archived *Profile, password strin
 	_ = zw.Close()
 	enc, e := encrypt(append([]byte("GBMZ"), z.Bytes()...), []byte(password))
 	if e != nil {
-		return nil, nil, 0, nil, e
+		return nil, e
 	}
-	return enc, ids, sent, files, nil
+	out := &chunkedUpload{enc: enc, refs: ids, files: files, uploaded: len(miss)}
+	out.reupload = func() (int, error) {
+		miss, e := c.missingChunks(ids)
+		if e != nil {
+			return 0, e
+		}
+		if len(miss) == 0 {
+			return 0, nil
+		}
+		t.phase("upload", 0)
+		if e = upload(miss); e != nil {
+			return 0, e
+		}
+		out.uploaded += len(miss)
+		out.sent = sent
+		return len(miss), nil
+	}
+	out.sent = sent
+	return out, nil
 }
 
 // ---------------------------------------------------------------- pull

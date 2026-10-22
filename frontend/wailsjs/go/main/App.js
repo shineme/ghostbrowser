@@ -54,6 +54,10 @@ export function CheckAllProxies() {
   return window['go']['main']['App']['CheckAllProxies']();
 }
 
+export function CheckCloud(arg1) {
+  return window['go']['main']['App']['CheckCloud'](arg1);
+}
+
 export function CheckEnvironment(arg1) {
   return window['go']['main']['App']['CheckEnvironment'](arg1);
 }
@@ -610,8 +614,16 @@ export function RemoveExtension(arg1) {
   return window['go']['main']['App']['RemoveExtension'](arg1);
 }
 
+export function RepairCloud(arg1) {
+  return window['go']['main']['App']['RepairCloud'](arg1);
+}
+
 export function RepairEnvironment(arg1, arg2) {
   return window['go']['main']['App']['RepairEnvironment'](arg1, arg2);
+}
+
+export function RepairGlobal() {
+  return window['go']['main']['App']['RepairGlobal']();
 }
 
 export function RepairHistory(arg1) {

@@ -595,6 +595,20 @@ func (a *App) KernelMajor() string {
 func (a *App) TestSync() error                 { return a.store.TestSync() }
 func (a *App) PushProfile(id string) error     { return a.store.PushProfile(id) }
 func (a *App) PullProfile(id string) error     { return a.store.PullProfile(id) }
+
+// RepairCloud (修复云端) force-uploads the local copy, sending every chunk the server lacks.
+func (a *App) RepairCloud(id string) (CloudRepairResult, error) {
+	if _, ok := runReg.get(id); ok {
+		return CloudRepairResult{}, fmt.Errorf("请先关闭这个环境的浏览器")
+	}
+	return a.store.RepairCloud(id)
+}
+
+// RepairGlobal re-uploads the global record even when nothing changed.
+func (a *App) RepairGlobal() (CloudRepairResult, error) { return a.store.RepairGlobal() }
+
+// CheckCloud reports whether every chunk of the profile's cloud copy is on the server.
+func (a *App) CheckCloud(id string) (CloudCheck, error) { return a.store.CheckCloud(id) }
 func (a *App) ListCloud() ([]cloudMeta, error) { return a.store.ListCloud() }
 
 func (a *App) DataDir() string { return appDataDir() }
@@ -634,6 +648,9 @@ func (a *App) RetrySync(id, action string) error {
 		return a.store.PushGlobal()
 	case "pull-global":
 		return a.store.PullGlobal()
+	case "repair":
+		_, e := a.RepairCloud(id)
+		return e
 	}
 	return fmt.Errorf("这条记录不能重试")
 }

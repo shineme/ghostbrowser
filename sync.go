@@ -283,10 +283,16 @@ func syncStatus(resp *http.Response) error {
 	if resp.StatusCode == 410 || resp.StatusCode == 423 {
 		return cloudStatusErr(resp.StatusCode, b)
 	}
+	if e := chunkMissingErr(resp, b); e != nil { // 409 chunk_missing (or an old server's 404 on chunks/get)
+		return e
+	}
 	if e := secStatusErr(resp.StatusCode, b); e != nil { // device / key / share errors
 		return e
 	}
-	return fmt.Errorf("sync HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+	if isHTMLBody(resp, b) {
+		return frontPageErr(resp, b)
+	}
+	return fmt.Errorf("sync HTTP %d (%s): %s", resp.StatusCode, reqLabel(resp), strings.TrimSpace(string(b)))
 }
 
 func (c *syncClient) jsonRequest(method, path string, in, out any) error {
@@ -406,11 +412,19 @@ func (s *Store) pushProfile(id string) (sent int64, err error) {
 		}
 		t.finish(err)
 	}()
-	err = s.pushProfileInner(id, &sent, t)
+	err = s.pushProfileInner(id, &sent, t, nil)
 	return sent, err
 }
 
-func (s *Store) pushProfileInner(id string, sent *int64, t *transfer) error {
+// pushResult reports what a push did (used by 修复云端).
+type pushResult struct {
+	Version  int64 `json:"version"`
+	Uploaded int   `json:"uploaded"` // chunks the server lacked
+	Bytes    int64 `json:"bytes"`
+	Chunked  bool  `json:"chunked"`
+}
+
+func (s *Store) pushProfileInner(id string, sent *int64, t *transfer, res *pushResult) error {
 	s.launchMu.Lock()
 	defer s.launchMu.Unlock()
 	if _, ok := runReg.get(id); ok {
@@ -457,11 +471,13 @@ func (s *Store) pushProfileInner(id string, sent *int64, t *transfer) error {
 	var enc []byte
 	var refs []string
 	var files []manifestFile
+	var cu *chunkedUpload
 	if si, err := s.ServerInfo(false); err == nil && si.has("chunks") {
-		enc, refs, *sent, files, e = s.buildChunked(dir, root, &archived, string(secret), t)
+		cu, e = s.buildChunked(dir, root, &archived, string(secret), t)
 		if e != nil {
 			return e
 		}
+		enc, refs, *sent, files = cu.enc, cu.refs, cu.sent, cu.files
 		if refs == nil {
 			refs = []string{}
 		}
@@ -539,7 +555,22 @@ func (s *Store) pushProfileInner(id string, sent *int64, t *transfer) error {
 		Version int64 `json:"version"`
 	}
 	t.phase("commit", 0)
-	if e = c.jsonRequest("POST", path+"/commit", cm, &result); e != nil {
+	e = c.jsonRequest("POST", path+"/commit", cm, &result)
+	if isChunkMissing(e) && cu != nil {
+		// Chunks vanished between the missing check and the commit (the
+		// server's collector, or a server that lost data): the server keeps
+		// the pending upload, so send what it lacks and commit once more.
+		if testHookCommitRetry != nil {
+			testHookCommitRetry()
+		}
+		if _, e2 := cu.reupload(); e2 != nil {
+			return fmt.Errorf("commit: %w (补传缺失分块失败：%v)", e, e2)
+		}
+		*sent = cu.sent
+		t.phase("commit", 0)
+		e = c.jsonRequest("POST", path+"/commit", cm, &result)
+	}
+	if e != nil {
 		return fmt.Errorf("commit: %w", e)
 	}
 	if !result.OK || result.Version != cm.Version {
@@ -556,6 +587,12 @@ func (s *Store) pushProfileInner(id string, sent *int64, t *transfer) error {
 	p.CloudVer = cm.Version
 	p.SyncedAt = syncStamp(p.LastRun)
 	s.PutProfile(*p)
+	if res != nil {
+		res.Version, res.Bytes, res.Chunked = cm.Version, *sent, cu != nil
+		if cu != nil {
+			res.Uploaded = cu.uploaded
+		}
+	}
 	return nil
 }
 

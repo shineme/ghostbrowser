@@ -64,11 +64,12 @@ func TestChunkUploadSplitsOn413(t *testing.T) {
 	var evs []TransferEvent
 	s.onTransfer = func(e TransferEvent) { evs = append(evs, e) }
 	tr := s.newTransfer(p.ID, "up")
-	_, ids, _, _, e := s.buildChunked(dir, s.Settings.ProfilesDir, &cp, "pw", tr)
+	cu, e := s.buildChunked(dir, s.Settings.ProfilesDir, &cp, "pw", tr)
 	tr.finish(e)
 	if e != nil {
 		t.Fatal(e)
 	}
+	ids := cu.refs
 	for _, id := range ids {
 		if !got[id] {
 			t.Fatalf("chunk %s never uploaded", id)

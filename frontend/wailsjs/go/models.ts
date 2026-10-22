@@ -403,6 +403,26 @@ export namespace main {
 	        this.detail = source["detail"];
 	    }
 	}
+	export class CloudCheck {
+	    version: number;
+	    chunked: boolean;
+	    chunks: number;
+	    missing: number;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CloudCheck(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.chunked = source["chunked"];
+	        this.chunks = source["chunks"];
+	        this.missing = source["missing"];
+	        this.message = source["message"];
+	    }
+	}
 	export class CloudDevice {
 	    id: string;
 	    name: string;
@@ -498,6 +518,24 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class CloudRepairResult {
+	    version: number;
+	    uploaded: number;
+	    bytes: number;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CloudRepairResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.uploaded = source["uploaded"];
+	        this.bytes = source["bytes"];
+	        this.message = source["message"];
+	    }
 	}
 	export class CloudVersion {
 	    version: number;

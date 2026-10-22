@@ -241,6 +241,14 @@ const ProfilesView: React.FC<{
   };
   const stop = async (p: Profile) => { setBusyFor(p.id, true); await api.StopProfile(p.id); setRunning(s => { const n = new Set(s); n.delete(p.id); return n; }); setBusyFor(p.id, false); };
   const clone = async (p: Profile) => { await api.CloneProfile(p.id); toast('已复制环境'); reload(); };
+  // 修复云端: force re-upload from this device (pull elsewhere reported missing chunks)
+  const repairCloud = async (p: Profile) => {
+    if (!await ask({ title: `修复「${p.name}」的云端数据？`, body: '用本机的这份环境数据强制重新上传：补传服务器缺少的全部数据分块，并提交一个新的云端版本。请在上传它的那台设备上操作。', ok: '修复云端' })) return;
+    setSyncBusy(s => new Set(s).add(p.id));
+    try { const r: any = await api.RepairCloud(p.id); toast(r?.message || '已修复', 'ok'); reload(); }
+    catch (e: any) { toast(String(e?.message || e), 'bad'); }
+    finally { setSyncBusy(s => { const n = new Set(s); n.delete(p.id); return n; }); }
+  };
   const [delT, setDelT] = useState<DelTarget[] | null>(null);
   const [trashOpen, setTrashOpen] = useState(false); // 最近删除
   const [trashN, refreshTrash] = useTrashCount(profiles.length);
@@ -356,6 +364,7 @@ const ProfilesView: React.FC<{
                         !(p as any).shareId && { label: '环境检测 / 一键修复', icon: <Icon.shield s={14} />, onClick: () => setEnvChk(p) },
                         !(p as any).shareId && { label: '分享给其他用户', icon: <ShIc.share s={14} />, onClick: () => setShareP(p) },
                         !(p as any).shareId && { label: '复制环境', icon: <Icon.copy s={14} />, onClick: () => clone(p) },
+                        !(p as any).shareId && p.storage === 'cloud' && { label: '修复云端（强制重新上传）', icon: <Icon.upload s={14} />, onClick: () => repairCloud(p) },
                         !(p as any).shareId && 'sep',
                         { label: '删除', icon: <Icon.trash s={14} />, danger: true, onClick: () => del([p.id]) },
                       ]} />

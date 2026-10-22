@@ -393,13 +393,17 @@ const M = {
   Transfers: async (): Promise<any[]> => [],
   PushProfile: async (id: string) => { const q = mock.profiles.find(x => x.id === id); await simTransfer(id, q?.name || id, 'up', 38 << 20, 212 << 20, 6000); const p = mock.profiles.find(x => x.id === id); p.storage = 'cloud'; p.cloudVersion++; p.syncedAt = Date.now() / 1000; },
   PullProfile: async (id: string) => { const q = mock.profiles.find(x => x.id === id); await simTransfer(id, q?.name || id, 'down', 64 << 20, 96 << 20, 7000); },
+  // 修复云端: force re-upload of every chunk the server lacks, then a new version
+  RepairCloud: async (id: string): Promise<{ version: number; uploaded: number; bytes: number; message: string }> => { const q = mock.profiles.find(x => x.id === id); await simTransfer(id, q?.name || id, 'up', 12 << 20, 212 << 20, 4000); q.storage = 'cloud'; q.cloudVersion++; q.syncedAt = Date.now() / 1000; return { version: q.cloudVersion, uploaded: 3, bytes: 12 << 20, message: `已修复：补传 3 个缺失的数据分块，云端版本 v${q.cloudVersion}` }; },
+  RepairGlobal: async (): Promise<{ version: number; uploaded: number; bytes: number; message: string }> => { await wait(800); return { version: 7, uploaded: 0, bytes: 0, message: '全局数据已重新上传，云端版本 v7' }; },
+  CheckCloud: async (id: string): Promise<{ version: number; chunked: boolean; chunks: number; missing: number; message: string }> => { await wait(900); const q = mock.profiles.find(x => x.id === id); const miss = location.hash.includes('chunkmiss') ? 3 : 0; return { version: q?.cloudVersion || 1, chunked: true, chunks: 54, missing: miss, message: miss ? `云端 v${q?.cloudVersion || 1} 缺少 ${miss} / 54 个分块：请在上传它的设备上点「修复云端」` : `云端 v${q?.cloudVersion || 1} 完整（54 个分块都在）` }; },
   ListCloud: async () => mock.profiles.filter(p => p.storage === 'cloud').map(p => ({ id: p.id, name: p.name, version: p.cloudVersion, sha256: 'e3b0c442…', meta: null, lockedBy: '' })),
   DataDir: async () => 'C:\\Users\\me\\AppData\\Roaming\\GhostBrowser',
   EnvStatus: async (): Promise<any> => ({ ready: true, kitDir: 'undetectable-kit', chromeExe: 'undetectable-kit\\runtime\\chrome\\chrome.exe', phase: 'ready', pct: 100, done: 0, total: 0, speedBps: 0, message: '环境就绪', updatedAt: Math.floor(Date.now() / 1000), manifestFromServer: false }),
   EnvRecheck: async (_force: boolean): Promise<any> => ({ ready: true, kitDir: 'undetectable-kit', chromeExe: 'undetectable-kit\\runtime\\chrome\\chrome.exe', phase: 'ready', pct: 100, done: 0, total: 0, speedBps: 0, message: '环境就绪', updatedAt: Math.floor(Date.now() / 1000), manifestFromServer: false }),
   EnvCancel: async () => {},
   ResetAPIKey: async () => (mock.settings = { ...mock.settings, apiKey: 'gb_' + rid() + rid() }),
-  SyncServerInfo: async (): Promise<any> => ({ features: ['chunks', 'history', 'multiuser'], keepVersions: 3, maxBody: 8388608, usedBytes: 734003200, freeBytes: 21474836480, user: 'owner', protocol: 2 }),
+  SyncServerInfo: async (): Promise<any> => ({ features: ['chunks', 'history', 'multiuser', 'chunkcheck'], keepVersions: 3, maxBody: 8388608, usedBytes: 734003200, freeBytes: 21474836480, user: 'owner', protocol: 2 }),
   CloudHistory: async (_id: string): Promise<any[]> => [{ version: 3, size: 18000, updatedAt: Date.now() / 1000 - 600, deviceName: 'Office-PC', current: true }, { version: 2, size: 17000, updatedAt: Date.now() / 1000 - 86400, deviceName: 'Laptop', current: false }],
   RestoreVersion: async (_id: string, _v: number) => { await wait(900); },
   SyncLog: async (): Promise<any[]> => [{ time: Date.now() / 1000 - 120, id: 'x', name: 'Shop US 01', action: 'push', ok: true, error: '', bytes: 2400000, ms: 3200, version: 4 }, { time: Date.now() / 1000 - 3600, id: 'y', name: 'Ads 02', action: 'pull', ok: false, error: 'sync HTTP 413: Request Entity Too Large', bytes: 0, ms: 900, version: 2 }],
@@ -776,7 +780,7 @@ const M = {
   PendingRestart: async (): Promise<string[]> => mock.running.map(r => r.profileId).filter(id => { const p = mock.profiles.find(x => x.id === id); return p && shellMock.launched[id] !== undefined && shellMock.launched[id] !== shellMock.key(p); }),
   RestartProfile: async (id: string): Promise<any> => { await wait(1400); const p = mock.profiles.find(x => x.id === id); if (p) shellMock.launched[id] = shellMock.key(p); return mock.running.find(r => r.profileId === id); },
   StartProfileAt: async (id: string, url: string): Promise<any> => { await wait(700); if (!/^https?:\/\//i.test(url)) throw '网址无效：只支持 http/https'; let r = mock.running.find(x => x.profileId === id); if (!r) { r = { profileId: id, pid: 1234, debugPort: 9222, wsUrl: '', startedAt: Date.now() / 1000 }; mock.running.push(r); const p = mock.profiles.find(x => x.id === id); if (p) shellMock.launched[id] = shellMock.key(p); } return r; },
-  AppVersion: async (): Promise<string> => '0.8.7',
+  AppVersion: async (): Promise<string> => '0.8.8',
   // ---- proxy subscriptions ---- (#subbad = preview fails)
   ListSubscriptions: async (): Promise<Subscription[]> => subMock.subs.map(x => ({ ...x })),
   PreviewSubscription: async (url: string, _ua: string): Promise<SubPreview> => {
@@ -1261,7 +1265,7 @@ const recFinalize = (steps: any[], o: any) => {
 const shellMock: any = {
   key: (p: any) => JSON.stringify([p.proxyId, p.kernel || '', p.fingerprint?.timezone, p.fingerprint?.languages, p.fingerprint?.userAgent, p.fingerprint?.screenWidth]),
   launched: {} as Record<string, string>,
-  info: { current: '0.8.6', latest: '0.8.7', available: true, source: 'server', checkedAt: Date.now() / 1000 - 420, error: '',
+  info: { current: '0.8.7', latest: '0.8.8', available: true, source: 'server', checkedAt: Date.now() / 1000 - 420, error: '',
     notes: '## 新功能\n- **托盘常驻**：关闭窗口后环境和代理继续运行，可从托盘恢复\n- **待重启提示**：运行中修改代理或指纹后一键重启生效\n- 网站快捷入口与公告中心\n\n## 修复\n1. 修复云同步在弱网下偶尔重复上传的问题\n2. 修复部分 4K 屏幕下窗口排列错位\n\n详情见 [更新日志](https://example.com/changelog)' },
   prog: { phase: 'idle', got: 0, total: 0, pct: 0 },
   install() {

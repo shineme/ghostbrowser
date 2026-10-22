@@ -28,6 +28,8 @@ export function ChangeSyncPassword(arg1:string,arg2:string):Promise<void>;
 
 export function CheckAllProxies():Promise<Array<main.Proxy>>;
 
+export function CheckCloud(arg1:string):Promise<main.CloudCheck>;
+
 export function CheckEnvironment(arg1:string):Promise<main.EnvReport>;
 
 export function CheckProxies(arg1:Array<string>):Promise<Array<main.Proxy>>;
@@ -306,7 +308,11 @@ export function RegisterDefaultBrowser():Promise<main.DefaultBrowserStatus>;
 
 export function RemoveExtension(arg1:string):Promise<void>;
 
+export function RepairCloud(arg1:string):Promise<main.CloudRepairResult>;
+
 export function RepairEnvironment(arg1:string,arg2:Array<string>):Promise<main.RepairResult>;
+
+export function RepairGlobal():Promise<main.CloudRepairResult>;
 
 export function RepairHistory(arg1:string):Promise<Array<main.RepairEntry>>;
 

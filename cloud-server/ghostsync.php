@@ -22,10 +22,13 @@
  *   GET  /api/profiles/{id}/blob[?version=N]   (N = current or a kept older version)
  *   GET  /api/profiles/{id}/history
  *   PUT  /api/profiles/{id}/refs      (under lease: newline-separated chunk IDs of this upload)
+ *   GET  /api/profiles/{id}/check     -> {refs, chunks, missing, sample} chunk health of the current version
  *   POST /api/profiles/{id}/delete    {"force": false} -> leaves a tombstone so other devices delete their copy
  *   POST /api/chunks/missing          {"ids": [...]}  -> {"missing": [...]}
  *   PUT  /api/chunks                  framed: (64-hex id, uint32 BE length, GBC1 data)*
  *   POST /api/chunks/get              {"ids": [...]}  -> framed, same layout
+ *                                     (409 {code:"chunk_missing", missing:[...]} when a chunk is gone; commit
+ *                                      refuses the same way, so a manifest never points at absent chunks)
  *
  * Accounts & security (feature "devices", "keys", "directory", "shares"; see the block near the end):
  *   GET  /api/devices | /api/devices/self ; POST /api/devices/{id}/approve|revoke|forget ; POST /api/devices/settings
@@ -54,6 +57,8 @@ const GHOST_REQUIRE_APPROVAL = false;   // default for "new devices need approva
 const GHOST_SHARE_MAX_MB = 256;         // largest shared-profile upload
 // ----------------------------------------------------------------------
 
+const GS_SERVER_VERSION = '0.8.8';     // ghostsync.php release (reported by /api/ping)
+
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
 @set_time_limit(0);
@@ -61,7 +66,9 @@ ini_set('display_errors', '0');
 final class GsFail extends Exception
 {
     public $status;
-    public function __construct(int $status, string $message) { parent::__construct($message); $this->status = $status; }
+    /** Extra JSON fields for the error reply (e.g. code, missing). */
+    public $extra;
+    public function __construct(int $status, string $message, array $extra = []) { parent::__construct($message); $this->status = $status; $this->extra = $extra; }
 }
 
 function gs_reply(int $status, $value): void
@@ -324,17 +331,80 @@ function gs_chunk_gc(array $c, bool $force = false): void
     $stamp = $c['dir'] . '/chunks/.gc';
     if (!$force && is_file($stamp) && filemtime($stamp) > time() - 21600) return;
     @touch($stamp);
-    $live = [];
-    foreach (glob($c['dir'] . '/refs/*.txt') ?: [] as $f) {
-        $h = fopen($f, 'rb');
-        if (!$h) return; // never delete on a partial view
-        while (($line = fgets($h)) !== false) { $line = trim($line); if ($line !== '') $live[$line] = true; }
-        fclose($h);
+    // Versions committed by ghostsync.php <= 0.8.7 have no chunk list (its blob
+    // upload dropped the list sent just before). Their chunks cannot be told
+    // apart from garbage, so collect nothing until they are re-uploaded
+    // (修复云端) or leave the kept history.
+    $idx = json_decode((string)@file_get_contents($c['dir'] . '/index.json'), true);
+    if (!is_array($idx)) return;
+    foreach ($idx['profiles'] ?? [] as $pid => $r) {
+        if ((string)$pid === '_global' || !empty($r['deleted'])) continue;
+        $shas = [(string)($r['sha256'] ?? '')];
+        foreach ($r['history'] ?? [] as $hh) $shas[] = (string)gs_hist_entry($hh)['sha256'];
+        foreach ($shas as $sha) if ($sha !== '' && !is_file($c['dir'] . '/refs/' . $sha . '.txt')) return;
     }
-    $old = time() - 172800; // chunks of an upload still in progress are young
-    foreach (glob($c['dir'] . '/chunks/??/*') ?: [] as $f) {
-        if (!isset($live[basename($f)]) && filemtime($f) < $old) @unlink($f);
+    $gl = @fopen($c['dir'] . '/chunks/.gc.lock', 'c');
+    if (!$gl || !flock($gl, LOCK_EX | LOCK_NB)) { if ($gl) fclose($gl); return; } // another request is collecting
+    try {
+        $live = [];
+        // Pending chunk lists (an upload between PUT refs and commit) count as
+        // live. They are read before refs/: a list that a commit renames into
+        // refs/ meanwhile fails to open here and is read in the refs/ pass.
+        foreach (glob($c['dir'] . '/tmp/*.refs') ?: [] as $f) {
+            $h = @fopen($f, 'rb');
+            if (!$h) continue;
+            while (($line = fgets($h)) !== false) { $line = trim($line); if ($line !== '') $live[$line] = true; }
+            fclose($h);
+        }
+        foreach (glob($c['dir'] . '/refs/*.txt') ?: [] as $f) {
+            $h = @fopen($f, 'rb');
+            if (!$h) return; // never delete on a partial view
+            while (($line = fgets($h)) !== false) { $line = trim($line); if ($line !== '') $live[$line] = true; }
+            fclose($h);
+        }
+        $old = time() - 172800; // chunks of an upload still in progress are young
+        foreach (glob($c['dir'] . '/chunks/??/*') ?: [] as $f) {
+            if (substr($f, -5) === '.part') { if (filemtime($f) < $old) @unlink($f); continue; }
+            clearstatcache(true, $f);
+            if (!isset($live[basename($f)]) && filemtime($f) < $old) @unlink($f);
+        }
+    } finally {
+        flock($gl, LOCK_UN);
+        fclose($gl);
     }
+}
+
+/** IDs from $ids that have no chunk file (at most $limit). */
+function gs_chunks_absent(array $c, array $ids, int $limit = 0): array
+{
+    $miss = [];
+    foreach ($ids as $id) {
+        if (!is_file(gs_chunk_path($c, $id))) { $miss[] = $id; if ($limit > 0 && count($miss) >= $limit) break; }
+    }
+    return $miss;
+}
+
+/** Reads a chunk list file (refs/*.txt or tmp/*.refs); null when it does not exist. */
+function gs_read_refs(string $f): ?array
+{
+    if (!is_file($f)) return null;
+    $raw = (string)@file_get_contents($f);
+    return $raw === '' ? [] : array_values(array_filter(array_map('trim', explode("\n", $raw)), 'strlen'));
+}
+
+/** 409 chunk_missing: the cloud copy lacks chunks (never a 404, which nginx error_page may replace). */
+function gs_chunk_missing_fail(array $miss, string $msg): GsFail
+{
+    return new GsFail(409, $msg, ['code' => 'chunk_missing', 'missing' => array_slice(array_values($miss), 0, 1000), 'count' => count($miss)]);
+}
+
+/** Chunk health of a profile's current version: refs=false means the server never got its chunk list. */
+function gs_profile_check(array $c, array $r): array
+{
+    $ids = gs_read_refs($c['dir'] . '/refs/' . $r['sha256'] . '.txt');
+    if ($ids === null) return ['id' => $r['id'], 'version' => (int)$r['version'], 'refs' => false, 'chunks' => 0, 'missing' => 0, 'sample' => []];
+    $miss = gs_chunks_absent($c, $ids);
+    return ['id' => $r['id'], 'version' => (int)$r['version'], 'refs' => true, 'chunks' => count($ids), 'missing' => count($miss), 'sample' => array_slice($miss, 0, 20)];
 }
 
 function gs_route(): string
@@ -392,7 +462,7 @@ function gs_serve(): void
         $limits = array_filter([$c['max'], gs_ini_bytes('post_max_size')]);
         $free = @disk_free_space($c['dir']);
         gs_reply(200, ['ok' => true, 'service' => 'ghostbrowser-sync', 'protocol' => 2, 'single' => true, 'time' => time(),
-            'user' => $user, 'features' => array_merge(['chunks', 'history', 'multiuser', 'tombstones'], gs_sec_features()), 'keepVersions' => $c['keep'],
+            'user' => $user, 'features' => array_merge(['chunks', 'history', 'multiuser', 'tombstones', 'chunkcheck'], gs_sec_features()), 'serverVersion' => GS_SERVER_VERSION, 'keepVersions' => $c['keep'],
             'tombstoneDays' => (int)($c['tomb'] / 86400),
             'maxBody' => $limits ? min($limits) : 0, 'usedBytes' => gs_dir_size($c['dir']),
             'freeBytes' => $free === false ? -1 : (int)$free]);
@@ -400,7 +470,13 @@ function gs_serve(): void
     if ($path === '/api/chunks/missing' && $method === 'POST') {
         $ids = gs_ids(gs_body());
         $miss = [];
-        foreach ($ids as $id) if (!is_file(gs_chunk_path($c, $id))) $miss[] = $id;
+        $now = time();
+        foreach ($ids as $id) {
+            $f = gs_chunk_path($c, $id);
+            // A chunk reported present will not be uploaded again, so refresh its
+            // age: the collector only deletes unreferenced chunks older than 48 h.
+            if (!is_file($f) || !@touch($f, $now) || !is_file($f)) $miss[] = $id;
+        }
         gs_reply(200, ['missing' => $miss]);
     }
     if ($path === '/api/chunks' && $method === 'PUT') {
@@ -439,7 +515,8 @@ function gs_serve(): void
     }
     if ($path === '/api/chunks/get' && $method === 'POST') {
         $ids = gs_ids(gs_body());
-        foreach ($ids as $id) if (!is_file(gs_chunk_path($c, $id))) throw new GsFail(404, 'Chunk ' . $id . ' is missing.');
+        $miss = gs_chunks_absent($c, $ids);
+        if ($miss) throw gs_chunk_missing_fail($miss, 'Chunk ' . $miss[0] . ' is missing.' . (count($miss) > 1 ? ' (' . count($miss) . ' chunks missing)' : '') . ' Re-upload the profile from a device that has it (修复云端).');
         while (ob_get_level() > 0) ob_end_clean();
         header('Content-Type: application/octet-stream');
         header('Cache-Control: no-store');
@@ -465,7 +542,7 @@ function gs_serve(): void
         });
         gs_reply(200, $list);
     }
-    if (!preg_match('~^/api/profiles/([a-zA-Z0-9_-]{1,64})/(lock|unlock|blob|commit|delete|history|refs)$~D', $path, $m)) throw new GsFail(404, 'Not found.');
+    if (!preg_match('~^/api/profiles/([a-zA-Z0-9_-]{1,64})/(lock|unlock|blob|commit|delete|history|refs|check)$~D', $path, $m)) throw new GsFail(404, 'Not found.');
     $id = $m[1];
     $action = $m[2];
     $ttl = $c['ttl'];
@@ -535,7 +612,12 @@ function gs_serve(): void
             gs_tx($c, function (array &$idx) use ($c, $id, $version, $name, $sha, $size, $ttl) {
                 $r = gs_lease($idx, $id);
                 if ((int)$r['version'] !== $version) throw new GsFail(412, 'Version changed during upload.');
+                // Replace only an older pending blob: the chunk list sent just
+                // before (PUT refs) belongs to this upload and must survive.
+                $refs = $r['pending_refs'] ?? null;
+                $r['pending_refs'] = null;
                 gs_clear_pending($c, $r);
+                $r['pending_refs'] = $refs;
                 $r['pending_path'] = $name;
                 $r['pending_sha'] = $sha;
                 $r['pending_size'] = $size;
@@ -592,15 +674,23 @@ function gs_serve(): void
             if (!is_file($src) || filesize($src) !== (int)$r['pending_size'] || !hash_equals($b['sha256'], hash_file('sha256', $src))) {
                 throw new GsFail(409, 'Pending blob failed integrity validation.');
             }
+            // Never commit a manifest whose chunks are not all on the server.
+            $refs = $r['pending_refs'] ?? '';
+            $refFile = ($refs && preg_match('/^[a-f0-9]{48}\.refs$/D', $refs)) ? $c['dir'] . '/tmp/' . $refs : '';
+            if ($refs && (!$refFile || !is_file($refFile))) throw new GsFail(409, 'The uploaded chunk list is gone; upload again.', ['code' => 'refs_missing']);
+            if ($refFile) {
+                $miss = gs_chunks_absent($c, gs_read_refs($refFile) ?? []);
+                if ($miss) throw gs_chunk_missing_fail($miss, count($miss) . ' chunk(s) of this upload are not on the server; upload them and commit again.');
+            }
             $dst = $c['dir'] . '/blobs/' . $b['sha256'] . '.gbe';
             if (!is_file($dst)) {
                 if (!rename($src, $dst)) throw new GsFail(500, 'Cannot store upload.');
             } else {
                 @unlink($src);
             }
-            $refs = $r['pending_refs'] ?? '';
-            if ($refs && preg_match('/^[a-f0-9]{48}\.refs$/D', $refs) && is_file($c['dir'] . '/tmp/' . $refs)) {
-                @rename($c['dir'] . '/tmp/' . $refs, $c['dir'] . '/refs/' . $b['sha256'] . '.txt');
+            if ($refFile && !@rename($refFile, $c['dir'] . '/refs/' . $b['sha256'] . '.txt')) {
+                if (!@copy($refFile, $c['dir'] . '/refs/' . $b['sha256'] . '.txt')) throw new GsFail(500, 'Cannot store the chunk list (check folder permissions / disk space).');
+                @unlink($refFile);
             }
             $r['pending_refs'] = null;
             $hist = array_map('gs_hist_entry', $r['history'] ?? []);
@@ -696,7 +786,13 @@ function gs_serve(): void
         gs_chunk_gc($c, true);
         gs_reply(200, ['ok' => true, 'state' => $res['state'], 'version' => $res['version']]);
     }
-    header('Allow: ' . ($action === 'blob' ? 'GET, PUT' : ($action === 'history' ? 'GET' : ($action === 'refs' ? 'PUT' : 'POST'))));
+    if ($action === 'check' && $method === 'GET') {
+        $r = gs_tx($c, function (array &$idx) use ($id) { return $idx['profiles'][$id] ?? null; });
+        if (gs_is_tomb($r)) throw gs_tomb_fail($r);
+        if (!$r || (int)$r['version'] === 0) throw new GsFail(404, 'Profile has no committed blob.');
+        gs_reply(200, array_merge(['ok' => true], gs_profile_check($c, $r)));
+    }
+    header('Allow: ' . ($action === 'blob' ? 'GET, PUT' : ($action === 'history' || $action === 'check' ? 'GET' : ($action === 'refs' ? 'PUT' : 'POST'))));
     throw new GsFail(405, 'Method not allowed.');
 }
 
@@ -1148,7 +1244,18 @@ function gs_admin_page(array $c): void
         foreach (['blobs', 'chunks', 'refs', 'tmp'] as $sub) $bytes += gs_dir_size($dir . '/' . $sub);
         $idx = gs_jread($dir . '/index.json');
         $live = 0; $tomb = 0;
-        foreach ($idx['profiles'] ?? [] as $r) { if (!empty($r['deleted'])) $tomb++; elseif ((int)($r['version'] ?? 0) > 0) $live++; }
+        $broken = []; $norefs = 0;
+        foreach ($idx['profiles'] ?? [] as $r) {
+            if (!empty($r['deleted'])) { $tomb++; continue; }
+            if ((int)($r['version'] ?? 0) <= 0) continue;
+            $live++;
+            if (($r['id'] ?? '') === '_global' || empty($r['sha256'])) continue;
+            $ck = gs_profile_check(['dir' => $dir], $r);
+            if (!$ck['refs']) $norefs++;
+            elseif ($ck['missing'] > 0) $broken[] = ($r['name'] ?: $r['id']) . ' (' . $r['id'] . ' v' . (int)$r['version'] . '：缺 ' . $ck['missing'] . '/' . $ck['chunks'] . ')';
+        }
+        $health = $broken ? "<span class='b bad' title='" . $h(implode("\n", $broken)) . "'>" . count($broken) . " 个缺分块</span>" : "<span class='b ok'>完整</span>";
+        if ($norefs) $health .= " <span class='b warn' title='这些环境由旧版 ghostsync.php 接收，服务器没有它们的分块清单，无法在服务器端核对；在客户端点「检查云端完整性」，或重新上传一次'>$norefs 个未知</span>";
         $reg = gs_jread($dir . '/devices.json');
         $da = $dp = $dr = 0; $seen = 0;
         foreach ($reg['devices'] ?? [] as $d) { if (!empty($d['revoked'])) $dr++; elseif (!empty($d['approved'])) $da++; else $dp++; $seen = max($seen, (int)$d['last_seen']); }
@@ -1159,7 +1266,7 @@ function gs_admin_page(array $c): void
         $rows .= '<tr><td><b>' . $h($name) . '</b></td><td>' . $size($bytes) . "</td><td>$live" . ($tomb ? " <span class=mut>(+$tomb 已删除)</span>" : '') . '</td>'
             . "<td><span class='b ok'>$da</span> " . ($dp ? "<span class='b warn'>$dp 待批准</span> " : '') . ($dr ? "<span class='b bad'>$dr 已吊销</span>" : '') . '</td>'
             . '<td>' . ($keys ? "<span class='b ok'>已设置</span>" : "<span class=mut>未设置</span>") . (isset($directory[$name]) ? " <span class='b ok'>可分享</span>" : '') . '</td>'
-            . "<td>$so / $si</td><td class=mut>" . $ago($seen) . (!empty($reg['settings']['requireApproval']) ? " · 需批准" : '') . '</td></tr>';
+            . "<td>$so / $si</td><td>$health</td><td class=mut>" . $ago($seen) . (!empty($reg['settings']['requireApproval']) ? " · 需批准" : '') . '</td></tr>';
     }
     $errs = '';
     $lines = is_file($shdir . '/errors.jsonl') ? (file($shdir . '/errors.jsonl', FILE_IGNORE_NEW_LINES) ?: []) : [];
@@ -1173,7 +1280,8 @@ function gs_admin_page(array $c): void
     $page("<div class=wrap><h1>GhostSync 管理</h1><div class=sub>仅元数据 · 数据均为客户端加密，服务器无法解密 · " . $h(date('Y-m-d H:i')) . "</div>"
         . "<div class=grid><div class=card><div class=k>用户</div><div class=v>" . count($users) . "</div></div><div class=card><div class=k>存储占用</div><div class=v>" . $size($tot['bytes']) . "</div></div>"
         . "<div class=card><div class=k>云端环境</div><div class=v>{$tot['prof']}</div></div><div class=card><div class=k>有效设备 / 进行中分享</div><div class=v>{$tot['dev']} / {$tot['share']}</div></div></div>"
-        . "<h2>用户</h2><table><tr><th>用户</th><th>存储</th><th>环境</th><th>设备</th><th>密钥</th><th>分享 发出/收到</th><th>最近活动</th></tr>$rows</table>"
+        . "<h2>用户</h2><table><tr><th>用户</th><th>存储</th><th>环境</th><th>设备</th><th>密钥</th><th>分享 发出/收到</th><th>云端数据</th><th>最近活动</th></tr>$rows</table>"
+        . "<div class=note>「缺分块」的环境请在上传它的设备上点 更多 → 修复云端（强制重新上传）。悬停可看环境 ID。</div>"
         . "<h2>最近错误</h2><table><tr><th>时间</th><th>用户</th><th>状态</th><th>接口</th><th>信息</th></tr>$errs</table>"
         . "<div class=note>令牌、密码、密钥与环境内容从不显示，也不会写入本页。</div></div>");
 }
@@ -1217,7 +1325,7 @@ try {
     gs_serve();
 } catch (GsFail $e) {
     gs_sec_log($e->status, $e->getMessage());
-    gs_reply($e->status, ['error' => $e->getMessage()]);
+    gs_reply($e->status, array_merge(['error' => $e->getMessage()], $e->extra));
 } catch (Throwable $e) {
     error_log('ghostsync: ' . $e);
     gs_sec_log(500, 'Server error');
