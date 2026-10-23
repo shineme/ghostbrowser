@@ -12,6 +12,7 @@ import { useSubs, groupKey, groupOptions, isCore, protoOf } from './Subscription
 import { ProxyView } from './ProxyView';
 import { SettingsView } from './SettingsView';
 import { CloudView, syncState } from './CloudView';
+import { syncErrorToast } from './leftover';
 import { SyncPrompt } from './SyncPrompt';
 import { EnvSetup } from './EnvSetup';
 import { NativeTools } from './NativeTools';
@@ -246,7 +247,7 @@ const ProfilesView: React.FC<{
     if (!await ask({ title: `修复「${p.name}」的云端数据？`, body: '用本机的这份环境数据强制重新上传：补传服务器缺少的全部数据分块，并提交一个新的云端版本。请在上传它的那台设备上操作。', ok: '修复云端' })) return;
     setSyncBusy(s => new Set(s).add(p.id));
     try { const r: any = await api.RepairCloud(p.id); toast(r?.message || '已修复', 'ok'); reload(); }
-    catch (e: any) { toast(String(e?.message || e), 'bad'); }
+    catch (e: any) { syncErrorToast(p.id, e, toast, ask); }
     finally { setSyncBusy(s => { const n = new Set(s); n.delete(p.id); return n; }); }
   };
   const [delT, setDelT] = useState<DelTarget[] | null>(null);

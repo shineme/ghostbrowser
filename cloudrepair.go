@@ -159,6 +159,9 @@ func (s *Store) RepairCloud(id string) (res CloudRepairResult, err error) {
 	if p.ShareID != "" {
 		return res, fmt.Errorf("共享给你的环境只能由分享者修复")
 	}
+	if e := s.profileBusy(id); e != nil {
+		return res, e
+	}
 	if _, dir, e := s.syncDir(id); e != nil {
 		return res, e
 	} else if !dirHasFiles(dir) {

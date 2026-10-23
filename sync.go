@@ -74,7 +74,7 @@ func decrypt(blob, pass []byte) ([]byte, error) {
 func zipDir(dir string, p *Profile) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
-	excluded := map[string]bool{"cache": true, "code cache": true, "gpucache": true, "shadercache": true, "graphitedawncache": true, "dawnwebgpucache": true, "component_crx_cache": true, "_fp_ext": true, "_runtime": true, "crashpad": true}
+	excluded := syncExcludedDirs
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -96,7 +96,7 @@ func zipDir(dir string, p *Profile) ([]byte, error) {
 		if err != nil {
 			return err
 		}
-		if strings.EqualFold(rel, profileArchiveMetadata) || low == "launch.json" || low == "native-launch.lock" || strings.HasPrefix(low, "singleton") {
+		if syncSkipFile(rel, low) {
 			return nil
 		}
 		f, err := os.Open(path)
@@ -399,6 +399,10 @@ func syncFileLock(dir string) (func(), error) {
 
 func (s *Store) PushProfile(id string) error {
 	t0 := time.Now()
+	if e := s.profileBusy(id); e != nil {
+		s.logSync(id, "push", 0, t0, e)
+		return e
+	}
 	n, e := s.pushProfile(id)
 	s.logSync(id, "push", n, t0, e)
 	return e
@@ -428,7 +432,7 @@ func (s *Store) pushProfileInner(id string, sent *int64, t *transfer, res *pushR
 	s.launchMu.Lock()
 	defer s.launchMu.Unlock()
 	if _, ok := runReg.get(id); ok {
-		return fmt.Errorf("stop the profile before syncing its browser databases")
+		return errProfileRunning
 	}
 	st := s.GetSettings()
 	if e := syncReady(st, true); e != nil {
@@ -447,6 +451,9 @@ func (s *Store) pushProfileInner(id string, sent *int64, t *transfer, res *pushR
 	}
 	root, dir, e := s.syncDir(id)
 	if e != nil {
+		return e
+	}
+	if e = profileHeldError(dir); e != nil {
 		return e
 	}
 	release, e := syncFileLock(dir)
@@ -473,7 +480,7 @@ func (s *Store) pushProfileInner(id string, sent *int64, t *transfer, res *pushR
 	var files []manifestFile
 	var cu *chunkedUpload
 	if si, err := s.ServerInfo(false); err == nil && si.has("chunks") {
-		cu, e = s.buildChunked(dir, root, &archived, string(secret), t)
+		cu, e = s.buildChunked(dir, root, &archived, string(secret), t, res != nil)
 		if e != nil {
 			return e
 		}
@@ -621,7 +628,7 @@ func (s *Store) pullProfileInner(id string, want int64, got *int64, t *transfer)
 	s.launchMu.Lock()
 	defer s.launchMu.Unlock()
 	if _, ok := runReg.get(id); ok {
-		return fmt.Errorf("stop the profile before restoring its browser data")
+		return fmt.Errorf("环境正在运行，请先关闭后再下载")
 	}
 	st := s.GetSettings()
 	if e := syncReady(st, true); e != nil {
@@ -629,6 +636,9 @@ func (s *Store) pullProfileInner(id string, want int64, got *int64, t *transfer)
 	}
 	root, dir, e := s.syncDir(id)
 	if e != nil {
+		return e
+	}
+	if e = profileHeldError(dir); e != nil {
 		return e
 	}
 	release, e := syncFileLock(dir)

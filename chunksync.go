@@ -112,10 +112,44 @@ func (s *Store) ServerInfo(fresh bool) (serverInfo, error) {
 
 // ---------------------------------------------------------------- walking
 
-var syncExcludedDirs = map[string]bool{"cache": true, "code cache": true, "gpucache": true, "shadercache": true, "graphitedawncache": true, "dawnwebgpucache": true, "component_crx_cache": true, "_fp_ext": true, "_runtime": true, "crashpad": true}
+// syncExcludedDirs are directories (matched by name at any depth, case
+// insensitive) that never go to the cloud. Only caches Chromium rebuilds by
+// itself belong here, never site data:
+//   - cache, code cache, media cache: HTTP / V8 code / media caches;
+//   - gpucache, shadercache, grshadercache, dawncache, dawngraphitecache,
+//     graphitedawncache, dawnwebgpucache: GPU shader / pipeline caches. On
+//     Windows they are "blockfile" caches whose memory-mapped "index" the GPU
+//     process rewrites all the time without always moving its modification
+//     time, which broke uploads ("index changed during sync", v0.8.8);
+//   - component_crx_cache, extensions_crx_cache: downloaded installer copies;
+//   - optimization_guide_model_store: downloaded on-device ML models;
+//   - browsermetrics: memory-mapped UMA metrics files;
+//   - blob_storage: temporary Blob backing files Chromium wipes at start-up;
+//   - crashpad: crash reports; _fp_ext/_runtime: our own generated files.
+//
+// Deliberately kept: "Service Worker" (ScriptCache holds the scripts a
+// registered service worker needs to start; without them the registration is
+// dropped) and CacheStorage (the Cache API is site data), IndexedDB, Local
+// Storage, Session Storage, Network (cookies), segmentation_platform.
+// Adding a name is backward compatible: older manifests that still list such
+// files restore them as before, newer ones simply do not contain them.
+var syncExcludedDirs = map[string]bool{
+	"cache": true, "code cache": true, "media cache": true,
+	"gpucache": true, "shadercache": true, "grshadercache": true, "dawncache": true,
+	"dawngraphitecache": true, "graphitedawncache": true, "dawnwebgpucache": true,
+	"component_crx_cache": true, "extensions_crx_cache": true,
+	"optimization_guide_model_store": true, "browsermetrics": true, "blob_storage": true,
+	"_fp_ext": true, "_runtime": true, "crashpad": true,
+}
 
+// syncSkipFile leaves out single files: our own launch metadata, Chromium's
+// and Firefox's process locks, and the memory-mapped metrics spare file.
 func syncSkipFile(rel, low string) bool {
-	return strings.EqualFold(rel, profileArchiveMetadata) || low == "launch.json" || low == "native-launch.lock" || strings.HasPrefix(low, "singleton")
+	if strings.EqualFold(rel, profileArchiveMetadata) || low == "launch.json" || low == "native-launch.lock" || strings.HasPrefix(low, "singleton") || low == "browsermetrics-spare.pma" {
+		return true
+	}
+	top := !strings.ContainsAny(rel, `/\`)
+	return top && (low == "lockfile" || low == "parent.lock")
 }
 
 // walkSyncFiles calls fn for every regular file that belongs in a sync.
@@ -259,6 +293,7 @@ type chunkLoc struct {
 	path string // absolute
 	off  int64
 	n    int
+	mem  []byte // snapshot of a file that changed during the sync (path is informational)
 }
 
 // scanProfile lists the profile's files with chunk IDs, reusing the cache for
@@ -286,7 +321,7 @@ func scanProfile(dir string, key []byte, cache syncCache) ([]manifestFile, map[s
 				if rem := mf.Size - off; rem < int64(n) {
 					n = int(rem)
 				}
-				locs[id] = chunkLoc{abs, off, n}
+				locs[id] = chunkLoc{path: abs, off: off, n: n}
 			}
 			files = append(files, mf)
 			return nil
@@ -306,7 +341,7 @@ func scanProfile(dir string, key []byte, cache syncCache) ([]manifestFile, map[s
 			if n > 0 {
 				id := chunkID(key, buf[:n])
 				mf.Chunks = append(mf.Chunks, id)
-				locs[id] = chunkLoc{abs, off, n}
+				locs[id] = chunkLoc{path: abs, off: off, n: n}
 				off += int64(n)
 			}
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
@@ -324,6 +359,9 @@ func scanProfile(dir string, key []byte, cache syncCache) ([]manifestFile, map[s
 }
 
 func readLoc(l chunkLoc) ([]byte, error) {
+	if l.mem != nil {
+		return l.mem, nil
+	}
 	f, err := os.Open(l.path)
 	if err != nil {
 		return nil, err
@@ -433,18 +471,36 @@ type chunkedUpload struct {
 // (tests use it to reproduce the server's garbage collector racing a push).
 var testHookAfterMissing func()
 
+// testHookRechunkRead runs between the two reads that check a changed file
+// is stable again (tests use it to keep the file changing).
+var testHookRechunkRead func(rel string, attempt int)
+
+const (
+	rechunkRetries = 2         // extra snapshots of a file that changed during the sync
+	maxSnapshot    = 256 << 20 // bigger files are not snapshotted into memory
+)
+
+var rechunkPause = 200 * time.Millisecond
+
 // testHookCommitRetry runs when a commit answered chunk_missing and the push
 // uploads the missing chunks again.
 var testHookCommitRetry func()
 
 // buildChunked uploads the chunks the server is missing and returns the
 // encrypted manifest plus the chunk list for the server's garbage collector.
-func (s *Store) buildChunked(dir, root string, archived *Profile, password string, t *transfer) (*chunkedUpload, error) {
+//
+// fresh ignores the local chunk cache and hashes every file again (修复云端:
+// a memory-mapped file can change without moving its modification time, so
+// the cache may hold IDs of content that no longer exists).
+func (s *Store) buildChunked(dir, root string, archived *Profile, password string, t *transfer, fresh bool) (*chunkedUpload, error) {
 	key, e := profileChunkKey(archived)
 	if e != nil {
 		return nil, e
 	}
-	cache := loadSyncCache(root, archived.ID)
+	cache := syncCache{}
+	if !fresh {
+		cache = loadSyncCache(root, archived.ID)
+	}
 	files, locs, total, e := scanProfile(dir, key, cache)
 	if e != nil {
 		return nil, e
@@ -524,7 +580,132 @@ func (s *Store) buildChunked(dir, root string, archived *Profile, password strin
 		t.set(donePlain)
 		return nil
 	}
-	upload := func(miss []string) error {
+	// A file can change between the scan and the upload (a cache index, a
+	// process still writing). Such a file is read again into memory until
+	// two reads agree, its entry gets the new chunk IDs and the new chunks are
+	// uploaded; the manifest and the refs list are built from the result.
+	fileIdx := make(map[string]int, len(files))
+	for i, f := range files {
+		fileIdx[filepath.Join(dir, filepath.FromSlash(f.Path))] = i
+	}
+	dropped := map[string]bool{} // IDs no file references any more
+	rechunked := map[string]bool{}
+	refresh := func(abs string) ([]string, error) {
+		i, ok := fileIdx[abs]
+		if !ok || i < 0 {
+			return nil, fmt.Errorf("server asked for an unknown chunk")
+		}
+		rel := files[i].Path
+		changing := fmt.Errorf("文件 %s 在同步过程中一直在变化，说明浏览器或残留进程仍在写入，请关闭后重试", rel)
+		if rechunked[abs] {
+			return nil, changing // its snapshot is in memory; cannot change again
+		}
+		var data []byte
+		var mt int64
+		gone, stable := false, false
+		for attempt := 0; attempt <= rechunkRetries && !stable; attempt++ {
+			if attempt > 0 {
+				time.Sleep(rechunkPause)
+			}
+			st, e := os.Stat(abs)
+			if os.IsNotExist(e) {
+				gone, stable = true, true
+				break
+			}
+			if e != nil {
+				return nil, e
+			}
+			if st.Size() > maxSnapshot {
+				return nil, changing
+			}
+			d1, e := os.ReadFile(abs)
+			if e != nil {
+				return nil, e
+			}
+			if testHookRechunkRead != nil {
+				testHookRechunkRead(rel, attempt)
+			}
+			time.Sleep(rechunkPause)
+			d2, e := os.ReadFile(abs)
+			if os.IsNotExist(e) {
+				continue
+			}
+			if e != nil {
+				return nil, e
+			}
+			if bytes.Equal(d1, d2) {
+				data, mt, stable = d1, st.ModTime().UnixNano(), true
+			}
+		}
+		if !stable {
+			return nil, changing
+		}
+		rechunked[abs] = true
+		old := files[i].Chunks
+		var fresh []string
+		var newIDs []string
+		if gone {
+			fileIdx[abs] = -1
+			files = append(files[:i], files[i+1:]...)
+			for p, j := range fileIdx {
+				if j > i {
+					fileIdx[p] = j - 1
+				}
+			}
+		} else {
+			for off := 0; off < len(data); off += chunkSize {
+				end := off + chunkSize
+				if end > len(data) {
+					end = len(data)
+				}
+				piece := data[off:end:end]
+				id := chunkID(key, piece)
+				fresh = append(fresh, id)
+				if _, known := locs[id]; !known || dropped[id] {
+					newIDs = append(newIDs, id)
+				}
+				locs[id] = chunkLoc{path: abs, off: int64(off), n: len(piece), mem: piece}
+				delete(dropped, id)
+			}
+			files[i].Chunks, files[i].Size, files[i].MTime = fresh, int64(len(data)), mt
+		}
+		// Old IDs: drop the ones nothing references any more, and point the
+		// rest at another file that still contains them.
+		for _, id := range old {
+			if l, ok := locs[id]; !ok || l.mem != nil || l.path != abs {
+				continue
+			}
+			var nl *chunkLoc
+			for j, f := range files {
+				for k, c := range f.Chunks {
+					if c == id {
+						off := int64(k) * chunkSize
+						n := chunkSize
+						if rem := f.Size - off; rem < int64(n) {
+							n = int(rem)
+						}
+						nl = &chunkLoc{path: filepath.Join(dir, filepath.FromSlash(files[j].Path)), off: off, n: n}
+						break
+					}
+				}
+				if nl != nil {
+					break
+				}
+			}
+			if nl == nil {
+				delete(locs, id)
+				dropped[id] = true
+			} else {
+				locs[id] = *nl
+			}
+		}
+		if len(newIDs) == 0 {
+			return nil, nil
+		}
+		return c.missingChunks(newIDs)
+	}
+	nUp := 0 // chunks actually uploaded
+	upload := func(miss []string, allowRechunk bool) error {
 		var batch []piece
 		var batchLen int64
 		flush := func() error {
@@ -535,18 +716,39 @@ func (s *Store) buildChunked(dir, root string, archived *Profile, password strin
 			batch, batchLen = nil, 0
 			return e
 		}
-		for _, id := range miss {
+		queued := map[string]bool{}
+		queue := append([]string(nil), miss...)
+		for qi := 0; qi < len(queue); qi++ {
+			id := queue[qi]
+			if queued[id] {
+				continue
+			}
 			l, ok := locs[id]
 			if !ok {
+				if dropped[id] {
+					continue // belonged to a file that changed
+				}
 				return fmt.Errorf("server asked for an unknown chunk")
 			}
 			data, e := readLoc(l)
-			if e != nil {
+			if e != nil && !os.IsNotExist(e) {
 				return e
 			}
-			if chunkID(key, data) != id {
-				return fmt.Errorf("%s changed during sync; close the browser and try again", filepath.Base(l.path))
+			if e != nil || chunkID(key, data) != id {
+				if !allowRechunk {
+					rel, _ := filepath.Rel(dir, l.path)
+					return fmt.Errorf("文件 %s 在同步过程中一直在变化，说明浏览器或残留进程仍在写入，请关闭后重试", filepath.ToSlash(rel))
+				}
+				more, e := refresh(l.path)
+				if e != nil {
+					return e
+				}
+				queue = append(queue, more...)
+				queue = append(queue, id) // may still be needed by another file
+				continue
 			}
+			queued[id] = true
+			nUp++
 			blob, e := sealChunk(key, data)
 			if e != nil {
 				return e
@@ -561,8 +763,21 @@ func (s *Store) buildChunked(dir, root string, archived *Profile, password strin
 		}
 		return flush()
 	}
-	if e = upload(miss); e != nil {
+	if e = upload(miss, true); e != nil {
 		return nil, e
+	}
+	// The refs list and the manifest describe the same, final file list.
+	total = 0
+	ids = ids[:0]
+	seen := map[string]bool{}
+	for _, f := range files {
+		total += f.Size
+		for _, id := range f.Chunks {
+			if !seen[id] {
+				seen[id] = true
+				ids = append(ids, id)
+			}
+		}
 	}
 	m := syncManifest{Format: "GBM1", Profile: *archived, ChunkKey: archived.ChunkKey, Files: files, Total: total}
 	raw, e := json.Marshal(m)
@@ -577,7 +792,7 @@ func (s *Store) buildChunked(dir, root string, archived *Profile, password strin
 	if e != nil {
 		return nil, e
 	}
-	out := &chunkedUpload{enc: enc, refs: ids, files: files, uploaded: len(miss)}
+	out := &chunkedUpload{enc: enc, refs: ids, files: files, uploaded: nUp}
 	out.reupload = func() (int, error) {
 		miss, e := c.missingChunks(ids)
 		if e != nil {
@@ -587,7 +802,7 @@ func (s *Store) buildChunked(dir, root string, archived *Profile, password strin
 			return 0, nil
 		}
 		t.phase("upload", 0)
-		if e = upload(miss); e != nil {
+		if e = upload(miss, false); e != nil {
 			return 0, e
 		}
 		out.uploaded += len(miss)

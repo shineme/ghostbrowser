@@ -188,6 +188,8 @@ export function KernelList():Promise<Array<main.InstalledKernel>>;
 
 export function KernelMajor():Promise<string>;
 
+export function KillLeftoverProcesses(arg1:string):Promise<number>;
+
 export function LaunchTerminal(arg1:main.TerminalRequest):Promise<main.TerminalSession>;
 
 export function LeaveShare(arg1:string):Promise<void>;

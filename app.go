@@ -594,6 +594,10 @@ func (a *App) KernelMajor() string {
 
 func (a *App) TestSync() error                 { return a.store.TestSync() }
 func (a *App) PushProfile(id string) error     { return a.store.PushProfile(id) }
+
+// KillLeftoverProcesses ends browser processes GhostBrowser started for the
+// profile that outlived its window (offered when an upload finds them).
+func (a *App) KillLeftoverProcesses(id string) (int, error) { return a.store.KillLeftoverProcesses(id) }
 func (a *App) PullProfile(id string) error     { return a.store.PullProfile(id) }
 
 // RepairCloud (修复云端) force-uploads the local copy, sending every chunk the server lacks.

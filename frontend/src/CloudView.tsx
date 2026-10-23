@@ -7,6 +7,7 @@ import { DeleteModal, DelTarget } from './DeleteModal';
 import { SharingView } from './SharingView'; // share
 import { DevicesCard } from './DevicesCard';
 import { RecoveryCard } from './RecoveryKeyModal';
+import { syncErrorToast } from './leftover';
 
 type CloudOnlyItem = { id: string; name: string; version: number; updatedAt: number; deviceName: string; size: number; lockedBy: string; localDeleted: boolean; deletedVersion: number; deletedAt: number; cloudNewer: boolean; pendingDelete: boolean; pendingError?: string };
 
@@ -57,7 +58,7 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
   const retryDeletes = async () => { const left: any = await api.RetryCloudDeletes(); toast(left ? `仍有 ${left} 个云端删除未完成，稍后会自动重试` : '排队的云端删除已全部完成', left ? 'bad' : undefined); loadOnly(); };
 
   const mark = (id: string, on: boolean) => setBusy(s => { const n = new Set(s); on ? n.add(id) : n.delete(id); return n; });
-  const run = async (p: Profile, f: () => Promise<any>, ok: string) => { mark(p.id, true); try { await f(); toast(ok); reload(); } catch (e: any) { toast(String(e?.message || e), 'bad'); } finally { mark(p.id, false); loadLog(); } };
+  const run = async (p: Profile, f: () => Promise<any>, ok: string) => { mark(p.id, true); try { await f(); toast(ok); reload(); } catch (e: any) { syncErrorToast(p.id, e, toast, ask, loadLog); } finally { mark(p.id, false); loadLog(); } };
   const [syncing, setSyncing] = useState(false);
   const syncAll = async () => { setSyncing(true); try { const r: any = await api.SyncNow(); toast(r.error ? `同步失败：${r.error}` : (r.message || '同步完成'), r.error || r.failed ? 'bad' : undefined); reload(); } catch (e: any) { toast(String(e?.message || e), 'bad'); } finally { setSyncing(false); loadLog(); loadInfo(); } };
   const ask = useConfirm();
@@ -65,7 +66,7 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
     if (!await ask({ title: `修复「${p.name}」的云端数据？`, body: '用本机的这份环境数据强制重新上传：先检查服务器缺少哪些数据分块，全部补传后提交一个新的云端版本（即使本机没有改动）。请在上传它的那台设备上操作；拉取时提示「云端缺少数据分块」就用这个。', ok: '修复云端' })) return;
     mark(p.id, true);
     try { const r: any = await api.RepairCloud(p.id); toast(r?.message || '已修复', 'ok'); reload(); }
-    catch (e: any) { toast(String(e?.message || e), 'bad'); }
+    catch (e: any) { syncErrorToast(p.id, e, toast, ask, loadLog); }
     finally { mark(p.id, false); loadLog(); }
   };
   const check = async (p: Profile) => {

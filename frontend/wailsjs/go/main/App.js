@@ -374,6 +374,10 @@ export function KernelMajor() {
   return window['go']['main']['App']['KernelMajor']();
 }
 
+export function KillLeftoverProcesses(arg1) {
+  return window['go']['main']['App']['KillLeftoverProcesses'](arg1);
+}
+
 export function LaunchTerminal(arg1) {
   return window['go']['main']['App']['LaunchTerminal'](arg1);
 }

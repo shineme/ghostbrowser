@@ -444,6 +444,9 @@ func (a *autoSyncer) AfterExit(id string) {
 	go func() {
 		defer a.inflight.Done()
 		time.Sleep(1500 * time.Millisecond) // let Chrome release its file locks
+		if _, dir, e := a.s.syncDir(id); e == nil {
+			waitProfileReleased(dir, 20*time.Second) // helpers outliving the main process
+		}
 		if !a.claim(id) {
 			return
 		}

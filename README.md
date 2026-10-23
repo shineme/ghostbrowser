@@ -173,6 +173,9 @@ go test -run TestEnsureAgainstRealShop -v .
 - **历史版本**：「云同步 → 历史版本」可以恢复服务器保留的任意版本，恢复后会作为最新版本上传，其他电脑也会同步到这个版本
 - **同步日志**：最近 300 次同步的时间、流量、耗时和错误，失败的可以一键重试
 - **修复云端（v0.8.8）**：拉取时提示「云端缺少该环境的部分数据分块」说明服务器上丢了这个环境引用的数据块（v0.8.7 及更早的 `ghostsync.php` 存在数据块被误清理的问题，见下文）。在**上传它的那台设备**上点 环境列表 更多 → 修复云端（强制重新上传），或「云同步 → 全部环境」每行的 ⋯ → 修复云端：客户端重新向服务器确认缺少哪些块、全部补传，并提交一个新版本（即使本机没有改动），其他设备再拉取即可。同一菜单的「检查云端完整性」会下载并解密清单逐块核对（旧服务端也可用）。「重新上传全局数据」用于强制重传设置 / 代理 / 指纹库这条全局记录
+- **上传 / 修复时浏览器还开着（v0.8.9）**：环境正在运行时「上传」「修复云端」和自动同步会直接拒绝（「环境正在运行，请先关闭后再修复/上传」）；窗口关了但还有浏览器进程在后台写这个环境目录（残留的 chrome.exe / 崩溃处理进程等，Windows 上通过环境目录里被独占的 `lockfile` / `parent.lock` 判断）时提示「检测到该环境仍有浏览器进程在后台运行（可能是残留进程）」；如果这些进程是 GhostBrowser 为这个环境启动的，提示里会有「结束残留进程」按钮，确认后一键结束（只结束命令行指向该环境目录的浏览器进程）。关闭浏览器后的自动上传会先等残留进程退出（最多 20 秒）
+- **同步中变化的文件（v0.8.9）**：扫描后到上传前有文件被改写（比如缓存索引），不再整次失败（旧版报 `index changed during sync`），而是把这个文件重新读入内存（两次读取一致才算稳定）、重新切块并上传新内容，清单和块列表都以最终内容为准；同一文件重试 2 次仍在变化才报错「文件 <路径> 在同步过程中一直在变化，说明浏览器或残留进程仍在写入，请关闭后重试」。「修复云端」不再使用本地分块缓存，所有文件重新计算（内存映射的文件可能内容变了而修改时间不变）
+- **不同步的纯缓存目录（v0.8.9 起）**：Cache、Code Cache、Media Cache、GPUCache、ShaderCache、GrShaderCache、DawnCache、DawnGraphiteCache、GraphiteDawnCache、DawnWebGPUCache、component_crx_cache、extensions_crx_cache、optimization_guide_model_store、BrowserMetrics（及 BrowserMetrics-spare.pma）、blob_storage、Crashpad，以及根目录的 `lockfile` / `parent.lock`，浏览器会自己重建。网站数据（Cookie、Local/Session Storage、IndexedDB、Service Worker 及其 ScriptCache、CacheStorage）照常同步。旧版本上传的清单里如果还带着这些文件，恢复时照样还原，不影响兼容
 - 普通上传也更稳：提交时服务器发现有数据块不在（409 `chunk_missing`），客户端会补传缺的块并自动重试一次提交
 - 错误提示：服务器返回网页而不是 JSON 时（nginx / CDN 的错误页），错误里会带上请求的方法和接口（如 `POST /api/chunks/get`），并提示「服务器前端（nginx/CDN）替换了错误页，真实错误被隐藏」；宝塔请在网站配置里把 `fastcgi_intercept_errors` 改为 `off`，或删掉 `error_page 404 ...` 这类行后重载 nginx
 - **删除环境可选「只删本地」或「同时删云端」**（单个和批量删除共用一个确认框，记住上次的选择；未配置同步时不显示选项）：
