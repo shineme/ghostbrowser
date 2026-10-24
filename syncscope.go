@@ -124,8 +124,8 @@ var syncProfileTier = map[string]int{
 	"reporting and nel": tierNever, "reporting and nel-journal": tierNever,
 	"network/sct auditing pending reports": tierNever, "sct auditing pending reports": tierNever,
 	"discount_infos_db": tierNever, "declarative_performance_observer.db": tierNever,
-	"declarative_performance_observer.db-journal": tierNever,
-	"gpupersistentcache": tierNever, "jumplisticons": tierNever, "jumplisticonsold": tierNever,
+	"declarative_performance_observer.db-journal": tierNever, "gpupersistentcache": tierNever,
+	"jumplisticons": tierNever, "jumplisticonsold": tierNever,
 	"segmentation_platform": tierFull, "segmentation platform": tierFull, "shared_proto_db": tierFull,
 	"servercertificate": tierFull, "servercertificate-journal": tierFull,
 	// history, tabs, service workers (标准)

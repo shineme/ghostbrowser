@@ -10,22 +10,22 @@ import (
 // TransferEvent is a live progress report for one profile upload or download,
 // emitted to the UI as "sync:progress".
 type TransferEvent struct {
-	ID      string  `json:"id"`
-	Name    string  `json:"name"`
-	Dir     string  `json:"dir"`   // up | down
-	Phase   string  `json:"phase"` // scan | pack | upload | commit | download | write | done | error
-	Done    int64   `json:"done"`
-	Total   int64   `json:"total"` // 0 = unknown (indeterminate)
-	Speed   float64 `json:"speed"` // bytes per second, recent window
-	ETA     int     `json:"eta"`   // seconds, -1 unknown
-	Saved   int64   `json:"saved"` // bytes skipped because the other side already had them (跳过，未变化)
+	ID    string  `json:"id"`
+	Name  string  `json:"name"`
+	Dir   string  `json:"dir"`   // up | down
+	Phase string  `json:"phase"` // scan | pack | upload | commit | download | write | done | error
+	Done  int64   `json:"done"`
+	Total int64   `json:"total"` // 0 = unknown (indeterminate)
+	Speed float64 `json:"speed"` // bytes per second, recent window
+	ETA   int     `json:"eta"`   // seconds, -1 unknown
+	Saved int64   `json:"saved"` // bytes skipped because the other side already had them (跳过，未变化)
 	// Sent is what actually crossed the network (compressed + encrypted
 	// chunks, the manifest, or the legacy archive); Done/Total of the upload
 	// phase count the plain bytes of the changed pieces.
-	Sent    int64   `json:"sent"`
-	Started int64   `json:"started"`
-	Error   string  `json:"error,omitempty"`
-	Final   bool    `json:"final"`
+	Sent    int64  `json:"sent"`
+	Started int64  `json:"started"`
+	Error   string `json:"error,omitempty"`
+	Final   bool   `json:"final"`
 }
 
 type speedSample struct {
