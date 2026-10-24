@@ -18,7 +18,11 @@ type TransferEvent struct {
 	Total   int64   `json:"total"` // 0 = unknown (indeterminate)
 	Speed   float64 `json:"speed"` // bytes per second, recent window
 	ETA     int     `json:"eta"`   // seconds, -1 unknown
-	Saved   int64   `json:"saved"` // bytes skipped because the other side already had them
+	Saved   int64   `json:"saved"` // bytes skipped because the other side already had them (跳过，未变化)
+	// Sent is what actually crossed the network (compressed + encrypted
+	// chunks, the manifest, or the legacy archive); Done/Total of the upload
+	// phase count the plain bytes of the changed pieces.
+	Sent    int64   `json:"sent"`
 	Started int64   `json:"started"`
 	Error   string  `json:"error,omitempty"`
 	Final   bool    `json:"final"`
@@ -90,6 +94,16 @@ func (t *transfer) saved(n int64) {
 	}
 	t.mu.Lock()
 	t.ev.Saved += n
+	t.mu.Unlock()
+}
+
+// wire records n bytes that crossed the network.
+func (t *transfer) wire(n int64) {
+	if t == nil || n <= 0 {
+		return
+	}
+	t.mu.Lock()
+	t.ev.Sent += n
 	t.mu.Unlock()
 }
 

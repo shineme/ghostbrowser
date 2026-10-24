@@ -51,6 +51,9 @@ type syncManifest struct {
 	ChunkKey string         `json:"chunkKey"` // base64, 32 bytes
 	Files    []manifestFile `json:"files"`
 	Total    int64          `json:"total"`
+	// Scope is the 同步内容 mode the uploader used ("" = a client before
+	// v0.8.10, which synced everything except syncExcludedDirs).
+	Scope string `json:"scope,omitempty"`
 }
 
 // Local cache of what the last sync saw, so unchanged files are not re-hashed.
@@ -152,8 +155,9 @@ func syncSkipFile(rel, low string) bool {
 	return top && (low == "lockfile" || low == "parent.lock")
 }
 
-// walkSyncFiles calls fn for every regular file that belongs in a sync.
-func walkSyncFiles(dir string, fn func(rel string, info os.FileInfo) error) error {
+// walkSyncFiles calls fn for every regular file that belongs in a sync made
+// with the given 同步内容 scope (syncscope.go).
+func walkSyncFiles(dir string, sc contentScope, fn func(rel string, info os.FileInfo) error) error {
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			if os.IsNotExist(err) && path != dir {
@@ -165,8 +169,13 @@ func walkSyncFiles(dir string, fn func(rel string, info os.FileInfo) error) erro
 			return nil
 		}
 		low := strings.ToLower(info.Name())
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
 		if info.IsDir() {
-			if syncExcludedDirs[low] {
+			if !sc.keep(rel) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -174,14 +183,10 @@ func walkSyncFiles(dir string, fn func(rel string, info os.FileInfo) error) erro
 		if !info.Mode().IsRegular() {
 			return nil
 		}
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			return err
-		}
-		if syncSkipFile(rel, low) {
+		if syncSkipFile(rel, low) || !sc.keep(rel) {
 			return nil
 		}
-		return fn(filepath.ToSlash(rel), info)
+		return fn(rel, info)
 	})
 }
 
@@ -298,12 +303,12 @@ type chunkLoc struct {
 
 // scanProfile lists the profile's files with chunk IDs, reusing the cache for
 // files whose size and modification time did not change.
-func scanProfile(dir string, key []byte, cache syncCache) ([]manifestFile, map[string]chunkLoc, int64, error) {
+func scanProfile(dir string, key []byte, cache syncCache, sc contentScope) ([]manifestFile, map[string]chunkLoc, int64, error) {
 	var files []manifestFile
 	locs := map[string]chunkLoc{}
 	var total int64
 	buf := make([]byte, chunkSize)
-	err := walkSyncFiles(dir, func(rel string, info os.FileInfo) error {
+	err := walkSyncFiles(dir, sc, func(rel string, info os.FileInfo) error {
 		if len(files) >= maxManifestFiles {
 			return fmt.Errorf("profile has more than %d files", maxManifestFiles)
 		}
@@ -492,7 +497,7 @@ var testHookCommitRetry func()
 // fresh ignores the local chunk cache and hashes every file again (修复云端:
 // a memory-mapped file can change without moving its modification time, so
 // the cache may hold IDs of content that no longer exists).
-func (s *Store) buildChunked(dir, root string, archived *Profile, password string, t *transfer, fresh bool) (*chunkedUpload, error) {
+func (s *Store) buildChunked(dir, root string, archived *Profile, password string, t *transfer, fresh bool, scope string) (*chunkedUpload, error) {
 	key, e := profileChunkKey(archived)
 	if e != nil {
 		return nil, e
@@ -501,7 +506,7 @@ func (s *Store) buildChunked(dir, root string, archived *Profile, password strin
 	if !fresh {
 		cache = loadSyncCache(root, archived.ID)
 	}
-	files, locs, total, e := scanProfile(dir, key, cache)
+	files, locs, total, e := scanProfile(dir, key, cache, newSyncScope(scope))
 	if e != nil {
 		return nil, e
 	}
@@ -576,6 +581,7 @@ func (s *Store) buildChunked(dir, root string, archived *Profile, password strin
 			return e
 		}
 		sent += int64(len(frame))
+		t.wire(int64(len(frame)))
 		donePlain += plain
 		t.set(donePlain)
 		return nil
@@ -779,7 +785,7 @@ func (s *Store) buildChunked(dir, root string, archived *Profile, password strin
 			}
 		}
 	}
-	m := syncManifest{Format: "GBM1", Profile: *archived, ChunkKey: archived.ChunkKey, Files: files, Total: total}
+	m := syncManifest{Format: "GBM1", Profile: *archived, ChunkKey: archived.ChunkKey, Files: files, Total: total, Scope: normSyncScope(scope)}
 	raw, e := json.Marshal(m)
 	if e != nil {
 		return nil, e
@@ -844,7 +850,7 @@ func (s *Store) restoreChunked(m *syncManifest, dir, root, stage string, t *tran
 	// What we already have locally.
 	have := map[string]chunkLoc{}
 	if _, err := os.Stat(dir); err == nil {
-		_, locs, _, err := scanProfile(dir, key, loadSyncCache(root, m.Profile.ID))
+		_, locs, _, err := scanProfile(dir, key, loadSyncCache(root, m.Profile.ID), syncScopeAll)
 		if err == nil {
 			have = locs
 		}
@@ -908,6 +914,7 @@ func (s *Store) restoreChunked(m *syncManifest, dir, root, stage string, t *tran
 			t.set(plainDone)
 			return os.WriteFile(filepath.Join(scratch, id), data, 0o600)
 		}, func(n int64) {
+			t.wire(n)
 			wire += n
 			if wire < cur {
 				t.set(plainDone + wire)

@@ -1578,6 +1578,7 @@ export namespace main {
 	    fpCheckUrl?: string;
 	    fpCheckFreq?: string;
 	    fpCheckAt?: number;
+	    syncContent?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Profile(source);
@@ -1618,6 +1619,7 @@ export namespace main {
 	        this.fpCheckUrl = source["fpCheckUrl"];
 	        this.fpCheckFreq = source["fpCheckFreq"];
 	        this.fpCheckAt = source["fpCheckAt"];
+	        this.syncContent = source["syncContent"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -2311,6 +2313,7 @@ export namespace main {
 	    fpCheckSite?: string;
 	    fpCheckUrl?: string;
 	    fpCheckOnce?: boolean;
+	    syncContent?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -2357,6 +2360,7 @@ export namespace main {
 	        this.fpCheckSite = source["fpCheckSite"];
 	        this.fpCheckUrl = source["fpCheckUrl"];
 	        this.fpCheckOnce = source["fpCheckOnce"];
+	        this.syncContent = source["syncContent"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -2805,6 +2809,28 @@ export namespace main {
 	    }
 	}
 	
+	export class SyncSizeEstimate {
+	    lite: number;
+	    standard: number;
+	    full: number;
+	    never: number;
+	    mode: string;
+	    exists: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SyncSizeEstimate(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.lite = source["lite"];
+	        this.standard = source["standard"];
+	        this.full = source["full"];
+	        this.never = source["never"];
+	        this.mode = source["mode"];
+	        this.exists = source["exists"];
+	    }
+	}
 	
 	export class SyncerState {
 	    running: boolean;
@@ -2989,6 +3015,7 @@ export namespace main {
 	    speed: number;
 	    eta: number;
 	    saved: number;
+	    sent: number;
 	    started: number;
 	    error?: string;
 	    final: boolean;
@@ -3008,6 +3035,7 @@ export namespace main {
 	        this.speed = source["speed"];
 	        this.eta = source["eta"];
 	        this.saved = source["saved"];
+	        this.sent = source["sent"];
 	        this.started = source["started"];
 	        this.error = source["error"];
 	        this.final = source["final"];
@@ -3047,6 +3075,7 @@ export namespace main {
 	    fpCheckUrl?: string;
 	    fpCheckFreq?: string;
 	    fpCheckAt?: number;
+	    syncContent?: string;
 	    size: number;
 	    expiresAt: number;
 	    hasData: boolean;
@@ -3092,6 +3121,7 @@ export namespace main {
 	        this.fpCheckUrl = source["fpCheckUrl"];
 	        this.fpCheckFreq = source["fpCheckFreq"];
 	        this.fpCheckAt = source["fpCheckAt"];
+	        this.syncContent = source["syncContent"];
 	        this.size = source["size"];
 	        this.expiresAt = source["expiresAt"];
 	        this.hasData = source["hasData"];

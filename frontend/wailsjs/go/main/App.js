@@ -854,6 +854,10 @@ export function SyncServerInfo() {
   return window['go']['main']['App']['SyncServerInfo']();
 }
 
+export function SyncSizeEstimate(arg1) {
+  return window['go']['main']['App']['SyncSizeEstimate'](arg1);
+}
+
 export function SyncTabAction(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['SyncTabAction'](arg1, arg2, arg3, arg4, arg5);
 }

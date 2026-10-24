@@ -18,6 +18,15 @@ import (
 
 const swIndex = "Default/Service Worker/ScriptCache/index"
 
+// syncFullMode switches test devices to 同步内容 完整.
+func syncFullMode(ss ...*Store) {
+	for _, s := range ss {
+		st := s.GetSettings()
+		st.SyncContent = syncScopeFull
+		s.PutSettings(st)
+	}
+}
+
 func writeRel(t *testing.T, dir, rel string, data []byte) {
 	t.Helper()
 	p := filepath.Join(dir, filepath.FromSlash(rel))
@@ -88,6 +97,7 @@ func sameList(a, b []string) bool { return strings.Join(a, ",") == strings.Join(
 func TestVolatileFileRechunkedDuringUpload(t *testing.T) {
 	env := startRepServer(t)
 	a, b := env.dev("a", "dev-A"), env.dev("b", "dev-B")
+	syncFullMode(a, b) // the volatile file is a Service Worker index (标准 / 完整)
 	p, big := repProfile(t, a, "volatile", 9<<20)
 	dir := a.ProfileDir(p.ID)
 	writeRel(t, dir, swIndex, bytes.Repeat([]byte("old-index "), 300))
@@ -125,6 +135,7 @@ func TestVolatileFileRechunkedDuringUpload(t *testing.T) {
 func TestVolatileStaleCacheIndex(t *testing.T) {
 	env := startRepServer(t)
 	a, b := env.dev("a", "dev-A"), env.dev("b", "dev-B")
+	syncFullMode(a, b) // the volatile file is a Service Worker index (标准 / 完整)
 	p, _ := repProfile(t, a, "stale", 1<<20)
 	dir := a.ProfileDir(p.ID)
 	old := bytes.Repeat([]byte{1}, 4096)
@@ -178,6 +189,7 @@ func TestVolatileStaleCacheIndex(t *testing.T) {
 func TestVolatileFileKeepsChanging(t *testing.T) {
 	env := startRepServer(t)
 	a := env.dev("a", "dev-A")
+	syncFullMode(a) // the volatile file is a Service Worker index (标准 / 完整)
 	p, _ := repProfile(t, a, "busy", 1<<20)
 	dir := a.ProfileDir(p.ID)
 	writeRel(t, dir, swIndex, []byte("first"))
@@ -228,10 +240,10 @@ func TestExcludedCacheDirs(t *testing.T) {
 	dir := t.TempDir()
 	skipped, kept := excludedFixture(t, dir)
 	got := map[string]bool{}
-	if e := walkSyncFiles(dir, func(rel string, _ os.FileInfo) error { got[rel] = true; return nil }); e != nil {
+	if e := walkSyncFiles(dir, syncScopeAll, func(rel string, _ os.FileInfo) error { got[rel] = true; return nil }); e != nil {
 		t.Fatal(e)
 	}
-	zb, e := zipDir(dir, &Profile{ID: "x"})
+	zb, e := zipDir(dir, &Profile{ID: "x"}, syncScopeAll)
 	if e != nil {
 		t.Fatal(e)
 	}

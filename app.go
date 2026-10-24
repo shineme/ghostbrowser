@@ -1301,6 +1301,9 @@ func (a *App) TrashDays() int { return trashDays(a.store.GetSettings()) }
 // (cookies incl. partitioned, LocalStorage, IndexedDB) for the UI.
 func (a *App) SessionStoreInfo(id string) SessionStoreInfo { return a.store.SessionStoreInfo(id) }
 
+// SyncSizeEstimate: how much of the profile each 同步内容 mode carries.
+func (a *App) SyncSizeEstimate(id string) SyncSizeEstimate { return a.store.SyncSizeEstimate(id) }
+
 // ---- 环境自检 / 一键修复 ----
 
 // CheckEnvironment runs the environment self-check for one profile.

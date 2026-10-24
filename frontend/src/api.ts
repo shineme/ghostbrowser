@@ -653,6 +653,13 @@ const M = {
   PurgeTrash: async (ids: string[]): Promise<number> => { await wait(400); const n = trashMock.filter(x => ids.includes(x.id)).length; trashMock.splice(0, trashMock.length, ...trashMock.filter(x => !ids.includes(x.id))); return n; },
   EmptyTrash: async (): Promise<number> => { await wait(500); const n = trashMock.length; trashMock.length = 0; return n; },
   TrashDays: async (): Promise<number> => trashDaysMock,
+  // ---- 同步内容 ----
+  SyncSizeEstimate: async (id: string): Promise<any> => {
+    const p = mock.profiles.find(x => x.id === id); const g = (mock.settings as any).syncContent || 'lite';
+    const mode = (p as any)?.syncContent || g;
+    if (!p?.lastRun) return { lite: 0, standard: 0, full: 0, never: 0, mode, exists: false };
+    const MB = 1048576; return { lite: 18.4 * MB, standard: 96.2 * MB, full: 131.7 * MB, never: 612.5 * MB, mode, exists: true };
+  },
   // ---- session store ----
   SessionStoreInfo: async (id: string): Promise<any> => {
     const p = mock.profiles.find(x => x.id === id); const on = (mock.settings as any).syncSessionStorage !== false;
@@ -789,7 +796,7 @@ const M = {
   PendingRestart: async (): Promise<string[]> => mock.running.map(r => r.profileId).filter(id => { const p = mock.profiles.find(x => x.id === id); return p && shellMock.launched[id] !== undefined && shellMock.launched[id] !== shellMock.key(p); }),
   RestartProfile: async (id: string): Promise<any> => { await wait(1400); const p = mock.profiles.find(x => x.id === id); if (p) shellMock.launched[id] = shellMock.key(p); return mock.running.find(r => r.profileId === id); },
   StartProfileAt: async (id: string, url: string): Promise<any> => { await wait(700); if (!/^https?:\/\//i.test(url)) throw '网址无效：只支持 http/https'; let r = mock.running.find(x => x.profileId === id); if (!r) { r = { profileId: id, pid: 1234, debugPort: 9222, wsUrl: '', startedAt: Date.now() / 1000 }; mock.running.push(r); const p = mock.profiles.find(x => x.id === id); if (p) shellMock.launched[id] = shellMock.key(p); } return r; },
-  AppVersion: async (): Promise<string> => '0.8.9',
+  AppVersion: async (): Promise<string> => '0.8.10',
   // ---- proxy subscriptions ---- (#subbad = preview fails)
   ListSubscriptions: async (): Promise<Subscription[]> => subMock.subs.map(x => ({ ...x })),
   PreviewSubscription: async (url: string, _ua: string): Promise<SubPreview> => {
@@ -907,10 +914,10 @@ function simTransfer(id: string, name: string, dir: 'up' | 'down', total: number
       const iv = setInterval(() => {
         const sp = (total / (ms / 1000)) * (0.7 + Math.random() * 0.6);
         done = Math.min(total, done + sp * 0.2);
-        mockEmit('sync:progress', { id, name, dir, phase: ph, done, total, speed: sp, eta: Math.round((total - done) / sp), saved, started, final: false });
+        mockEmit('sync:progress', { id, name, dir, phase: ph, done, total, speed: sp, eta: Math.round((total - done) / sp), saved, sent: Math.round(done * 0.31), started, final: false });
         if (done >= total) {
           clearInterval(iv);
-          mockEmit('sync:progress', { id, name, dir, phase: 'done', done: total, total, speed: total / (ms / 1000), eta: 0, saved, started, final: true });
+          mockEmit('sync:progress', { id, name, dir, phase: 'done', done: total, total, speed: total / (ms / 1000), eta: 0, saved, sent: Math.round(total * 0.31), started, final: true });
           res();
         }
       }, 200);
@@ -1274,7 +1281,7 @@ const recFinalize = (steps: any[], o: any) => {
 const shellMock: any = {
   key: (p: any) => JSON.stringify([p.proxyId, p.kernel || '', p.fingerprint?.timezone, p.fingerprint?.languages, p.fingerprint?.userAgent, p.fingerprint?.screenWidth]),
   launched: {} as Record<string, string>,
-  info: { current: '0.8.8', latest: '0.8.9', available: true, source: 'server', checkedAt: Date.now() / 1000 - 420, error: '',
+  info: { current: '0.8.9', latest: '0.8.10', available: true, source: 'server', checkedAt: Date.now() / 1000 - 420, error: '',
     notes: '## 新功能\n- **托盘常驻**：关闭窗口后环境和代理继续运行，可从托盘恢复\n- **待重启提示**：运行中修改代理或指纹后一键重启生效\n- 网站快捷入口与公告中心\n\n## 修复\n1. 修复云同步在弱网下偶尔重复上传的问题\n2. 修复部分 4K 屏幕下窗口排列错位\n\n详情见 [更新日志](https://example.com/changelog)' },
   prog: { phase: 'idle', got: 0, total: 0, pct: 0 },
   install() {

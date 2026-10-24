@@ -71,39 +71,19 @@ func decrypt(blob, pass []byte) ([]byte, error) {
 	return gcm.Open(nil, blob[20:32], blob[32:], nil)
 }
 
-func zipDir(dir string, p *Profile) ([]byte, error) {
+func zipDir(dir string, p *Profile, sc contentScope) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
-	excluded := syncExcludedDirs
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if path == dir {
-			return nil
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return nil
-		}
-		low := strings.ToLower(info.Name())
-		if info.IsDir() {
-			if excluded[low] {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			return err
-		}
-		if syncSkipFile(rel, low) {
-			return nil
-		}
+	err := walkSyncFiles(dir, sc, func(rel string, _ os.FileInfo) error {
+		path := filepath.Join(dir, filepath.FromSlash(rel))
 		f, err := os.Open(path)
+		if os.IsNotExist(err) {
+			return nil // vanished while walking
+		}
 		if err != nil {
 			return err
 		}
-		w, err := zw.Create(filepath.ToSlash(rel))
+		w, err := zw.Create(rel)
 		if err != nil {
 			f.Close()
 			return err
@@ -479,18 +459,20 @@ func (s *Store) pushProfileInner(id string, sent *int64, t *transfer, res *pushR
 	var refs []string
 	var files []manifestFile
 	var cu *chunkedUpload
+	scope := syncScopeFor(st, p)
 	if si, err := s.ServerInfo(false); err == nil && si.has("chunks") {
-		cu, e = s.buildChunked(dir, root, &archived, string(secret), t, res != nil)
+		cu, e = s.buildChunked(dir, root, &archived, string(secret), t, res != nil, scope)
 		if e != nil {
 			return e
 		}
-		enc, refs, *sent, files = cu.enc, cu.refs, cu.sent, cu.files
+		enc, refs, files = cu.enc, cu.refs, cu.files
+		*sent = cu.sent + int64(len(enc)) // chunks + manifest
 		if refs == nil {
 			refs = []string{}
 		}
 	} else {
 		t.phase("pack", 0)
-		raw, e := zipDir(dir, &archived)
+		raw, e := zipDir(dir, &archived, newSyncScope(scope))
 		if e != nil {
 			return e
 		}
@@ -555,6 +537,7 @@ func (s *Store) pushProfileInner(id string, sent *int64, t *transfer, res *pushR
 	if e != nil {
 		return e
 	}
+	t.wire(int64(len(enc)))
 	marker := json.RawMessage(`{"encrypted":true,"format":"GBE1","profileMetadata":"in-blob"}`)
 	cm := cloudMeta{ID: id, Name: p.Name, Version: p.CloudVer + 1, Sha256: hex.EncodeToString(sum[:]), Meta: marker}
 	var result struct {
@@ -573,7 +556,7 @@ func (s *Store) pushProfileInner(id string, sent *int64, t *transfer, res *pushR
 		if _, e2 := cu.reupload(); e2 != nil {
 			return fmt.Errorf("commit: %w (补传缺失分块失败：%v)", e, e2)
 		}
-		*sent = cu.sent
+		*sent = cu.sent + int64(len(enc))
 		t.phase("commit", 0)
 		e = c.jsonRequest("POST", path+"/commit", cm, &result)
 	}
@@ -695,6 +678,7 @@ func (s *Store) pullProfileInner(id string, want int64, got *int64, t *transfer)
 	}
 	defer os.RemoveAll(stage)
 	*got = int64(len(enc))
+	t.wire(int64(len(enc)))
 	var p Profile
 	man, chunked, e := decodeManifest(raw)
 	if e != nil {
@@ -749,6 +733,17 @@ func (s *Store) pullProfileInner(id string, want int64, got *int64, t *transfer)
 			_ = os.Rename(backup, dir)
 		}
 		return fmt.Errorf("restore failed: %w", e)
+	}
+	if backup != "" {
+		// Keep what the cloud copy deliberately does not carry (caches,
+		// component data, history in 精简 …) instead of losing it on pull.
+		carry := syncScopeAll
+		if chunked && man.Scope != "" {
+			carry = newSyncScope(man.Scope)
+		} else if !chunked {
+			carry = newSyncScope(syncScopeFor(st, &p))
+		}
+		carryLocalOnly(backup, dir, carry)
 	}
 	s.PutProfile(p)
 	s.clearLocalDeleted(id) // restored on purpose: auto sync may follow it again

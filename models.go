@@ -158,6 +158,8 @@ type Profile struct {
 	FpCheckURL  string `json:"fpCheckUrl,omitempty"`  // custom site
 	FpCheckFreq string `json:"fpCheckFreq,omitempty"` // "" = 跟随全局 | once | every
 	FpCheckAt   int64  `json:"fpCheckAt,omitempty"`   // when the check page was opened (仅首次启动)
+	// 同步内容 override (syncscope.go): "" = 跟随全局 | lite | standard | full.
+	SyncContent string `json:"syncContent,omitempty"`
 }
 
 // needsOpenKernel: the custom kernel only carries Windows desktop templates.
@@ -227,6 +229,9 @@ type Settings struct {
 	FpCheckSite string `json:"fpCheckSite,omitempty"` // site key ("" = browserscan) | builtin | custom
 	FpCheckURL  string `json:"fpCheckUrl,omitempty"`  // custom site
 	FpCheckOnce bool   `json:"fpCheckOnce,omitempty"` // only on a profile's first launch
+	// 同步内容 (syncscope.go): "" / lite = 精简, standard = 标准, full = 完整.
+	// Synced with the other settings; a profile may override it.
+	SyncContent string `json:"syncContent,omitempty"`
 }
 
 type RunState struct {

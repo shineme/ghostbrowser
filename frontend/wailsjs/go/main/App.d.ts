@@ -428,6 +428,8 @@ export function SyncNow():Promise<main.SyncEvent>;
 
 export function SyncServerInfo():Promise<main.serverInfo>;
 
+export function SyncSizeEstimate(arg1:string):Promise<main.SyncSizeEstimate>;
+
 export function SyncTabAction(arg1:string,arg2:Array<string>,arg3:string,arg4:string,arg5:boolean):Promise<main.TabActionResult>;
 
 export function SyncerState():Promise<main.SyncerState>;

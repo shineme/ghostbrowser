@@ -9,6 +9,7 @@ import { AppShellSettings } from './AppShell';
 import { DefaultBrowserCard } from './DefaultBrowser';
 import { CoreCard } from './Subscriptions';
 import { FpCheckSettingsCard } from './FpCheck';
+import { SyncContentSetting } from './SyncContent';
 
 const mb = (b: number) => b ? `${(b / 1048576).toFixed(b > 1e8 ? 0 : 1)} MB` : '';
 
@@ -129,6 +130,7 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
           <Field label="云端较新时询问等待（秒）" hint="0 = 不弹窗，直接执行右侧动作"><input type="number" min={0} max={300} value={s.syncPromptSecs ?? 3} onChange={e => set({ syncPromptSecs: Math.max(0, Math.min(300, Math.round(+e.target.value || 0))) })} /></Field>
           <Field label="倒计时结束后"><select value={s.syncPromptAction || 'pull'} onChange={e => set({ syncPromptAction: e.target.value })}><option value="pull">拉取云端覆盖本地</option><option value="keep">保留本地（上传覆盖云端）</option></select></Field>
         </div>}
+        <SyncContentSetting s={s} set={set} />
         {/* ---- session store ---- */}
         <Toggle on={(s as any).syncSessionStorage !== false} onChange={v => set({ syncSessionStorage: v } as any)} label="同步网站登录状态（会话存储）" hint="换设备启动时恢复网站登录。除普通 Cookie 外，还同步分区 Cookie、LocalStorage 和 IndexedDB，适合网页应用（SPA）。关闭后只同步普通 Cookie" />
         <div className={`ss-opts ${(s as any).syncSessionStorage !== false ? '' : 'dim'}`}>

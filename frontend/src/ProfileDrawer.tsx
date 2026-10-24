@@ -7,6 +7,7 @@ import { CookieModal } from './CookieModal';
 import { ExtIcon, Ext } from './ExtensionsView';
 import { GuardPane, LaunchPane, seedShort } from './FpControls';
 import { FpCheckProfilePane } from './FpCheck';
+import { SyncContentProfileField } from './SyncContent';
 import { KernelMissingNotice } from './KernelInstall';
 import { FoxIcon, FirefoxMissingNotice, FirefoxFpPane, FirefoxFontPane, FirefoxGuardPane, FirefoxLaunchPane, useFirefoxInfo, ffVersionLabel } from './FirefoxKernel';
 import { DEVICE_TYPES, TRUST, devType, osName, osVerLabel, needsOpen, uaOSOf } from './devices';
@@ -222,6 +223,7 @@ export const ProfileDrawer: React.FC<{
             <Field label="存储方式">
               <SelectField value={p.storage || 'local'} onChange={v => setP({ ...p, storage: v })} options={[['local', '本地 — 只存在这台电脑'], ['cloud', '云端 — 同步到你的 VPS']]} />
             </Field>
+            {p.storage === 'cloud' && <SyncContentProfileField p={p} setP={setP as any} existing={!!profile} />}
             <Field label="代理">
               <ProxyPicker value={p.proxyId || ''} onChange={v => setP({ ...p, proxyId: v })} proxies={[...extraProxies.filter(x => !proxies.some(y => y.id === x.id)), ...proxies]} />
               <div className="combo-row" style={{ marginTop: 6 }}>

@@ -5,7 +5,7 @@ import { Icon } from './ui';
 export type Transfer = {
   id: string; name: string; dir: 'up' | 'down';
   phase: 'scan' | 'pack' | 'upload' | 'commit' | 'download' | 'write' | 'done' | 'error';
-  done: number; total: number; speed: number; eta: number; saved: number; started: number; error?: string; final: boolean;
+  done: number; total: number; speed: number; eta: number; saved: number; sent?: number; started: number; error?: string; final: boolean;
 };
 
 // ---- tiny shared store: the dock, the profile list and the cloud list all read it ----
@@ -95,7 +95,7 @@ const Row: React.FC<{ t: Entry }> = ({ t }) => {
         <div className="xtop">
           <span className="xname" title={t.name}>{t.name}</span>
           <span className="xphase">{t.phase === 'upload' || t.phase === 'download' ? label : `${t.dir === 'up' ? '上传' : '拉取'} · ${label}`}</span>
-          {t.saved > 0 && t.phase !== 'error' && <span className="xsave" title="对方已有这些数据，增量同步不再传输">省 {fmtBytes(t.saved)}</span>}
+          {t.saved > 0 && t.phase !== 'error' && <span className="xsave" title={t.dir === 'up' ? '这些文件或分块与云端相同，增量同步不再上传' : '本地已有这些分块，直接复用，不再下载'}>跳过 {fmtBytes(t.saved)}（{t.dir === 'up' ? '未变化' : '本地已有'}）</span>}
           <span className="xpct num">{t.phase === 'done' ? '100%' : moving && t.total > 0 ? `${p < 10 ? p.toFixed(1) : Math.floor(p)}%` : ''}</span>
           {t.final && <button className="xx" onClick={() => dismiss(t.id)} aria-label="关闭"><Icon.x s={12} /></button>}
         </div>
@@ -104,9 +104,9 @@ const Row: React.FC<{ t: Entry }> = ({ t }) => {
           {t.phase === 'error'
             ? <span className="xerr" title={t.error}>{t.error}</span>
             : t.phase === 'done'
-              ? <span className="num">用时 {fmtEta(elapsed)}{t.speed > 0 ? ` · 平均 ${fmtSpeed(t.speed)}` : ''}</span>
+              ? <span className="num" title="实际经过网络的字节数（压缩加密后），不含跳过的未变化数据">{t.dir === 'up' ? '实际上传' : '实际下载'} {fmtBytes(t.sent || 0)} · 用时 {fmtEta(elapsed)}</span>
               : moving && t.total > 0
-                ? <span className="num">{fmtBytes(t.done)} / {fmtBytes(t.total)}{t.phase !== 'write' && t.speed > 0 ? <> · <b>{fmtSpeed(t.speed)}</b></> : null}{t.eta > 0 ? ` · 约 ${fmtEta(t.eta)}` : ''}</span>
+                ? <span className="num" title={t.phase === 'upload' ? '变化数据（压缩前）；实际传输压缩后通常更小' : undefined}>{t.phase === 'upload' ? '变化 ' : ''}{fmtBytes(t.done)} / {fmtBytes(t.total)}{(t.sent || 0) > 0 && t.phase !== 'write' ? ` · 已传 ${fmtBytes(t.sent || 0)}` : ''}{t.phase !== 'write' && t.speed > 0 ? <> · <b>{fmtSpeed(t.speed)}</b></> : null}{t.eta > 0 ? ` · 约 ${fmtEta(t.eta)}` : ''}</span>
                 : <span>{hint || '准备中'}</span>}
           {t.phase !== 'error' && <Spark v={t.hist} dir={t.dir} />}
         </div>

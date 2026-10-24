@@ -253,7 +253,7 @@ func (s *Store) CreateShare(r ShareRequest) (ShareInfo, error) {
 		}
 		defer os.RemoveAll(src)
 	}
-	raw, e := zipDir(src, &a)
+	raw, e := zipDir(src, &a, newSyncScope(syncScopeLite)) // login state only: no history / tabs to another user
 	if e != nil {
 		return out, e
 	}

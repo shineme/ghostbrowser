@@ -64,7 +64,7 @@ func TestChunkUploadSplitsOn413(t *testing.T) {
 	var evs []TransferEvent
 	s.onTransfer = func(e TransferEvent) { evs = append(evs, e) }
 	tr := s.newTransfer(p.ID, "up")
-	cu, e := s.buildChunked(dir, s.Settings.ProfilesDir, &cp, "pw", tr, false)
+	cu, e := s.buildChunked(dir, s.Settings.ProfilesDir, &cp, "pw", tr, false, syncScopeFull)
 	tr.finish(e)
 	if e != nil {
 		t.Fatal(e)
