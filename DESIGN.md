@@ -58,3 +58,12 @@
 
 ## 无边框窗口
 Wails 开启 Frameless + 透明 WebView2，四周圆角由 CSS 绘制。外框是 1px 白色 8% 描边加顶部内高光，叠在最上层，保证圆角边缘清晰。拖动区域是顶栏和 Logo，窗口按钮自绘。
+
+## Graphite (v0.9.0)
+Replaces the Spectral look; tokens and overrides live in frontend/src/graphite.css (loaded after style.css).
+- Stage: graphite #1D1D20 with a soft top-left radial; no aurora. Surfaces are pure black #050506 cards with a .6px hairline (`--edge`) and a soft drop shadow (`--lift`); radius 24 for cards, 28 for large cards, pills = height/2.
+- One accent per section (`--c-<tab>`): 环境 #A78BFA, 代理 #2DD4BF, 自动化 #F5A524, 扩展 #F472B6, 云同步 #4F8CFF, 接口审计 #FF7A6B, 终端/设置 #A1A1AA. Running = #30D158, failure #FF5A52, warning #FFB547. An accent appears as the hero number, an icon chip (accent at 15%) and fills.
+- Numbers that change use `<Roll>` (ui.tsx): odometer digits that spring the short way. Running time uses `<Uptime since>` (ticks each second).
+- Stats are Live Activity pills (`StatCard` with `sub`). Buttons and pickers are pills. Profile list rows are separate black cards (`.panel.list.plist`); a list/card toggle (`gb.view` in localStorage) shows `.pcard` cards.
+- 实时活动 rail (LiveRail.tsx) beside the profile page at window width ≥ 1680 px: local API, uploads/downloads (sync:progress), RPA runs (rpa:event + WorkflowRun), syncer (syncer:event), proxy health (one bar per proxy, height = latency). It replaces the transfer dock on that page; below 1680 px the dock stays.
+- In-progress text uses `.shim` (a highlight sweeping through it).

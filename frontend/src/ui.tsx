@@ -417,12 +417,31 @@ export const Splash: React.FC = () => {
   );
 };
 
-export const StatCard: React.FC<{ l: string; n: number; of?: number; ic: keyof typeof Icon; tone?: string; pct: number }> = ({ l, n, of, ic, tone = '', pct }) => {
+/** Odometer digits (Graphite): each digit is a 0-9 column that springs to its value, rolling the short way. */
+const RollDigit: React.FC<{ d: number }> = ({ d }) => {
+  const pos = useRef(d + 10); const [p, setP] = useState(d + 10);
+  useEffect(() => { const cur = ((pos.current % 10) + 10) % 10; let diff = ((d - cur) % 10 + 10) % 10; if (diff > 5) diff -= 10; pos.current += diff; setP(pos.current); }, [d]);
+  return <span className="rd"><span className="rd-c" style={{ transform: `translateY(${-p * 1.2}em)` }}>{Array.from({ length: 30 }, (_, j) => <b key={j}>{j % 10}</b>)}</span></span>;
+};
+export const Roll: React.FC<{ v: string | number; className?: string }> = ({ v, className }) => {
+  const s = String(v);
+  return <span className={`roll num ${className || ''}`} aria-label={s}>{[...s].map((c, i) => /\d/.test(c) ? <RollDigit key={s.length - i} d={+c} /> : <span key={`c${s.length - i}${c}`} className="rd-s">{c}</span>)}</span>;
+};
+export const fmtUptime = (sec: number) => { sec = Math.max(0, Math.floor(sec)); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), x = sec % 60; return (h ? `${h}:${String(m).padStart(2, '0')}` : `${m}`) + ':' + String(x).padStart(2, '0'); };
+/** Live run time since a unix-seconds start, ticking each second. */
+export const Uptime: React.FC<{ since?: number; className?: string }> = ({ since, className }) => {
+  const [, tick] = useState(0);
+  useEffect(() => { if (!since) return; const t = setInterval(() => tick(x => x + 1), 1000); return () => clearInterval(t); }, [since]);
+  if (!since) return <span className={className}>启动中</span>;
+  return <Roll v={fmtUptime(Date.now() / 1000 - since)} className={className} />;
+};
+
+export const StatCard: React.FC<{ l: string; n: number; of?: number; ic: keyof typeof Icon; tone?: string; pct?: number; sub?: React.ReactNode }> = ({ l, n, of, ic, tone = '', sub }) => {
   const I = Icon[ic];
   return <div className={`stat spot ${tone}`}>
-    <div className="top"><span className="l">{l}</span><span className="ic"><I /></span></div>
-    <div className="n"><CountUp n={n} />{of != null && <small className="num">/ {of}</small>}</div>
-    <div className="bar"><i style={{ width: `${Math.max(pct, 2)}%` }} /></div>
+    <span className="ic"><I /></span>
+    <div className="st-t"><span className="l">{l}</span>{sub != null && <span className="st-sub">{sub}</span>}</div>
+    <div className="n"><Roll v={n} />{of != null && <small className="num">/{of}</small>}</div>
   </div>;
 };
 

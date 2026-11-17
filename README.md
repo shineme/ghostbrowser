@@ -79,6 +79,8 @@ go test -run TestEnsureAgainstRealShop -v .
 
 ## 功能
 
+- **界面（Graphite，v0.9.0）**：石墨灰底 + 纯黑圆角卡片，每个板块一种强调色；数字滚动跳变；环境支持「列表 / 卡片」两种视图，运行中的环境显示实时运行时长；窗口宽度 ≥ 1680 px 时环境页右侧显示「实时活动」栏（本地 API、云同步进度、自动化流程、同步器、代理健康）。
+
 - 应用图标（v0.8.5）：Spectral 渐变幽灵 + 指纹纹路，透明背景；EXE、托盘、侧栏和启动画面统一使用（源文件 `frontend/src/assets/images/ghost-mark.svg`）。
 
 ### 环境

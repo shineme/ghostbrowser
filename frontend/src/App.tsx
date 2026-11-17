@@ -5,7 +5,8 @@ import { ThinkingOrb } from 'thinking-orbs';
 import { api, Profile, Proxy, Settings, onEvent } from './api';
 import { DeleteModal, DelTarget } from './DeleteModal';
 import { TrashModal, useTrashCount } from './TrashView';
-import { Icon, Field, flag, ago, useToast, useConfirm, useExit, ToastHost, WindowControls, useMaximised, StatCard, Avatar, CC, CountUp, OsIcon, Ambient, Splash, useSpotlight, Pick, Segmented, DevIcon, MoreMenu } from './ui';
+import { Icon, Field, flag, ago, useToast, useConfirm, useExit, ToastHost, WindowControls, useMaximised, StatCard, Avatar, CC, CountUp, OsIcon, Ambient, Splash, useSpotlight, Pick, Segmented, DevIcon, MoreMenu, Roll, Uptime } from './ui';
+import { LiveRail } from './LiveRail';
 import { DEVICE_TYPES, devType, devName, osName as osNameOf, needsOpen } from './devices';
 import { ProfileDrawer } from './ProfileDrawer';
 import { useSubs, groupKey, groupOptions, isCore, protoOf } from './Subscriptions';
@@ -69,6 +70,8 @@ function Shell() {
   useEffect(() => onEvent('defaultbrowser:opened', (e: any) => { if (e?.error) toast(`链接没有打开（${e.name || '环境'}）：${e.error}`, 'bad'); }), []);
 
   const proxyName = useMemo(() => Object.fromEntries(proxies.map(p => [p.id, p])), [proxies]);
+  // the live rail replaces the bottom-right transfer dock on the profile page (wide windows only, see graphite.css)
+  useEffect(() => { document.body.classList.toggle('rail-on', tab === 'profiles'); }, [tab]);
 
   const titles: Record<Tab, [string, string]> = {
     profiles: ['浏览器环境', '每个环境拥有独立指纹、代理与数据目录'],
@@ -150,7 +153,7 @@ function Shell() {
       </aside>
       {tip && collapsed && <div className="side-tip" style={{ top: tip.y }}>{tip.text.split('　')[0]}{tip.text.includes('　') && <kbd>{tip.text.split('　')[1]}</kbd>}</div>}
 
-      <main className="main">
+      <main className={`main ${tab === 'profiles' ? 'has-rail' : ''}`}>
         <div className="topbar">
           <div key={tab} className="page">
             <h2>{titles[tab][0]}</h2>
@@ -170,6 +173,7 @@ function Shell() {
             {tab === 'settings' && settings && <SettingsView key={settingsRev} settings={settings} onSaved={s => { setSettings(s); toast('设置已保存'); }} />}
           </div>
         </div>
+        {tab === 'profiles' && <LiveRail profiles={profiles} proxies={proxies} settings={settings} />}
       </main>
       <LinkPicker profiles={profiles} running={running} />
     </div>
@@ -205,6 +209,8 @@ const ProfilesView: React.FC<{
   const [pending, refreshPending] = usePendingRestart([profiles, proxyName, running]);
   const { restart, restarting } = useRestart(useCallback(() => { reload(); refreshPending(); }, [reload, refreshPending]));
   const [, tick] = useState(0);
+  const [view, setView] = useState<'list' | 'grid'>(() => { try { return localStorage.getItem('gb.view') === 'grid' ? 'grid' : 'list'; } catch { return 'list'; } });
+  const setViewP = (v: 'list' | 'grid') => { setView(v); try { localStorage.setItem('gb.view', v); } catch { /* private mode */ } };
   useEffect(() => { api.SyncBusy().then((b: any) => setSyncBusy(new Set(b || []))).catch(() => {}); }, []);
   useEffect(() => onEvent('sync:event', (e: any) => {
     if (e.phase === 'busy') setSyncBusy(s => new Set(s).add(e.id));
@@ -269,7 +275,7 @@ const ProfilesView: React.FC<{
       <h3>还没有环境</h3>
       <div>创建第一个浏览器环境，它会拥有一套独立的指纹、代理和数据目录。</div>
       <div className="actions">
-        <BorderBeam size="sm" colorVariant="ocean" theme="dark" borderRadius={9}>
+        <BorderBeam size="sm" colorVariant="ocean" theme="dark" borderRadius={19}>
           <button className="btn primary" onClick={() => { setEditing(null); setDrawer(true); }}><Icon.plus s={15} /> 新建环境</button>
         </BorderBeam>
         <button className="btn" onClick={() => setBulk(true)}><Icon.layers s={15} /> 批量创建</button>
@@ -285,14 +291,15 @@ const ProfilesView: React.FC<{
 
   const cloudN = profiles.filter(p => p.storage === 'cloud').length;
   const proxied = profiles.filter(p => p.proxyId).length;
+  const avgLat = (() => { const l = profiles.map(p => proxyName[p.proxyId]).filter(px => px && px.status === 'ok' && px.latency).map(px => px!.latency); return l.length ? Math.round(l.reduce((a, b) => a + b, 0) / l.length) : 0; })();
 
   return (
     <div className={sel.size ? 'has-bulk' : ''} style={{ display: 'contents' }}>
       <div className="stat-row">
-        <StatCard l="环境总数" n={profiles.length} ic="layers" pct={100} />
-        <StatCard l="运行中" n={running.size} of={profiles.length} ic="bolt" tone="ok" pct={profiles.length ? running.size / profiles.length * 100 : 0} />
-        <StatCard l="云端同步" n={cloudN} of={profiles.length} ic="cloud" tone="vi" pct={profiles.length ? cloudN / profiles.length * 100 : 0} />
-        <StatCard l="已分配代理" n={proxied} of={profiles.length} ic="globe" tone="cy" pct={profiles.length ? proxied / profiles.length * 100 : 0} />
+        <StatCard l="环境总数" n={profiles.length} ic="layers" sub={`本机 ${profiles.length - cloudN} · 云端 ${cloudN}`} />
+        <StatCard l="运行中" n={running.size} of={profiles.length} ic="bolt" tone="ok" sub={`空闲 ${profiles.length - running.size} 个`} />
+        <StatCard l="云端同步" n={cloudN} of={profiles.length} ic="cloud" tone="vi" sub={syncBusy.size ? `${syncBusy.size} 个正在同步` : '已是最新'} />
+        <StatCard l="已分配代理" n={proxied} of={profiles.length} ic="globe" tone="cy" sub={avgLat ? `平均 ${avgLat} ms` : '尚未检测'} />
       </div>
 
       <div className="toolbar">
@@ -304,11 +311,12 @@ const ProfilesView: React.FC<{
         <Pick label="排序" value={sort} onChange={setSort as any} icon={<Icon.layers />}
           options={[['recent', '最近运行'], ['name', '名称'], ['created', '创建时间']]} />
         {(fGroup !== '\u0000' || fTag) && <><span className="tb-count num">{list.length} / {profiles.length}</span><button className="tb-clear" onClick={() => { setFGroup('\u0000'); setFTag(''); }}>清除</button></>}
+        <Segmented className="compact view-tg" items={[['list', '列表'], ['grid', '卡片']]} value={view} onChange={setViewP} />
         <div className="spacer" />
         {trashBtn}
         <button className="btn" onClick={() => setBulk(true)}><Icon.layers s={15} /> 批量创建</button>
         <button className="btn" onClick={() => setNativeTools(true)}><Icon.shield s={15} /> 指纹库 / JSON</button>
-        <BorderBeam size="sm" colorVariant="ocean" theme="dark" borderRadius={9}>
+        <BorderBeam size="sm" colorVariant="ocean" theme="dark" borderRadius={19}>
           <button className="btn primary" onClick={() => { setEditing(null); setDrawer(true); }}><Icon.plus s={15} /> 新建环境</button>
         </BorderBeam>
       </div>
@@ -325,11 +333,34 @@ const ProfilesView: React.FC<{
         <WindowTools running={runningList.filter(p => (p as any).kernel !== 'firefox')} selected={[...sel].filter(id => running.has(id))} bulk={sel.size > 0} />
       </div>}
 
-      <div className="panel list">
+      {view === 'grid' ? <div className="pgrid">{list.map((p, i) => { const px = proxyName[p.proxyId]; const isRun = running.has(p.id); const isBusy = busy.has(p.id) || restarting.has(p.id); const needRestart = isRun && pending.has(p.id); const shared = !!(p as any).shareId;
+        return <div key={p.id} className={`pcard rise ${isRun ? 'running' : ''} ${sel.has(p.id) ? 'sel' : ''}`} style={{ ['--i' as any]: i }}>
+          <div className="pc-h"><Avatar seed={p.fingerprint.noiseSeed || p.id} os={p.fingerprint.os} running={isRun} />
+            <div className="pc-t"><div className="nm"><span className="nm-t">{p.name}</span><DefaultStar profile={p} on={dbStatus.profileId === p.id} onChanged={setDbStatus} />{needRestart && <RestartTag compact />}</div><div className="sub"><OsIcon os={p.fingerprint.os} s={11} /> {osLabel(p.fingerprint.os)} · {(p as any).kernel === 'firefox' ? 'Firefox' : `Chrome ${p.fingerprint.browserVersion}`}</div></div>
+            <span className="spacer" />
+            {isBusy ? <ThinkingOrb state={isRun ? 'breathing' : 'connecting'} size={20} theme="dark" /> : isRun ? <div className="pc-up"><Uptime since={runs[p.id]} className="up" /><span className="pc-live"><i />运行中</span></div>
+              : <button className="pc-go" title="启动" onClick={() => start(p)}><Icon.play s={13} /></button>}</div>
+          <div className="pc-px">{px ? <><CC cc={px.country} /><b>{px.city || px.name}</b><span className="num sub">{px.ip || px.host}</span><span className="spacer" />{px.status === 'fail' ? <span className="badge fail">失效</span> : px.status === 'ok' && px.latency ? <LatDot ms={px.latency} /> : null}</> : <span className="sub">直连</span>}</div>
+          {isRun && <div className="pc-run">{needRestart && <button className="btn sm restart-btn" disabled={isBusy} onClick={() => restart(p)}><Icon.refresh s={12} /> 重启生效</button>}<button className="btn sm" onClick={() => focus(p.id)}><Icon.laptop s={12} /> 切到前台</button><SiteLaunch profile={p} running={isRun} onLaunched={() => {}} /><span className="spacer" /><button className="btn sm stop" disabled={isBusy} onClick={() => stop(p)}><Icon.stop s={11} /> 停止</button></div>}
+          <div className="pc-f"><Chk on={sel.has(p.id)} onClick={() => toggleSel(p.id)} /><span className="tag">{p.group || '未分组'}</span>{(p.tags || []).slice(0, 2).map(t => <span key={t} className="tag">{t}</span>)}<span className="spacer" />
+            {(() => { const [txt, tone] = syncState(p, syncBusy); return <InlineTransfer id={p.id} fallback={<span className={`badge ${tone}`}>{tone === 'local' ? <Icon.laptop s={12} /> : <Icon.cloud s={12} />} {txt}{p.storage === 'cloud' && <span className="num" style={{ marginLeft: 3 }}>v{p.cloudVersion}</span>}</span>} />; })()}
+            {shared ? null : <button className="btn ghost icon" title="编辑" onClick={() => { setEditing(p); setDrawer(true); }}><Icon.edit s={14} /></button>}
+            <MoreMenu title="更多操作" items={[
+              !shared && { label: '环境检测 / 一键修复', icon: <Icon.shield s={14} />, onClick: () => setEnvChk(p) },
+              !shared && { label: '分享给其他用户', icon: <ShIc.share s={14} />, onClick: () => setShareP(p) },
+              !shared && { label: '复制环境', icon: <Icon.copy s={14} />, onClick: () => clone(p) },
+              !shared && p.storage === 'cloud' && { label: '修复云端（强制重新上传）', icon: <Icon.upload s={14} />, onClick: () => repairCloud(p) },
+              !shared && 'sep',
+              { label: '删除', icon: <Icon.trash s={14} />, danger: true, onClick: () => del([p.id]) },
+            ]} /></div>
+        </div>; })}
+        {list.length === 0 && <div className="empty" style={{ padding: 50, gridColumn: '1 / -1' }}><Icon.search s={28} /><div>没有匹配「{q}」的环境</div></div>}
+      </div> :
+      <div className="panel list plist">
         <table>
           <thead><tr>
             <th style={{ width: 44 }}><Chk on={allSel} onClick={() => setSel(allSel ? new Set() : new Set(list.map(p => p.id)))} /></th>
-            <th>环境</th><th>指纹</th><th>代理出口</th><th>存储</th><th>最近使用</th><th style={{ textAlign: 'right' }}>操作</th>
+            <th>环境</th><th>指纹</th><th>代理出口</th><th>存储</th><th>状态</th><th style={{ textAlign: 'right' }}>操作</th>
           </tr></thead>
           <tbody>
             {list.map((p, i) => {
@@ -348,9 +379,9 @@ const ProfilesView: React.FC<{
                   </div>
                 </td>
                 <td><div className="os" style={{ fontWeight: 550 }}><OsIcon os={p.fingerprint.os} s={13} />{osLabel(p.fingerprint.os)} <span className="sub" style={{ margin: 0 }}>{(p as any).kernel === 'firefox' ? 'Firefox' : `Chrome ${p.fingerprint.browserVersion}`}</span><span className={`devtag ${(p as any).kernel === 'firefox' ? 'ff' : ''} ${(p as any).kernel === 'chromium' || needsOpen(p.fingerprint.os, (p.fingerprint as any).deviceType) ? 'open' : ''}`} title={(p as any).kernel === 'firefox' ? 'Firefox 内核' : (p as any).kernel === 'chromium' || needsOpen(p.fingerprint.os, (p.fingerprint as any).deviceType) ? '开源内核' : '定制内核'}>{(p as any).kernel === 'firefox' ? <FoxIcon s={11} /> : null}<DevIcon t={devType((p.fingerprint as any).deviceType)} s={11} />{(p.fingerprint as any).deviceName || devName((p.fingerprint as any).deviceType)}</span></div><div className="sub num">{p.fingerprint.screenWidth}×{p.fingerprint.screenHeight} · {p.fingerprint.hardwareConcurrency}C/{p.fingerprint.deviceMemory}G</div></td>
-                <td>{px ? <div><CC cc={px.country} /><span>{px.city || px.name}</span>{px.status === 'fail' && <span className="badge fail" style={{ marginLeft: 6 }}>失效</span>}<div className="sub num">{px.ip || px.host}{px.ip && ipShare[px.ip] > 1 && <span className="ip-dup" title="多个环境使用同一出口 IP，容易被平台关联"> ⚠ {ipShare[px.ip]} 个环境共用此 IP</span>}</div></div> : <span className="sub">直连</span>}</td>
+                <td>{px ? <div><CC cc={px.country} /><span>{px.city || px.name}</span>{px.status === 'fail' ? <span className="badge fail" style={{ marginLeft: 6 }}>失效</span> : px.status === 'ok' && px.latency ? <LatDot ms={px.latency} /> : null}<div className="sub num">{px.ip || px.host}{px.ip && ipShare[px.ip] > 1 && <span className="ip-dup" title="多个环境使用同一出口 IP，容易被平台关联"> ⚠ {ipShare[px.ip]} 个环境共用此 IP</span>}</div></div> : <span className="sub">直连</span>}</td>
                 <td>{(() => { const [txt, tone] = syncState(p, syncBusy); return <InlineTransfer id={p.id} fallback={<span className={`badge ${tone}`}>{tone === 'local' ? <Icon.laptop s={12} /> : <Icon.cloud s={12} />} {txt}{p.storage === 'cloud' && <span className="num" style={{ marginLeft: 3 }}>v{p.cloudVersion}</span>}</span>} />; })()}</td>
-                <td><span className="sub">{ago(p.lastRun)}</span></td>
+                <td>{isRun ? <div className="up-cell"><Uptime since={runs[p.id]} className="up" /><div className="sub">运行时长</div></div> : <div className="up-cell"><span className="ago">{ago(p.lastRun)}</span><div className="sub">最近使用</div></div>}</td>
                 <td>
                   <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
                     {needRestart && !isBusy && <button className="btn sm icon restart-btn" onClick={() => restart(p)} title="重启：代理、指纹或启动参数已修改，重启后生效" aria-label="重启"><Icon.refresh s={13} /></button>}
@@ -377,7 +408,7 @@ const ProfilesView: React.FC<{
           </tbody>
         </table>
         {list.length === 0 && <div className="empty" style={{ padding: 50 }}><Icon.search s={28} /><div>没有匹配「{q}」的环境</div></div>}
-      </div>
+      </div>}
 
       {sel.size > 0 && <div className="bulkbar">
         <span className="cnt">已选 <b className="num">{sel.size}</b> 个</span>
@@ -542,5 +573,6 @@ const BulkModal: React.FC<{ proxies: Proxy[]; onClose: () => void; onDone: () =>
 };
 
 const osLabel = (o: string) => osNameOf(o);
+const LatDot: React.FC<{ ms: number }> = ({ ms }) => <span className={`latdot num ${ms < 150 ? 'g' : ms < 350 ? 'm' : 'b'}`}><i /><Roll v={ms} /><small>ms</small></span>;
 
 export default function App() { return <ToastHost><Shell /><SyncPrompt /><TransferDock /><EnvSetup onReady={() => {}} /><Splash /></ToastHost>; }
