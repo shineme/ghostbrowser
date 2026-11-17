@@ -48,8 +48,12 @@ func main() {
 		},
 		BackgroundColour: &options.RGBA{R: 0, G: 0, B: 0, A: 0},
 		Windows: &windows.Options{
-			WebviewIsTransparent:              true,
-			WindowIsTranslucent:               false,
+			WebviewIsTransparent: true,
+			// Translucent + no backdrop: the window gets WS_EX_NOREDIRECTIONBITMAP, so the
+			// pixels outside the CSS rounded corners are really transparent instead of
+			// the black the redirection surface paints there.
+			WindowIsTranslucent:               true,
+			BackdropType:                      windows.None,
 			DisableFramelessWindowDecorations: true,
 			Theme:                             windows.Dark,
 		},

@@ -305,3 +305,84 @@ select option { background: #121215; }
 .xrates .up { color: #8AB4FF; }
 thead th { background: var(--card); }
 .panel.list.plist thead th { background: transparent; }
+
+/* =====================================================================
+   v0.9.1 detail fixes
+   ===================================================================== */
+/* start / stop + site menu: one pill, two segments */
+.split-btn { display: inline-flex; align-items: stretch; height: 30px; border-radius: 999px; overflow: hidden; isolation: isolate; flex: none; }
+.split-btn > .btn, .split-btn .ash-pop-wrap > .site-caret { height: 30px; margin: 0; border: 0; box-shadow: none; transform: none; }
+.split-btn > .btn { width: 66px; padding: 0 10px 0 12px; gap: 6px; justify-content: center; border-radius: 999px 0 0 999px; }
+.split-btn .ash-pop-wrap > .site-caret { width: 28px; padding: 0 2px 0 0; justify-content: center; border-radius: 0 999px 999px 0; position: relative; }
+.split-btn .ash-pop-wrap > .site-caret::before { content: ""; position: absolute; left: 0; top: 7px; bottom: 7px; width: 1px; background: rgba(0,0,0,.28); }
+.split-btn .site-caret.go { background: var(--ok); color: #06060A; }
+.split-btn .site-caret.go:hover { background: #3EDC66; }
+.split-btn.run .site-caret, .split-btn.run .site-caret:not(.go) { background: rgba(255,90,82,.14); color: #FF7A72; border: 0; }
+.split-btn.run .site-caret:hover { background: rgba(255,90,82,.22); }
+.split-btn.run .ash-pop-wrap > .site-caret::before { background: rgba(255,122,114,.28); }
+.split-btn > .btn:hover, .split-btn .site-caret:hover { box-shadow: none; }
+.split-btn .site-caret svg { transition: transform var(--t-med) var(--ease-out); }
+.split-busy { width: 94px; height: 30px; display: grid; place-items: center; flex: none; }
+
+/* proxy table: clipped corners, columns drop by available width instead of overflowing */
+.panel.list.pxlist { overflow: clip; container-type: inline-size; }
+.pxlist table { min-width: 0; }
+.pxlist th, .pxlist td { white-space: nowrap; }
+.pxlist td .nm { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+.pxlist td .sub.num { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.pxlist tr.grp-row td { white-space: normal; }
+@container (max-width: 1300px) {
+  .pxlist th:nth-child(8), .pxlist tr:not(.grp-row) td:nth-child(8) { display: none; }
+  .pxlist td .nm { max-width: 200px; } .pxlist td .sub.num { max-width: 210px; }
+}
+@container (max-width: 1120px) {
+  .pxlist th:nth-child(3), .pxlist tr:not(.grp-row) td:nth-child(3) { display: none; }
+  .pxlist .px-chk { width: 30px; padding: 0; justify-content: center; }
+  .pxlist .px-chk span { display: none; }
+  .pxlist td .nm { max-width: 170px; } .pxlist td .sub.num { max-width: 180px; }
+}
+@container (max-width: 980px) {
+  .pxlist th:nth-child(6), .pxlist tr:not(.grp-row) td:nth-child(6) { display: none; }
+  .pxlist th, .pxlist td { padding-left: 10px; padding-right: 10px; }
+}
+/* stat pills: labels stay on one line */
+.stat .l { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-row { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+
+/* terminal: nothing wider than its card */
+.term { container-type: inline-size; min-width: 0; }
+.term-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.term-card { overflow: hidden; }
+.tc-install { min-width: 0; }
+.tc-install code, .tc-install .mono { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tf-custom { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tf-custom > div { min-width: 0; }
+.ssel, .ssel > * { min-width: 0; max-width: 100%; }
+.tf-custom .ssel, .tf-custom .ssel > * { width: 100%; }
+.term-form { min-width: 0; overflow: hidden; }
+@container (max-width: 1040px) { .term-body { grid-template-columns: minmax(0, 1fr); } }
+@container (min-width: 1041px) { .term-body { grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr); } }
+@container (max-width: 640px) { .tf-row { grid-template-columns: minmax(0, 1fr); gap: 8px; } .tf-custom { grid-template-columns: minmax(0, 1fr); } }
+@container (max-width: 1120px) {
+  .pxlist tr:not(.grp-row) td:last-child > div { gap: 2px !important; }
+  .pxlist tr:not(.grp-row) td:last-child .btn.sm { width: 30px; padding: 0; justify-content: center; }
+  .pxlist tr:not(.grp-row) td:last-child .btn.icon { width: 28px; height: 28px; }
+}
+@container (max-width: 880px) {
+  .pxlist th, .pxlist td { padding-left: 8px; padding-right: 8px; }
+  .pxlist th:first-child, .pxlist td:first-child { padding-left: 14px; }
+  .pxlist td .nm { max-width: 150px; } .pxlist td .sub.num { max-width: 150px; }
+}
+/* profile list: same idea, columns drop instead of pushing actions off-screen */
+.panel.list.plist { container-type: inline-size; }
+.panel.list.plist tbody tr.running td:first-child { box-shadow: .6px .6px 0 rgba(255,255,255,.05) inset, 0 -.6px 0 rgba(255,255,255,.05) inset; }
+@container (max-width: 1180px) {
+  .plist th:nth-child(3), .plist td:nth-child(3) { display: none; }
+}
+@container (max-width: 980px) {
+  .plist th:nth-child(5), .plist td:nth-child(5) { display: none; }
+  .panel.list.plist tbody td { padding-left: 10px; padding-right: 10px; }
+}
+.plist td:last-child { white-space: nowrap; }
+.au-table td:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.au-table td:last-child > * { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }

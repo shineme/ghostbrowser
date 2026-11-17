@@ -124,8 +124,8 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
       <div className="stat-row">
         <StatCard l="代理总数" n={all.length} ic="globe" pct={100} />
         <StatCard l="可用" n={okCount} of={all.length} ic="check" tone="ok" pct={okCount / all.length * 100} />
-        <StatCard l="不可用 / 未检测" n={all.length - okCount} of={all.length} ic="alert" tone="bad" pct={(all.length - okCount) / all.length * 100} />
-        <StatCard l="覆盖国家 / 地区" n={countries.length} ic="shield" tone="cy" pct={60} />
+        <StatCard l="异常" sub="含未检测" n={all.length - okCount} of={all.length} ic="alert" tone="bad" pct={(all.length - okCount) / all.length * 100} />
+        <StatCard l="覆盖地区" sub="国家 / 地区" n={countries.length} ic="shield" tone="cy" pct={60} />
       </div>
       {failIds.length > 0 && <div className="notice bad">
         <Icon.alert /><b>{failIds.length} 个代理不可用</b>
@@ -153,7 +153,7 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
         <button className="btn primary" onClick={() => setImportText('')}><Icon.upload s={15} /> 批量导入</button>
       </div>
 
-      <div className="panel list">
+      <div className="panel list pxlist">
         <table>
           <thead><tr>
             <th style={{ width: 28 }}><input type="checkbox" checked={allSel} onChange={() => setSel(allSel ? new Set() : new Set(list.map(p => p.id)))} /></th>
@@ -181,7 +181,7 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
               <td><div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                 {busy.has(p.id) ? <span style={{ width: 26, display: 'grid', placeItems: 'center' }}><ThinkingOrb state="searching" size={20} theme="dark" /></span>
                   : <>
-                    <button className="btn sm" onClick={() => runCheck([p.id])} title="检测国家、IP 类型和延迟"><Icon.refresh s={13} /> 检测</button>
+                    <button className="btn sm px-chk" onClick={() => runCheck([p.id])} title="检测国家、IP 类型和延迟"><Icon.refresh s={13} /><span>检测</span></button>
                     <button className="btn sm" onClick={() => runSpeed([p.id])} title="下载约 5 MB 测速"><Icon.bolt s={13} /></button>
                     {p.changeIpUrl && <button className="btn sm rot" onClick={() => rotate(p)} title={p.rotateOnLaunch ? '换 IP（已设置每次启动前自动换）' : '调用换 IP 链接，然后重新检测出口'}><Icon.dice s={13} />{p.rotateOnLaunch ? <span className="rot-dot" /> : null}</button>}
                   </>}
