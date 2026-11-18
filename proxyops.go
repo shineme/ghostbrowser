@@ -21,28 +21,42 @@ func (s *Store) rotateProxy(id string) (Proxy, error) {
 		return Proxy{}, fmt.Errorf("proxy not found")
 	}
 	u := strings.TrimSpace(px.ChangeIP)
-	if u == "" {
-		return *px, fmt.Errorf("这个代理没有填写换 IP 链接")
-	}
-	if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
-		return *px, fmt.Errorf("换 IP 链接必须以 http:// 或 https:// 开头")
-	}
 	old := px.IP
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Get(u)
-	if err != nil {
-		return *px, fmt.Errorf("换 IP 请求失败: %w", err)
-	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-	resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		return *px, fmt.Errorf("换 IP 链接返回 HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
+	q := *px
 	var r Proxy
-	for i := 0; i < 4; i++ { // providers take a few seconds to switch
-		time.Sleep(3 * time.Second)
-		r = CheckProxy(*px)
-		if r.Status == "ok" && (old == "" || r.IP != old) {
-			break
+	if u == "" {
+		// gateway username: a new session value means a new exit IP
+		nu, ok := rerollGatewaySession(px.User)
+		if !ok {
+			return *px, fmt.Errorf("这个代理没有填写换 IP 链接")
+		}
+		q.User = nu
+		for i := 0; i < 3; i++ { // the new session can land on the same IP; roll again
+			r = CheckProxy(q)
+			if r.Status == "ok" && (old == "" || r.IP != old) {
+				break
+			}
+			q.User, _ = rerollGatewaySession(q.User)
+		}
+	} else {
+		if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+			return *px, fmt.Errorf("换 IP 链接必须以 http:// 或 https:// 开头")
+		}
+		resp, err := (&http.Client{Timeout: 30 * time.Second}).Get(u)
+		if err != nil {
+			return *px, fmt.Errorf("换 IP 请求失败: %w", err)
+		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		resp.Body.Close()
+		if resp.StatusCode >= 400 {
+			return *px, fmt.Errorf("换 IP 链接返回 HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		}
+		for i := 0; i < 4; i++ { // providers take a few seconds to switch
+			time.Sleep(3 * time.Second)
+			r = CheckProxy(q)
+			if r.Status == "ok" && (old == "" || r.IP != old) {
+				break
+			}
 		}
 	}
 	if cur, ok := s.GetProxy(id); ok {
@@ -72,7 +86,7 @@ func (s *Store) rotateBeforeLaunch(p *Profile) {
 	if p.ProxyID == "" {
 		return
 	}
-	if px, ok := s.GetProxy(p.ProxyID); ok && px.RotateOnLaunch && px.ChangeIP != "" {
+	if px, ok := s.GetProxy(p.ProxyID); ok && px.RotateOnLaunch && px.canRotate() {
 		_, _ = s.rotateProxy(px.ID)
 	}
 }

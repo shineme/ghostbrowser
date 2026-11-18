@@ -4,6 +4,7 @@ import { api, onEvent, Proxy, Profile } from './api';
 import { Icon, Field, Toggle, ago, useToast, useConfirm, useExit, CC, Latency, StatCard, Pick, Segmented, SelectField, Tip } from './ui';
 import { COUNTRIES } from './locales';
 import { MihomoModal } from './MihomoModal';
+import { GatewayModal } from './Gateway';
 import { SubsPanel, useSubs, groupOptions, groupKey, ProtoChip, isCore } from './Subscriptions';
 
 const cname = (cc?: string) => (cc && COUNTRIES.find(c => c.cc === cc.toUpperCase())?.name) || cc || '';
@@ -11,6 +12,8 @@ const IPTYPE: Record<string, [string, string]> = { residential: ['住宅', 'ok']
 const speedText = (k?: number) => !k ? '—' : k >= 1000 ? `${(k / 1000).toFixed(k >= 10000 ? 0 : 1)} Mbps` : `${k} Kbps`;
 const speedTone = (k?: number) => !k ? '' : k >= 20000 ? 'g' : k >= 5000 ? 'm' : 'b';
 // Looks like at least one proxy line: host:port somewhere.
+// gateway usernames with a session value (711 -session-, Cliproxy -sid-) change IP by rolling it
+const canRotate = (p: Proxy) => !!p.changeIpUrl || /-(session|sid)-[A-Za-z0-9]+/.test(p.user || '');
 const looksLikeProxies = (t: string) => /(\d{1,3}(\.\d{1,3}){3}|[a-z0-9-]+\.[a-z]{2,})[\s:,|]+\d{2,5}/i.test(t);
 
 export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reload: () => void }> = ({ proxies, profiles = [], reload }) => {
@@ -25,6 +28,7 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [live, setLive] = useState<Record<string, Proxy>>({});
   const [mihomo, setMihomo] = useState(false);
+  const [gw, setGw] = useState(false);
   const [view, setView] = useState<'list' | 'subs'>('list');
   const [group, setGroup] = useState('*'); // '*' = all, '' = manual, else subscription ID
   const [subs, reloadSubs] = useSubs();
@@ -102,9 +106,10 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
       <div className="halo"><ThinkingOrb state="searching" size={64} theme="dark" /></div>
       <h3>还没有代理</h3>
       <div>直接 <b>Ctrl+V</b> 粘贴一批代理，或拖入 .txt / .csv 文件。格式、协议、国家和延迟都会自动识别。</div>
-      <div className="actions"><button className="btn" onClick={() => setMihomo(true)}><Icon.server s={15} /> Clash / Mihomo</button><button className="btn" onClick={() => setView('subs')}><Icon.link s={15} /> 添加订阅</button><button className="btn primary" onClick={() => setImportText('')}><Icon.upload s={15} /> 批量导入</button></div>
+      <div className="actions"><button className="btn" onClick={() => setMihomo(true)}><Icon.server s={15} /> Clash / Mihomo</button><button className="btn" onClick={() => setView('subs')}><Icon.link s={15} /> 添加订阅</button><button className="btn" onClick={() => setGw(true)}><Icon.lock s={15} /> 代理商账号</button><button className="btn primary" onClick={() => setImportText('')}><Icon.upload s={15} /> 批量导入</button></div>
       {importText !== null && <ImportModal initial={importText} onClose={() => setImportText(null)} onDone={(ids, check) => { reload(); if (check) runCheck(ids, '导入检测'); }} />}
       {mihomo && <MihomoModal onClose={() => setMihomo(false)} onAdded={reload} />}
+      {gw && <GatewayModal proxies={all} onClose={() => setGw(false)} onDone={(ids, check) => { reload(); if (check) runCheck(ids, '检测'); }} />}
     </div></>
   );
 
@@ -150,6 +155,7 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
         {sel.size > 0 ? <button className="btn danger" onClick={() => delMany([...sel], '所选代理')}><Icon.trash s={14} /> 删除所选</button>
           : failIds.length > 0 && <button className="btn" onClick={() => delMany(failIds, '全部不可用的代理')}><Icon.trash s={14} /> 清理不可用 ({failIds.length})</button>}
         <button className="btn tb-mh" onClick={() => setMihomo(true)} title="Clash / Mihomo：连接 Clash Verge / Mihomo，切换节点并作为代理使用"><Icon.server s={15} /><span>Clash / Mihomo</span></button>
+        <button className="btn tb-gw" onClick={() => setGw(true)} title="填入 711Proxy / Cliproxy 的账户名和密码，其余下拉选择"><Icon.lock s={15} /><span>代理商账号</span></button>
         <button className="btn primary" onClick={() => setImportText('')}><Icon.upload s={15} /> 批量导入</button>
       </div>
 
@@ -183,7 +189,7 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
                   : <>
                     <button className="btn sm px-chk" onClick={() => runCheck([p.id])} title="检测国家、IP 类型和延迟"><Icon.refresh s={13} /><span>检测</span></button>
                     <button className="btn sm" onClick={() => runSpeed([p.id])} title="下载约 5 MB 测速"><Icon.bolt s={13} /></button>
-                    {p.changeIpUrl && <button className="btn sm rot" onClick={() => rotate(p)} title={p.rotateOnLaunch ? '换 IP（已设置每次启动前自动换）' : '调用换 IP 链接，然后重新检测出口'}><Icon.dice s={13} />{p.rotateOnLaunch ? <span className="rot-dot" /> : null}</button>}
+                    {canRotate(p) && <button className="btn sm rot" onClick={() => rotate(p)} title={p.rotateOnLaunch ? '换 IP（已设置每次启动前自动换）' : p.changeIpUrl ? '调用换 IP 链接，然后重新检测出口' : '换一个会话号，服务商会分配新的出口 IP'}><Icon.dice s={13} />{p.rotateOnLaunch ? <span className="rot-dot" /> : null}</button>}
                   </>}
                 <button className="btn ghost icon" title="编辑" onClick={() => setEditing(p)}><Icon.edit s={15} /></button>
                 <button className="btn ghost icon danger" onClick={() => delMany([p.id], '这个代理')}><Icon.trash s={15} /></button>
@@ -194,6 +200,7 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
         {list.length === 0 && <div className="sub" style={{ padding: 24, textAlign: 'center' }}>没有符合筛选条件的代理</div>}
       </div>
       {mihomo && <MihomoModal onClose={() => setMihomo(false)} onAdded={reload} />}
+      {gw && <GatewayModal proxies={all} onClose={() => setGw(false)} onDone={(ids, check) => { reload(); if (check) runCheck(ids, '检测'); }} />}
       {editing && <ProxyEditModal p={editing} onClose={() => setEditing(null)} onSaved={reload} />}
       {importText !== null && <ImportModal initial={importText} onClose={() => setImportText(null)} onDone={(ids, check) => { reload(); if (check) runCheck(ids, '导入检测'); }} />}
     </>
@@ -312,7 +319,7 @@ const ProxyEditModal: React.FC<{ p: Proxy; onClose: () => void; onSaved: () => v
             <Field label="密码"><input type="password" value={v.pass || ''} onChange={e => set({ pass: e.target.value })} /></Field>
           </div></>}
           <Field label="换 IP 链接" hint="服务商提供的 API 地址，打开它就会更换出口 IP"><input type="text" value={v.changeIpUrl || ''} onChange={e => set({ changeIpUrl: e.target.value })} placeholder="https://..." /></Field>
-          <Toggle on={!!v.rotateOnLaunch} onChange={x => set({ rotateOnLaunch: x })} label="每次启动环境前自动换 IP" hint="需要填写换 IP 链接；换 IP 失败不会阻止启动" />
+          <Toggle on={!!v.rotateOnLaunch} onChange={x => set({ rotateOnLaunch: x })} label="每次启动环境前自动换 IP" hint={canRotate(v) && !v.changeIpUrl ? '用户名带会话号（711 / Cliproxy 等），换会话号即换 IP；失败不会阻止启动' : '需要填写换 IP 链接；换 IP 失败不会阻止启动'} />
         </div>
         <div className="dfoot"><div className="spacer" /><button className="btn" onClick={() => close()}>取消</button><button className="btn primary" onClick={save}><Icon.check s={15} /> 保存</button></div>
       </div>
