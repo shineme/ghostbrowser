@@ -9,6 +9,7 @@ import { Icon, Field, flag, ago, useToast, useConfirm, useExit, ToastHost, Windo
 import { LiveRail } from './LiveRail';
 import { DEVICE_TYPES, devType, devName, osName as osNameOf, needsOpen } from './devices';
 import { ProfileDrawer } from './ProfileDrawer';
+import { useGateway } from './Gateway';
 import { useSubs, groupKey, groupOptions, isCore, protoOf } from './Subscriptions';
 import { ProxyView } from './ProxyView';
 import { SettingsView } from './SettingsView';
@@ -531,12 +532,27 @@ const BulkModal: React.FC<{ proxies: Proxy[]; onClose: () => void; onDone: () =>
   const [count, setCount] = useState(10);
   const [group, setGroup] = useState('');
   const [proxyId, setProxyId] = useState('');
+  const [pxMode, setPxMode] = useState<'pick' | 'gw'>('pick');
+  const g = useGateway(proxies, true);
   const [busy, setBusy] = useState(false);
   const [kernel, setKernel] = useState<'' | 'firefox'>('');
   const [ffInfo] = useFirefoxInfo();
   const ffOK = dt === 'desktop' || dt === 'laptop';
   const [out, close] = useExit(onClose);
-  const go = async () => { setBusy(true); await api.CreateTypedProfilesKernel(prefix, dt, os, count, proxyId, group, ffOK ? kernel : ''); toast(`已创建 ${count} 个${kernel === 'firefox' && ffOK ? ' Firefox ' : ''}环境`); setBusy(false); onDone(); close(); };
+  const go = async () => {
+    if (pxMode === 'gw' && !g.valid) { toast('请填写代理商的账户名和密码', 'bad'); return; }
+    setBusy(true);
+    try {
+      const made = await api.CreateTypedProfilesKernel(prefix, dt, os, count, pxMode === 'pick' ? proxyId : '', group, ffOK ? kernel : '');
+      if (pxMode === 'gw') { // one gateway session (= one exit IP) per environment
+        const added = await api.ImportProxyList(g.build(made.length) as any, g.label);
+        await api.AssignProxies(made.map(p => p.id), added.map(p => p.id), 'order');
+        api.CheckProxies(added.map(p => p.id)).catch(() => {});
+      }
+      toast(`已创建 ${made.length} 个${kernel === 'firefox' && ffOK ? ' Firefox ' : ''}环境${pxMode === 'gw' ? '，每个环境一个独立代理会话，正在检测出口…' : ''}`);
+      onDone(); close();
+    } catch (e: any) { toast(String(e?.message || e), 'bad'); } finally { setBusy(false); }
+  };
   return (
     <div className={`overlay center ${out ? 'out' : ''}`} onMouseDown={e => e.target === e.currentTarget && close()}>
       <BorderBeam size="pulse-inner" colorVariant="ocean" theme="dark" strength={0.6} borderRadius={20}>
@@ -561,9 +577,10 @@ const BulkModal: React.FC<{ proxies: Proxy[]; onClose: () => void; onDone: () =>
           <div className="grid2">
             <Field label="分组"><input type="text" value={group} onChange={e => setGroup(e.target.value)} /></Field>
           </div>
-          <Field label="统一代理" hint="每个环境仍会生成各自独立的指纹">
+          <Field label="代理"><Segmented className="block" items={[['pick', '从代理列表选'], ['gw', '代理商账号 · 每个环境独立 IP']]} value={pxMode} onChange={setPxMode} /></Field>
+          {pxMode === 'pick' ? <Field label="统一代理" hint="每个环境仍会生成各自独立的指纹">
             <select value={proxyId} onChange={e => setProxyId(e.target.value)}><option value="">不分配</option>{proxies.map(p => <option key={p.id} value={p.id}>{flag(p.country)} · {p.name}</option>)}</select>
-          </Field>
+          </Field> : <div className="gw-inline">{g.fields}<div className="sub" style={{ fontSize: 11.5, marginTop: 6 }}>会生成 {count} 个代理（标签 {g.label}），按顺序一个环境一个，各自独立会话 = 各自独立出口 IP</div></div>}
         </div>
         <div className="dfoot"><div className="spacer" /><button className="btn" onClick={() => close()}>取消</button><button className="btn primary" onClick={go} disabled={busy}><Icon.sparkles s={15} /> {busy ? '创建中…' : `创建 ${count} 个`}</button></div>
       </div>

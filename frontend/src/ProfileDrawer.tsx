@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Combo, SearchSelect, FontPicker, CountrySelect, LanguagePicker, TimezoneSelect, countryOfTz } from './locales';
 import { api, Profile, Proxy, Fingerprint } from './api';
 import { ProxyPicker } from './Subscriptions';
+import { GatewayInline } from './Gateway';
 import { Field, Toggle, Icon, flag, useToast, useConfirm, useExit, Segmented, Avatar, DevIcon, SelectField } from './ui';
 import { CookieModal } from './CookieModal';
 import { ExtIcon, Ext } from './ExtensionsView';
@@ -29,6 +30,7 @@ export const ProfileDrawer: React.FC<{
   const [pxBusy, setPxBusy] = useState(false);
   const [pxInfo, setPxInfo] = useState('');
   const [extraProxies, setExtraProxies] = useState<Proxy[]>([]);
+  const [gwOpen, setGwOpen] = useState(false);
   const quickProxy = async () => {
     setPxBusy(true); setPxInfo('');
     try {
@@ -229,7 +231,12 @@ export const ProfileDrawer: React.FC<{
               <div className="combo-row" style={{ marginTop: 6 }}>
                 <input type="text" value={pxText} onChange={e => setPxText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') quickProxy(); }} placeholder="或直接粘贴一个代理，自动识别格式并检测，如 user:pass@1.2.3.4:8080" />
                 <button type="button" className="btn sm combo-btn" disabled={pxBusy || !pxText.trim()} onClick={quickProxy}>{pxBusy ? '检测中…' : '识别并使用'}</button>
+                <button type="button" className={'btn sm combo-btn' + (gwOpen ? ' on' : '')} onClick={() => setGwOpen(x => !x)} title="填 711Proxy / Cliproxy 的账户名和密码，其余下拉选择"><Icon.lock s={13} /> 代理商账号</button>
               </div>
+              {gwOpen && <GatewayInline proxies={[...extraProxies, ...proxies]} onCancel={() => setGwOpen(false)} onUse={r => {
+                setExtraProxies(x => [r, ...x]); setP(cur => ({ ...cur, proxyId: r.id })); setGwOpen(false);
+                setPxInfo(r.status === 'ok' ? `✓ ${r.type.toUpperCase()} · ${r.country} ${r.region || ''} ${r.city || ''} · ${r.ipType === 'hosting' ? '机房' : r.ipType === 'mobile' ? '移动' : '住宅'} IP · ${r.latency} ms，已加入代理列表` : `✗ 不可用：${r.error || '连接失败'}（已加入代理列表，可检查账户名密码后重试）`);
+              }} />}
               {pxInfo && <div className="sub" style={{ marginTop: 4 }}>{pxInfo}</div>}
             </Field>
             <Field label="启动页 (每行一个)"><textarea value={(p.startUrls || []).join('\n')} onChange={e => setP({ ...p, startUrls: e.target.value.split('\n') })} placeholder="https://facebook.com" /></Field>
