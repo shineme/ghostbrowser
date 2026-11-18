@@ -1169,6 +1169,30 @@ export namespace main {
 	        this.note = source["note"];
 	    }
 	}
+	export class GatewayAccount {
+	    user: string;
+	    pass: string;
+	    cc?: string;
+	    state?: string;
+	    mins?: number;
+	    entry?: string;
+	    proto?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GatewayAccount(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.user = source["user"];
+	        this.pass = source["pass"];
+	        this.cc = source["cc"];
+	        this.state = source["state"];
+	        this.mins = source["mins"];
+	        this.entry = source["entry"];
+	        this.proto = source["proto"];
+	    }
+	}
 	
 	export class GroupInfo {
 	    name: string;
@@ -1579,6 +1603,7 @@ export namespace main {
 	    fpCheckFreq?: string;
 	    fpCheckAt?: number;
 	    syncContent?: string;
+	    gateways?: Record<string, GatewayAccount>;
 	
 	    static createFrom(source: any = {}) {
 	        return new Profile(source);
@@ -1620,6 +1645,7 @@ export namespace main {
 	        this.fpCheckFreq = source["fpCheckFreq"];
 	        this.fpCheckAt = source["fpCheckAt"];
 	        this.syncContent = source["syncContent"];
+	        this.gateways = this.convertValues(source["gateways"], GatewayAccount, true);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -3076,6 +3102,7 @@ export namespace main {
 	    fpCheckFreq?: string;
 	    fpCheckAt?: number;
 	    syncContent?: string;
+	    gateways?: Record<string, GatewayAccount>;
 	    size: number;
 	    expiresAt: number;
 	    hasData: boolean;
@@ -3122,6 +3149,7 @@ export namespace main {
 	        this.fpCheckFreq = source["fpCheckFreq"];
 	        this.fpCheckAt = source["fpCheckAt"];
 	        this.syncContent = source["syncContent"];
+	        this.gateways = this.convertValues(source["gateways"], GatewayAccount, true);
 	        this.size = source["size"];
 	        this.expiresAt = source["expiresAt"];
 	        this.hasData = source["hasData"];

@@ -8,6 +8,7 @@ import { Icon, Field, Toggle, useToast, useExit, Segmented, SelectField } from '
 import { COUNTRIES, SearchSelect } from './locales';
 
 type ProvID = '711' | 'cli';
+export type GwAcct = { user: string; pass: string; cc?: string; state?: string; mins?: number; entry?: string; proto?: string };
 type Provider = {
   name: string; site: string; domain: string;
   entries: [string, string][];           // gateway host -> label
@@ -66,15 +67,31 @@ export function useGateway(proxies: Proxy[], compact: boolean) {
   const [count, setCount] = useState('5');
   const [rotate, setRotate] = useState(false);
   const [showPw, setShowPw] = useState(false);
+  // accounts saved on the settings page win over "last used"
+  const [saved, setSaved] = useState<Record<string, GwAcct>>({});
+  const [editAcct, setEditAcct] = useState(false);
+  const apply = (k: ProvID, g: Record<string, GwAcct>) => {
+    const a = g[k], L = known[k], Pk = PROVIDERS[k];
+    if (a?.user) { setUser(a.user); setPass(a.pass || ''); } else if (L) { setUser(L.user); setPass(L.pass); }
+    setEntry(a?.entry && Pk.entries.some(e => e[0] === a.entry) ? a.entry : Pk.entries[0][0]);
+    if (a?.proto) setProto(a.proto as any);
+    if (a?.cc && (a.cc !== '*' || Pk.random)) { setCc(a.cc); setSt(a.cc === 'US' ? a.state || '' : ''); } else if (!Pk.random && cc === '*') setCc('US');
+    setMins(String(a?.mins && Pk.durations.includes(a.mins) ? a.mins : Pk.durations.includes(+mins) ? mins : 30));
+    setEditAcct(false);
+  };
+  useEffect(() => {
+    api.GetSettings().then(stt => {
+      const g = ((stt as any).gateways || {}) as Record<string, GwAcct>;
+      setSaved(g);
+      if (!g['711']?.user && g.cli?.user) setProv('cli'); else apply(prov, g);
+    }).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const first = React.useRef(true);
   useEffect(() => {
     if (first.current) { first.current = false; return; }
-    const k = known[prov];
-    if (k) { setUser(k.user); setPass(k.pass); } // otherwise keep what was typed
-    setEntry(PROVIDERS[prov].entries[0][0]);
-    if (!PROVIDERS[prov].durations.includes(+mins)) setMins('30');
-    if (!PROVIDERS[prov].random && cc === '*') setCc('US');
+    apply(prov, saved);
   }, [prov]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fromSettings = !!saved[prov]?.user && !editAcct;
 
   const countryOpts = useMemo(() => [...(P.random ? [['*', '随机（全球混播）'] as [string, string]] : []), ...COUNTRIES.map(c => [c.cc, `${c.cc} · ${c.name}`] as [string, string])], [P]);
   const stateOpts: [string, string][] = [['', '随机'], ...US_STATES.map(s => [s, s] as [string, string])];
@@ -88,10 +105,12 @@ export function useGateway(proxies: Proxy[], compact: boolean) {
 
   const fields = <>
     <Field label="服务商"><Segmented className="block" value={prov} onChange={setProv} items={[['711', '711Proxy · 动态住宅'], ['cli', 'Cliproxy · 流量套餐']]} /></Field>
-    <div className="grid2">
-      <Field label="账户名" hint={known[prov] ? '已从上次使用的账号自动填入' : `${P.name} 控制台「子账户」里的账户名`}><input type="text" value={user} onChange={e => setUser(e.target.value)} placeholder="子账户名" autoFocus={!compact} spellCheck={false} /></Field>
+    {fromSettings
+      ? <div className="gw-acct"><Icon.lock s={14} /><span className="grow">账号 <b className="mono">{user}</b><span className="sub"> · 来自设置</span></span><button type="button" className="btn sm ghost" onClick={() => setEditAcct(true)}>这次换个账号</button></div>
+      : <div className="grid2">
+      <Field label="账户名" hint={known[prov] ? '已从上次使用的账号自动填入' : `${P.name} 控制台「子账户」里的账户名；可在 设置 → 代理商账号 保存，以后不用再填`}><input type="text" value={user} onChange={e => setUser(e.target.value)} placeholder="子账户名" autoFocus={!compact} spellCheck={false} /></Field>
       <Field label="密码"><div className="gw-pw"><input type={showPw ? 'text' : 'password'} value={pass} onChange={e => setPass(e.target.value)} placeholder="子账户密码" spellCheck={false} /><button type="button" className="btn sm ghost" onClick={() => setShowPw(x => !x)}>{showPw ? '隐藏' : '显示'}</button></div></Field>
-    </div>
+    </div>}
     <div className="grid2">
       <Field label="国家 / 地区"><SearchSelect value={cc} options={countryOpts} onChange={v => { setCc(v); setSt(''); }} placeholder="搜索，如 US / 日本" /></Field>
       <Field label="州" hint={cc === 'US' ? '' : '目前仅美国可选州'}><SelectField value={cc === 'US' ? st : ''} onChange={setSt} options={stateOpts} disabled={cc !== 'US'} /></Field>
@@ -171,6 +190,57 @@ export const GatewayModal: React.FC<{ proxies: Proxy[]; onClose: () => void; onD
           <div className="spacer" /><button className="btn" onClick={() => close()}>取消</button>
           <button className="btn primary" onClick={go} disabled={busy || !g.valid}>{busy ? '生成中…' : `生成 ${n} 个代理`}</button>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// 设置 → 代理商账号: save each provider's sub-account once, plus default choices.
+export const GatewaySettingsCard: React.FC<{ s: any; set: (p: any) => void; index: number }> = ({ s, set, index }) => {
+  const toast = useToast();
+  const [prov, setProv] = useState<ProvID>('711');
+  const P = PROVIDERS[prov];
+  const all: Record<string, GwAcct> = s.gateways || {};
+  const a: GwAcct = all[prov] || { user: '', pass: '' };
+  const put = (patch: Partial<GwAcct>) => set({ gateways: { ...all, [prov]: { ...a, ...patch } } });
+  const clear = () => { const n = { ...all }; delete n[prov]; set({ gateways: n }); };
+  const [showPw, setShowPw] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const cc = a.cc || 'US';
+  const countryOpts: [string, string][] = [...(P.random ? [['*', '随机（全球混播）'] as [string, string]] : []), ...COUNTRIES.map(c => [c.cc, `${c.cc} · ${c.name}`] as [string, string])];
+  const u = (a.user || '').trim().replace(/-.*$/, '');
+  const test = async () => {
+    setTesting(true);
+    try {
+      const host = a.entry || P.entries[0][0];
+      const r: any = await api.CheckProxyDraft({ type: a.proto || 'http', host, port: P.port, user: P.build({ user: u, cc: cc === '*' ? '' : cc, st: cc === 'US' ? a.state || '' : '', sess: newSess(P), mins: 5 }), pass: (a.pass || '').trim(), name: host } as any);
+      if (r.status === 'ok') toast(`账号可用 · 出口 ${r.ip} · ${r.country} ${r.city || ''} · ${r.latency} ms`, 'ok');
+      else toast(`连接失败：${r.error || '请检查账户名和密码'}`, 'bad');
+    } catch (e: any) { toast(String(e?.message || e), 'bad'); } finally { setTesting(false); }
+  };
+  const has = (k: ProvID) => !!all[k]?.user;
+  return (
+    <div className="panel pad setting-card spot rise" style={{ ['--i' as any]: index }} id="gateway-card">
+      <div className="head"><span className="ic"><Icon.lock /></span><div><h4>代理商账号</h4><span>保存一次，新建环境时只需选国家；账号随设置加密同步</span></div></div>
+      <Field label="服务商"><Segmented className="block" value={prov} onChange={setProv} items={[['711', `711Proxy${has('711') ? ' · 已保存' : ''}`], ['cli', `Cliproxy${has('cli') ? ' · 已保存' : ''}`]]} /></Field>
+      <div className="grid2">
+        <Field label="账户名" hint={`${P.name} 控制台「子账户」里的账户名`}><input type="text" value={a.user} onChange={e => put({ user: e.target.value })} placeholder="子账户名" spellCheck={false} /></Field>
+        <Field label="密码"><div className="gw-pw"><input type={showPw ? 'text' : 'password'} value={a.pass} onChange={e => put({ pass: e.target.value })} placeholder="子账户密码" spellCheck={false} /><button type="button" className="btn sm ghost" onClick={() => setShowPw(x => !x)}>{showPw ? '隐藏' : '显示'}</button></div></Field>
+      </div>
+      <div className="grid2">
+        <Field label="默认国家 / 地区"><SearchSelect value={cc} options={countryOpts} onChange={v => put({ cc: v, state: '' })} placeholder="搜索，如 US / 日本" /></Field>
+        <Field label="默认州" hint={cc === 'US' ? '' : '目前仅美国可选州'}><SelectField value={cc === 'US' ? a.state || '' : ''} onChange={v => put({ state: v })} options={[['', '随机'], ...US_STATES.map(x => [x, x] as [string, string])]} disabled={cc !== 'US'} /></Field>
+      </div>
+      <div className="grid3">
+        <Field label="默认 IP 保持时长"><SelectField value={String(a.mins && P.durations.includes(a.mins) ? a.mins : 30)} onChange={v => put({ mins: +v })} options={P.durations.map(d => [String(d), d >= 60 ? `${d / 60} 小时` : `${d} 分钟`] as [string, string])} /></Field>
+        <Field label="默认接入节点"><SelectField value={a.entry && P.entries.some(e => e[0] === a.entry) ? a.entry : P.entries[0][0]} onChange={v => put({ entry: v })} options={P.entries.map(([h, l]) => [h, l] as [string, string])} /></Field>
+        <Field label="默认协议"><SelectField value={a.proto || 'http'} onChange={v => put({ proto: v })} options={[['http', 'HTTP'], ['socks5', 'SOCKS5']]} /></Field>
+      </div>
+      <div className="gw-inline-foot">
+        <span className="sub">保存设置后，新建环境、批量创建和「代理商账号」窗口会自动用这里的账号和默认选项</span>
+        <div className="spacer" />
+        {has(prov) && <button type="button" className="btn sm ghost" onClick={clear}>清除</button>}
+        <button type="button" className="btn sm" disabled={testing || !u || !(a.pass || '').trim()} onClick={test}>{testing ? '检测中…' : '检测账号'}</button>
       </div>
     </div>
   );

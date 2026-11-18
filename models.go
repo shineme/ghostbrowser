@@ -160,6 +160,20 @@ type Profile struct {
 	FpCheckAt   int64  `json:"fpCheckAt,omitempty"`   // when the check page was opened (仅首次启动)
 	// 同步内容 override (syncscope.go): "" = 跟随全局 | lite | standard | full.
 	SyncContent string `json:"syncContent,omitempty"`
+	// 代理商账号 (Gateway.tsx): saved sub-account + default choices per
+	// provider ("711", "cli"), so new environments only pick a country.
+	Gateways map[string]GatewayAccount `json:"gateways,omitempty"`
+}
+
+// GatewayAccount is one rotating-residential provider account on the settings page.
+type GatewayAccount struct {
+	User  string `json:"user"`
+	Pass  string `json:"pass"`
+	CC    string `json:"cc,omitempty"`    // default country ("*" = global random)
+	State string `json:"state,omitempty"` // default US state
+	Mins  int    `json:"mins,omitempty"`  // default sticky minutes
+	Entry string `json:"entry,omitempty"` // default entry host
+	Proto string `json:"proto,omitempty"` // http | socks5
 }
 
 // needsOpenKernel: the custom kernel only carries Windows desktop templates.

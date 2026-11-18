@@ -403,3 +403,7 @@ thead th { background: var(--card); }
 .gw-inline .grid2, .gw-modal .grid2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .gw-inline .grid3, .gw-modal .grid3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .gw-inline .field, .gw-modal .field { min-width: 0; }
+.gw-acct { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-bottom: 12px; border-radius: 10px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.07); min-width: 0; }
+.gw-acct .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#gateway-card .grid2 { grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+#gateway-card .grid3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
