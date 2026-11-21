@@ -43,7 +43,8 @@
 body { letter-spacing: -.01em; }
 
 /* ---------- stage ---------- */
-.app { background: radial-gradient(90% 70% at 30% 0%, rgb(var(--k-26262b)) 0, rgb(var(--k-1d1d20)) 55%, rgb(var(--k-18181b)) 100%); grid-template-columns: 262px 1fr; }
+.app { background: radial-gradient(90% 70% at 30% 0%, rgb(var(--k-26262b)) 0, rgb(var(--k-1d1d20)) 55%, rgb(var(--k-18181b)) 100%); --side-w: 262px; grid-template-columns: var(--side-w) 1fr; }
+.app.side-collapsed { --side-w: 82px; }
 .aurora { display: none; }
 .grain { opacity: .03; }
 
