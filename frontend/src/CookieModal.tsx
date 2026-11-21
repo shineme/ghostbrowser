@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api } from './api';
 import { Icon, Segmented, ago, useExit, useToast } from './ui';
+import { fxTheme } from './theme';
 
 type Info = { running: boolean; snapshotAt: number; snapshot: number; staged: number };
 type Result = { count: number; skipped: number; mode: string; staged: string };
@@ -121,7 +122,7 @@ export const CookieModal: React.FC<{ profile: { id: string; name: string }; init
             </div>}
           </> : <>
             <div className="ck-out">
-              {busy && <div className="ck-loading"><ThinkingOrb state="searching" size={32} theme="dark" /><span>正在读取 Cookie…</span></div>}
+              {busy && <div className="ck-loading"><ThinkingOrb state="searching" size={32} theme={fxTheme()} /><span>正在读取 Cookie…</span></div>}
               <textarea className="ck-text" readOnly value={expErr ? '' : exp} spellCheck={false} placeholder={busy ? '' : '这个环境还没有 Cookie'} />
             </div>
             <div className="ck-tools">
@@ -137,7 +138,7 @@ export const CookieModal: React.FC<{ profile: { id: string; name: string }; init
           <span className="sub" style={{ fontSize: 11.5 }}>{mode === 'import' ? '同名 Cookie（域名 + 路径 + 名称相同）会被覆盖' : 'Cookie 等同于登录凭据，请妥善保管导出的文件'}</span>
           <div className="spacer" />
           <button className="btn" onClick={() => close()}>{res ? '完成' : '关闭'}</button>
-          {mode === 'import' && <button className="btn primary" disabled={busy || !text.trim()} onClick={doImport}>{busy ? <><ThinkingOrb state="connecting" size={20} theme="dark" /> 导入中…</> : <><Icon.upload s={15} /> {info?.running ? '立即写入' : '暂存，下次启动写入'}</>}</button>}
+          {mode === 'import' && <button className="btn primary" disabled={busy || !text.trim()} onClick={doImport}>{busy ? <><ThinkingOrb state="connecting" size={20} theme={fxTheme()} /> 导入中…</> : <><Icon.upload s={15} /> {info?.running ? '立即写入' : '暂存，下次启动写入'}</>}</button>}
         </div>
       </div>
     </div>

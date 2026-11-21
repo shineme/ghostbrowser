@@ -1,0 +1,106 @@
+/* =====================================================================
+   Themes (v0.9.3): 暗色 (default) · 灰色 · 亮色.
+   themes-gen.css remaps every literal colour per theme; this file hand-tunes
+   the semantic tokens so each theme reads as designed, not as an inversion.
+   Theme is set on <html data-theme="light|gray">; dark has no attribute.
+   ===================================================================== */
+:root { --tip-bg: rgba(28,32,44,.98); --on-accent: #0A0A0C; color-scheme: dark; }
+
+/* ---------- 亮色: paper cards on a cool porcelain stage ---------- */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --stage: #ECECF0;
+  --card: #FFFFFF;
+  --card-2: #F4F4F7;
+  --card-3: #ECECF1;
+  --ink-0: #FFFFFF; --ink-1: #F4F4F7; --ink-2: #ECECF1;
+  --glass: #FFFFFF; --glass-2: #F7F7F9;
+  --glass-hi: rgba(15,15,25,.025);
+  --hair: rgba(15,15,25,.075);
+  --hair-2: rgba(15,15,25,.11);
+  --hair-3: rgba(15,15,25,.18);
+  --txt: #0B0B10;
+  --txt-2: #4B4B55;
+  --txt-3: #6E6E78;
+  --txt-4: #A3A3AD;
+  --a1: #6D4AE0; --a2: #5B36D6; --a3: #0F9F94;
+  --spectral: linear-gradient(140deg, #8B6CF6, #6D4AE0);
+  --spectral-soft: rgba(109,74,224,.10);
+  --on-accent: #FFFFFF;
+  --ok: #13A44A; --warn: #C57A00; --bad: #E0352B;
+  --edge: inset 0 0 0 .6px rgba(15,15,25,.09);
+  --lift: 0 1px 2px rgba(20,20,35,.05), 0 12px 30px -14px rgba(20,20,35,.16);
+  --sh-3: var(--edge), 0 40px 90px -30px rgba(20,20,35,.35);
+  --glow-a: 0 0 0 1px rgba(109,74,224,.35), 0 8px 24px -10px rgba(109,74,224,.45);
+  --c-profiles: #6D4AE0; --c-proxies: #0F9F94; --c-rpa: #D17A00; --c-extensions: #D6337F;
+  --c-terminal: #5A5A64; --c-cloud: #2F6BEB; --c-audit: #E0533F; --c-settings: #5A5A64;
+  --tip-bg: #16161C;
+}
+:root[data-theme="light"] .app { background: radial-gradient(90% 70% at 30% 0%, #F7F7FA 0, #ECECF0 55%, #E6E6EB 100%); }
+:root[data-theme="light"] .overlay { background: rgba(28,28,40,.26); }
+:root[data-theme="light"] .tip, :root[data-theme="light"] [class*="tip"][role="tooltip"] { color: #F4F4F5; }
+:root[data-theme="light"] ::selection { background: rgba(109,74,224,.22); color: inherit; }
+:root[data-theme="light"] .grain { opacity: .015; }
+
+/* ---------- 灰色: space-gray cards on a soft graphite stage ---------- */
+:root[data-theme="gray"] {
+  color-scheme: dark;
+  --stage: #44444B;
+  --card: #2A2A2F;
+  --card-2: #323238;
+  --card-3: #3A3A41;
+  --ink-0: #2A2A2F; --ink-1: #3A3A41; --ink-2: #323238;
+  --glass: #2A2A2F; --glass-2: #323238;
+  --glass-hi: rgba(255,255,255,.04);
+  --hair: rgba(255,255,255,.085);
+  --hair-2: rgba(255,255,255,.12);
+  --hair-3: rgba(255,255,255,.19);
+  --txt: #F7F7F8;
+  --txt-2: #C2C2CA;
+  --txt-3: #A0A0A9;
+  --txt-4: #74747D;
+  --a1: #B4A0FF; --a2: #9B7BFA; --a3: #45E0CC;
+  --spectral: linear-gradient(140deg, #D2C6FF, #B4A0FF);
+  --spectral-soft: rgba(180,160,255,.16);
+  --on-accent: #17171B;
+  --ok: #3ADB63; --warn: #FFC05C; --bad: #FF6A62;
+  --edge: inset 0 0 0 .6px rgba(255,255,255,.09);
+  --lift: 0 14px 34px rgba(10,10,14,.32), 0 2px 6px rgba(10,10,14,.22);
+  --c-profiles: #B4A0FF; --c-proxies: #45E0CC; --c-rpa: #FFB23E; --c-extensions: #FF85C2;
+  --c-terminal: #C2C2CA; --c-cloud: #6FA2FF; --c-audit: #FF8D7F; --c-settings: #C2C2CA;
+  --tip-bg: #1E1E22;
+}
+:root[data-theme="gray"] .app { background: radial-gradient(90% 70% at 30% 0%, #55555D 0, #47474E 55%, #3F3F45 100%); }
+:root[data-theme="gray"] .overlay { background: rgba(16,16,20,.5); }
+
+/* text that sits on an accent fill follows the theme's accent contrast */
+.btn.primary, .btn.primary svg, .chk.on svg { color: var(--on-accent); }
+
+/* ---------- 外观 picker (settings) ---------- */
+.theme-pick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.theme-opt { position: relative; border: 0; padding: 10px; border-radius: 20px; background: var(--card-2); box-shadow: var(--edge); cursor: pointer; text-align: left; color: var(--txt-2); transition: box-shadow var(--t-fast), transform var(--t-fast) var(--ease-spring); min-width: 0; }
+.theme-opt:hover { transform: translateY(-1px); }
+.theme-opt.on { box-shadow: 0 0 0 2px var(--a1), var(--lift); color: var(--txt); }
+.theme-opt .tp-art { height: 86px; border-radius: 13px; padding: 9px; display: grid; grid-template-columns: 26% 1fr; gap: 7px; overflow: hidden; }
+.theme-opt .tp-side { border-radius: 8px; padding: 7px 6px; display: flex; flex-direction: column; gap: 5px; }
+.theme-opt .tp-side i { height: 4px; border-radius: 2px; opacity: .55; }
+.theme-opt .tp-side i:first-child { width: 70%; opacity: 1; }
+.theme-opt .tp-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.theme-opt .tp-row { height: 17px; border-radius: 7px; display: flex; align-items: center; gap: 5px; padding: 0 6px; }
+.theme-opt .tp-row b { width: 7px; height: 7px; border-radius: 3px; flex: none; }
+.theme-opt .tp-row s { height: 3px; border-radius: 2px; width: 46%; text-decoration: none; }
+.theme-opt .tp-row u { margin-left: auto; width: 15px; height: 7px; border-radius: 4px; }
+.theme-opt .tp-name { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; padding: 0 3px; font-size: 13px; font-weight: 620; }
+.theme-opt .tp-name small { font-size: 11px; font-weight: 500; color: var(--txt-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.theme-opt .radio { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--hair-3); flex: none; }
+.theme-opt.on .radio { box-shadow: inset 0 0 0 5px var(--a1); }
+/* each preview paints its own theme, independent of the current one */
+.tp-dark  .tp-art { background: #1D1D20; } .tp-dark  .tp-side, .tp-dark  .tp-row { background: #050506; } .tp-dark  i, .tp-dark  s { background: #55555C; } .tp-dark  u { background: #30D158; } .tp-dark b { background: #A78BFA; }
+.tp-gray  .tp-art { background: #44444B; } .tp-gray  .tp-side, .tp-gray  .tp-row { background: #2A2A2F; } .tp-gray  i, .tp-gray  s { background: #8A8A93; } .tp-gray  u { background: #3ADB63; } .tp-gray b { background: #B4A0FF; }
+.tp-light .tp-art { background: #ECECF0; } .tp-light .tp-side, .tp-light .tp-row { background: #FFFFFF; box-shadow: 0 1px 2px rgba(20,20,35,.08); } .tp-light i, .tp-light s { background: #C9C9D1; } .tp-light u { background: #13A44A; } .tp-light b { background: #6D4AE0; }
+.tp-dark .tp-side i:first-child, .tp-dark s:first-of-type { background: #A1A1AA; }
+.tp-gray .tp-side i:first-child { background: #C2C2CA; }
+.tp-light .tp-side i:first-child { background: #4B4B55; }
+
+/* smooth switch */
+:root.theme-anim, :root.theme-anim * { transition: background-color .35s ease, color .35s ease, border-color .35s ease, box-shadow .35s ease !important; }

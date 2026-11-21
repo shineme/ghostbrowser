@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api } from './api';
 import { Icon, Avatar, ago, useToast, useConfirm, useExit } from './ui';
+import { fxTheme } from './theme';
 
 // 最近删除 (recycle bin): profiles deleted on this device stay here with their
 // data folder for Settings.trashDays (default 30) before they are purged.
@@ -91,9 +92,9 @@ export const TrashModal: React.FC<{ onClose: () => void; onChanged: () => void }
         </div>
         <div className="dbody trash-body">
           {err && <div className="notice bad trash-err"><Icon.alert s={15} /><span>{err}</span></div>}
-          {items === null ? <div className="trash-load"><ThinkingOrb state="connecting" size={32} theme="dark" /><span>正在读取…</span></div>
+          {items === null ? <div className="trash-load"><ThinkingOrb state="connecting" size={32} theme={fxTheme()} /><span>正在读取…</span></div>
             : items.length === 0 ? <div className="empty trash-empty">
-              <div className="halo"><ThinkingOrb state="breathing" size={64} theme="dark" /></div>
+              <div className="halo"><ThinkingOrb state="breathing" size={64} theme={fxTheme()} /></div>
               <h3>最近删除是空的</h3>
               <div>在环境列表中删除的环境会先放到这里，保留 {days} 天，误删可以一键恢复。</div>
             </div>
@@ -116,7 +117,7 @@ export const TrashModal: React.FC<{ onClose: () => void; onChanged: () => void }
                       <span className={`trash-left ${left <= 3 ? 'warn' : ''}`} title={`${exact(it.expiresAt)} 自动彻底删除`}>{left > 0 ? `剩 ${left} 天` : '即将删除'}</span>
                     </div>
                     <div className="trash-acts">
-                      <button className="btn sm" disabled={b || emptying} onClick={() => restore(it)}>{b ? <ThinkingOrb state="weaving" size={20} theme="dark" /> : <Icon.refresh s={13} />} 恢复</button>
+                      <button className="btn sm" disabled={b || emptying} onClick={() => restore(it)}>{b ? <ThinkingOrb state="weaving" size={20} theme={fxTheme()} /> : <Icon.refresh s={13} />} 恢复</button>
                       <button className="btn sm ghost danger icon" disabled={b || emptying} onClick={() => purge(it)} title="彻底删除" aria-label={`彻底删除 ${it.name}`}><Icon.trash s={13} /></button>
                     </div>
                   </div>;
@@ -128,7 +129,7 @@ export const TrashModal: React.FC<{ onClose: () => void; onChanged: () => void }
           <div className="spacer" />
           <button className="btn" disabled={emptying} onClick={() => close()}>关闭</button>
           <button className="btn solid-bad" disabled={emptying || !items?.length} onClick={empty}>
-            {emptying ? <><ThinkingOrb state="weaving" size={20} theme="dark" /> 正在清空…</> : <><Icon.trash s={14} /> 清空回收站</>}
+            {emptying ? <><ThinkingOrb state="weaving" size={20} theme={fxTheme()} /> 正在清空…</> : <><Icon.trash s={14} /> 清空回收站</>}
           </button>
         </div>
       </div>

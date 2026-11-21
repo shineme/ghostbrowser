@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api, Profile } from './api';
 import { Icon, useToast, useConfirm, useExit, Avatar, ago, Segmented, Field, SelectField } from './ui';
+import { fxTheme } from './theme';
 
 // ---- share: icons not in the shared Icon set ----
 const SV = (s = 16) => ({ width: s, height: s, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const });
@@ -63,9 +64,9 @@ export const SharingView: React.FC<{ reload: () => void; goSecurity: () => void 
   const leave = async (s: ShareInfo) => { if (await ask({ title: `退出「${s.name}」？`, body: '本机的共享环境副本会被删除（包括你在里面产生的登录状态），之后需要对方重新分享。', ok: '退出并删除', danger: true })) act(s, () => api.LeaveShare(s.id), '已退出分享', reload); };
   const revoke = async (s: ShareInfo) => { if (await ask({ title: `撤销分享给 ${s.to} 的「${s.name}」？`, body: '对方本机的副本会在下次同步（最多几分钟）或下次启动该环境时被删除。已经打开的浏览器在关闭后删除。', ok: '撤销', danger: true })) act(s, () => api.RevokeShare(s.id), '已撤销'); };
 
-  if (!data) return <div className="panel sh-panel"><div className="empty" style={{ padding: 60 }}><ThinkingOrb state="connecting" size={32} theme="dark" /><div>正在读取分享…</div></div></div>;
+  if (!data) return <div className="panel sh-panel"><div className="empty" style={{ padding: 60 }}><ThinkingOrb state="connecting" size={32} theme={fxTheme()} /><div>正在读取分享…</div></div></div>;
   if (!data.supported) return <div className="panel sh-panel"><div className="empty" style={{ padding: 56 }}>
-    <div className="halo"><ThinkingOrb state="breathing" size={32} theme="dark" /></div><h3>无法使用环境分享</h3><div className="sh-maxw">{data.error || '同步服务器不支持分享'}</div>
+    <div className="halo"><ThinkingOrb state="breathing" size={32} theme={fxTheme()} /></div><h3>无法使用环境分享</h3><div className="sh-maxw">{data.error || '同步服务器不支持分享'}</div>
     <div className="actions"><button className="btn" onClick={() => { setData(null); load(); }}><Icon.refresh s={14} /> 重试</button></div></div></div>;
 
   const list = tab === 'in' ? data.in : data.out;
@@ -84,7 +85,7 @@ export const SharingView: React.FC<{ reload: () => void; goSecurity: () => void 
       {data.error && <div className="notice bad"><Icon.alert s={14} /> {data.error}</div>}
       <div className="panel list sh-panel">
         {list.length === 0 ? <div className="empty" style={{ padding: 52 }}>
-          <div className="halo"><ThinkingOrb state="breathing" size={32} theme="dark" /></div>
+          <div className="halo"><ThinkingOrb state="breathing" size={32} theme={fxTheme()} /></div>
           {tab === 'in' ? <><h3>还没有人分享环境给你</h3><div className="sh-maxw">同一同步服务器上的其他用户可以把环境分享给 <b>{data.self}</b>。你会在这里看到，并选择接受或拒绝。</div></>
             : <><h3>你还没有分享过环境</h3><div className="sh-maxw">在「环境」列表的操作栏点击分享图标，选择接收者、是否包含登录状态和有效期。服务器只保存加密后的分享包。</div></>}
         </div> : <div className="sh-list">{list.map((s, i) => {
@@ -108,7 +109,7 @@ export const SharingView: React.FC<{ reload: () => void; goSecurity: () => void 
               {!live(s) && <span className="sh-left mute">{new Date(s.updatedAt * 1000).toLocaleDateString()}</span>}
             </div>
             <div className="sh-acts">
-              {busy === s.id ? <span className="sh-spin"><ThinkingOrb state="weaving" size={20} theme="dark" /></span> : tab === 'in' ? (
+              {busy === s.id ? <span className="sh-spin"><ThinkingOrb state="weaving" size={20} theme={fxTheme()} /></span> : tab === 'in' ? (
                 s.status === 'pending' ? <>
                   <button className="btn sm primary" disabled={!data.ready || !!busy} title={data.ready ? '' : '请先设置恢复密钥'} onClick={() => accept(s)}><Icon.check s={13} /> 接受</button>
                   <button className="btn sm ghost" disabled={!!busy} onClick={() => decline(s)}>拒绝</button>
@@ -159,7 +160,7 @@ const ExtendModal: React.FC<{ share: ShareInfo; onClose: () => void; onDone: () 
       <div className="dbody">
         <Field label="从今天起有效" hint={`当前 ${shareLeft(share.expiresAt)[0]}；续期后到期日为 ${until(n)}`}><DaysPicker value={k} custom={custom} onChange={setK} onCustom={setCustom} /></Field>
       </div>
-      <div className="dfoot"><div className="spacer" /><button className="btn" onClick={() => close()}>取消</button><button className="btn primary" disabled={busy || !daysOk(n)} onClick={go}>{busy ? <ThinkingOrb state="weaving" size={20} theme="dark" /> : <Icon.check s={15} />} 续期</button></div>
+      <div className="dfoot"><div className="spacer" /><button className="btn" onClick={() => close()}>取消</button><button className="btn primary" disabled={busy || !daysOk(n)} onClick={go}>{busy ? <ThinkingOrb state="weaving" size={20} theme={fxTheme()} /> : <Icon.check s={15} />} 续期</button></div>
     </div>
   </div>;
 };
@@ -194,7 +195,7 @@ export const ShareDialog: React.FC<{ profile: Profile; running: boolean; onClose
       <div className="dhead"><div className="glyph"><ShIc.share s={18} /></div><div className="sh-h"><h3>分享环境</h3><div className="sub sh-ell" title={profile.name}>{profile.name}</div></div><div style={{ marginLeft: 'auto' }}><button className="btn ghost icon" disabled={busy} onClick={() => close()}><Icon.x /></button></div></div>
       <div className="dbody">
         {!ready ? <div className="sh-blank"><ShIc.key s={26} /><h4>先设置恢复密钥</h4><div className="sub">分享使用账号密钥加密：设置恢复密钥后才能分享或接收环境。</div>{onSecurity && <button className="btn sm primary" onClick={() => { close(); onSecurity(); }}>去设置</button>}</div>
-          : users === null ? <div className="sh-blank"><ThinkingOrb state="connecting" size={32} theme="dark" /><div className="sub">正在读取服务器上的用户…</div></div>
+          : users === null ? <div className="sh-blank"><ThinkingOrb state="connecting" size={32} theme={fxTheme()} /><div className="sub">正在读取服务器上的用户…</div></div>
             : err ? <div className="notice bad"><Icon.alert s={14} /> {err}</div>
               : users.length === 0 ? <div className="sh-blank"><ShIc.users s={26} /><h4>没有可以接收分享的用户</h4><div className="sub">对方需要是同一台同步服务器上的用户（ghostsync.php 的 GHOST_USERS），并在客户端设置过恢复密钥。</div></div>
                 : <>
@@ -212,7 +213,7 @@ export const ShareDialog: React.FC<{ profile: Profile; running: boolean; onClose
                 </>}
       </div>
       <div className="dfoot"><div className="spacer" /><button className="btn" disabled={busy} onClick={() => close()}>取消</button>
-        <button className="btn primary" disabled={busy || !ready || !to || !users?.length || blocked || !daysOk(n)} onClick={go}>{busy ? <><ThinkingOrb state="weaving" size={20} theme="dark" /> 加密上传中…</> : <><ShIc.send s={14} /> 分享</>}</button></div>
+        <button className="btn primary" disabled={busy || !ready || !to || !users?.length || blocked || !daysOk(n)} onClick={go}>{busy ? <><ThinkingOrb state="weaving" size={20} theme={fxTheme()} /> 加密上传中…</> : <><ShIc.send s={14} /> 分享</>}</button></div>
     </div>
   </div>;
 };

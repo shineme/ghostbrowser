@@ -27,7 +27,7 @@ const Bar: React.FC<{ f: number; c: string; indet?: boolean }> = ({ f, c, indet 
 // ---------- local API
 const ApiPill: React.FC<{ settings: Settings | null }> = ({ settings }) => {
   const on = (settings as any)?.apiEnabled !== false;
-  return <div className="la la-pill"><span className={`la-dot ${on ? '' : 'off'}`} /><b>本地 API</b><span className="sp" /><span className="num" style={{ color: on ? C.ok : '#6E6E76', fontWeight: 650 }}>{on ? `:${settings?.apiPort ?? '—'}` : '已关闭'}</span></div>;
+  return <div className="la la-pill"><span className={`la-dot ${on ? '' : 'off'}`} /><b>本地 API</b><span className="sp" /><span className="num" style={{ color: on ? C.ok : 'rgb(var(--k-6e6e76))', fontWeight: 650 }}>{on ? `:${settings?.apiPort ?? '—'}` : '已关闭'}</span></div>;
 };
 
 // ---------- uploads / downloads
@@ -111,7 +111,7 @@ const ProxyCard: React.FC<{ proxies: Proxy[] }> = ({ proxies }) => {
     <div className="la-h"><Chip c={C.proxy}><Icon.globe s={16} /></Chip>
       <div className="la-t"><b>代理健康</b><span>{real.length - ok.length - fail.length > 0 ? `${real.length - ok.length - fail.length} 个未检测` : '全部已检测'}</span></div>
       <span className="sp" /><span className="la-big" style={{ color: C.proxy }}><Roll v={ok.length} /><small>/{real.length}</small></span></div>
-    <div className="la-hist">{bars.map(p => { const v = p.status === 'ok' ? Math.max(.12, Math.min(1, (p.latency || 0) / max)) : p.status === 'fail' ? 1 : .08; return <i key={p.id} title={`${p.name} · ${p.status === 'ok' ? `${p.latency} ms` : p.status === 'fail' ? '失效' : '未检测'}`} style={{ height: `${v * 100}%`, background: p.status === 'fail' ? C.bad : p.status === 'ok' ? ((p.latency || 0) < 150 ? C.proxy : (p.latency || 0) < 350 ? C.warn : '#FF8A5B') : '#2A2A30' }} />; })}</div>
+    <div className="la-hist">{bars.map(p => { const v = p.status === 'ok' ? Math.max(.12, Math.min(1, (p.latency || 0) / max)) : p.status === 'fail' ? 1 : .08; return <i key={p.id} title={`${p.name} · ${p.status === 'ok' ? `${p.latency} ms` : p.status === 'fail' ? '失效' : '未检测'}`} style={{ height: `${v * 100}%`, background: p.status === 'fail' ? C.bad : p.status === 'ok' ? ((p.latency || 0) < 150 ? C.proxy : (p.latency || 0) < 350 ? C.warn : '#FF8A5B') : 'rgb(var(--k-2a2a30))' }} />; })}</div>
     <div className="la-f"><span>平均 <b className="num">{avg || '—'}</b> ms</span><span className="sp" />{fail.length > 0 && <span style={{ color: C.bad }}>{fail.length} 个失效</span>}</div>
   </div>;
 };

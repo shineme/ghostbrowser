@@ -30,6 +30,7 @@ import { FoxIcon, useFirefoxInfo, ffVersionLabel } from './FirefoxKernel';
 import { ShareDialog, ShIc, shareLeft } from './SharingView'; // share
 import { TopbarExtras, usePendingRestart, RestartTag, useRestart, SiteLaunch } from './AppShell';
 import { DefaultStar, LinkPicker, useDefaultBrowser, DBStatus } from './DefaultBrowser';
+import { fxTheme, applyTheme } from './theme';
 
 type Tab = 'profiles' | 'proxies' | 'rpa' | 'extensions' | 'terminal' | 'cloud' | 'audit' | 'settings';
 
@@ -51,6 +52,9 @@ function Shell() {
   }, []);
 
   useEffect(() => { reload(); api.GetSettings().then(setSettings); }, [reload]);
+  useEffect(() => { if (settings) applyTheme((settings as any).theme); }, [(settings as any)?.theme]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [, setThemeTick] = useState(0); // re-render fx (orbs / beams) on theme switch
+  useEffect(() => { const f = (e: any) => { setThemeTick(x => x + 1); setSettings(st => st && (st as any).theme !== e.detail ? { ...st, theme: e.detail } as any : st); }; window.addEventListener('gb:theme', f); return () => window.removeEventListener('gb:theme', f); }, []);
   // Auto sync: refresh the list whenever a profile is pulled/pushed; surface failures.
   useEffect(() => onEvent('sync:event', (e: any) => {
     if (e.phase === 'item' && e.id === '_global' && e.action === 'pull' && !e.error) { api.GetSettings().then(st => { setSettings(st); setSettingsRev(r => r + 1); }); }
@@ -272,11 +276,11 @@ const ProfilesView: React.FC<{
 
   if (profiles.length === 0) return (
     <div className="empty">
-      <div className="halo"><ThinkingOrb state="breathing" size={64} theme="dark" /></div>
+      <div className="halo"><ThinkingOrb state="breathing" size={64} theme={fxTheme()} /></div>
       <h3>还没有环境</h3>
       <div>创建第一个浏览器环境，它会拥有一套独立的指纹、代理和数据目录。</div>
       <div className="actions">
-        <BorderBeam size="sm" colorVariant="ocean" theme="dark" borderRadius={19}>
+        <BorderBeam size="sm" colorVariant="ocean" theme={fxTheme()} borderRadius={19}>
           <button className="btn primary" onClick={() => { setEditing(null); setDrawer(true); }}><Icon.plus s={15} /> 新建环境</button>
         </BorderBeam>
         <button className="btn" onClick={() => setBulk(true)}><Icon.layers s={15} /> 批量创建</button>
@@ -317,7 +321,7 @@ const ProfilesView: React.FC<{
         {trashBtn}
         <button className="btn" onClick={() => setBulk(true)}><Icon.layers s={15} /> 批量创建</button>
         <button className="btn" onClick={() => setNativeTools(true)}><Icon.shield s={15} /> 指纹库 / JSON</button>
-        <BorderBeam size="sm" colorVariant="ocean" theme="dark" borderRadius={19}>
+        <BorderBeam size="sm" colorVariant="ocean" theme={fxTheme()} borderRadius={19}>
           <button className="btn primary" onClick={() => { setEditing(null); setDrawer(true); }}><Icon.plus s={15} /> 新建环境</button>
         </BorderBeam>
       </div>
@@ -339,7 +343,7 @@ const ProfilesView: React.FC<{
           <div className="pc-h"><Avatar seed={p.fingerprint.noiseSeed || p.id} os={p.fingerprint.os} running={isRun} />
             <div className="pc-t"><div className="nm"><span className="nm-t">{p.name}</span><DefaultStar profile={p} on={dbStatus.profileId === p.id} onChanged={setDbStatus} />{needRestart && <RestartTag compact />}</div><div className="sub"><OsIcon os={p.fingerprint.os} s={11} /> {osLabel(p.fingerprint.os)} · {(p as any).kernel === 'firefox' ? 'Firefox' : `Chrome ${p.fingerprint.browserVersion}`}</div></div>
             <span className="spacer" />
-            {isBusy ? <ThinkingOrb state={isRun ? 'breathing' : 'connecting'} size={20} theme="dark" /> : isRun ? <div className="pc-up"><Uptime since={runs[p.id]} className="up" /><span className="pc-live"><i />运行中</span></div>
+            {isBusy ? <ThinkingOrb state={isRun ? 'breathing' : 'connecting'} size={20} theme={fxTheme()} /> : isRun ? <div className="pc-up"><Uptime since={runs[p.id]} className="up" /><span className="pc-live"><i />运行中</span></div>
               : <button className="pc-go" title="启动" onClick={() => start(p)}><Icon.play s={13} /></button>}</div>
           <div className="pc-px">{px ? <><CC cc={px.country} /><b>{px.city || px.name}</b><span className="num sub">{px.ip || px.host}</span><span className="spacer" />{px.status === 'fail' ? <span className="badge fail">失效</span> : px.status === 'ok' && px.latency ? <LatDot ms={px.latency} /> : null}</> : <span className="sub">直连</span>}</div>
           {isRun && <div className="pc-run">{needRestart && <button className="btn sm restart-btn" disabled={isBusy} onClick={() => restart(p)}><Icon.refresh s={12} /> 重启生效</button>}<button className="btn sm" onClick={() => focus(p.id)}><Icon.laptop s={12} /> 切到前台</button><SiteLaunch profile={p} running={isRun} onLaunched={() => {}} /><span className="spacer" /><button className="btn sm stop" disabled={isBusy} onClick={() => stop(p)}><Icon.stop s={11} /> 停止</button></div>}
@@ -386,7 +390,7 @@ const ProfilesView: React.FC<{
                 <td>
                   <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
                     {needRestart && !isBusy && <button className="btn sm icon restart-btn" onClick={() => restart(p)} title="重启：代理、指纹或启动参数已修改，重启后生效" aria-label="重启"><Icon.refresh s={13} /></button>}
-                    {isBusy ? <span className="split-busy"><ThinkingOrb state={isRun ? 'breathing' : 'connecting'} size={20} theme="dark" /></span>
+                    {isBusy ? <span className="split-busy"><ThinkingOrb state={isRun ? 'breathing' : 'connecting'} size={20} theme={fxTheme()} /></span>
                       : <span className={`split-btn ${isRun ? 'run' : ''}`}>{isRun ? <button className="btn sm stop" onClick={() => stop(p)}><Icon.stop s={12} /> 停止</button>
                         : <button className="btn sm go" onClick={() => start(p)}><Icon.play s={12} /> 启动</button>}
                         <SiteLaunch profile={p} running={isRun} onLaunched={() => setRunning(s => new Set(s).add(p.id))} /></span>}
@@ -511,7 +515,7 @@ const AssignModal: React.FC<{ ids: string[]; proxies: Proxy[]; profiles: Profile
           <Field label="分配方式" hint={mode === 'order' ? (group !== '*' && group ? '按所选分组的节点依次轮流：第 1 个环境用第 1 个节点' : '第 1 个环境用第 1 个代理，依次轮流') : mode === 'random' ? '随机分配，代理数量足够时不重复' : '所有环境都用第一个选中的代理'}>
             <Segmented className="block" items={[['order', '顺序轮流'], ['random', '随机'], ['one', '统一一个']]} value={mode} onChange={setMode} />
           </Field>
-          {nPick > 0 && nPick < ids.length && mode !== 'one' && <div className="sub" style={{ color: '#ffd98a' }}>⚠ 代理数（{nPick}）少于环境数（{ids.length}），会有环境共用同一个代理。</div>}
+          {nPick > 0 && nPick < ids.length && mode !== 'one' && <div className="sub" style={{ color: 'rgb(var(--k-ffd98a))' }}>⚠ 代理数（{nPick}）少于环境数（{ids.length}），会有环境共用同一个代理。</div>}
         </div>
         <div className="dfoot"><button className="btn ghost" onClick={() => go(true)}>改为直连</button><div className="spacer" /><button className="btn" onClick={() => close()}>取消</button><button className="btn primary" disabled={!nPick} onClick={() => go()}><Icon.check s={15} /> 分配 {nPick} 个代理</button></div>
       </div>
@@ -555,7 +559,7 @@ const BulkModal: React.FC<{ proxies: Proxy[]; onClose: () => void; onDone: () =>
   };
   return (
     <div className={`overlay center ${out ? 'out' : ''}`} onMouseDown={e => e.target === e.currentTarget && close()}>
-      <BorderBeam size="pulse-inner" colorVariant="ocean" theme="dark" strength={0.6} borderRadius={20}>
+      <BorderBeam size="pulse-inner" colorVariant="ocean" theme={fxTheme()} strength={0.6} borderRadius={20}>
       <div className="modal">
         <div className="dhead"><div className="glyph"><Icon.layers s={18} /></div><div><h3>批量创建环境</h3><div className="sub">每个环境都会生成一套独立且自洽的指纹</div></div><div style={{ marginLeft: 'auto' }}><button className="btn ghost icon" onClick={() => close()}><Icon.x /></button></div></div>
         <div className="dbody">

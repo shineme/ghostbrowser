@@ -11,6 +11,7 @@ import { CoreCard } from './Subscriptions';
 import { FpCheckSettingsCard } from './FpCheck';
 import { SyncContentSetting } from './SyncContent';
 import { GatewaySettingsCard } from './Gateway';
+import { applyTheme, normTheme, ThemeID } from './theme';
 
 const mb = (b: number) => b ? `${(b / 1048576).toFixed(b > 1e8 ? 0 : 1)} MB` : '';
 
@@ -51,8 +52,24 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
 
   const envBusy = envS && ['checking', 'downloading', 'verifying', 'extracting'].includes(envS.phase);
 
+  const theme = normTheme((s as any).theme);
+  const pickTheme = async (t: ThemeID) => {
+    set({ theme: t } as any); applyTheme(t, true);
+    try { const cur = await api.GetSettings(); await api.SaveSettings({ ...cur, theme: t } as any); } catch (e: any) { toast(String(e?.message || e), 'bad'); }
+  };
+  const THEMES: [ThemeID, string, string][] = [['dark', '暗色', '黑色卡片 · 石墨舞台'], ['gray', '灰色', '深空灰 · 柔和对比'], ['light', '亮色', '白色卡片 · 瓷白舞台']];
+
   return (
     <div style={{ maxWidth: 780 }}>
+      <div className="panel pad setting-card spot rise" style={{ ['--i' as any]: 0 }} id="theme-card">
+        <div className="head"><span className="ic"><Icon.sparkles /></span><div><h4>外观</h4><span>选好立即生效，随设置同步到其他设备</span></div></div>
+        <div className="theme-pick">
+          {THEMES.map(([id, name, hint]) => <button key={id} type="button" className={`theme-opt tp-${id} ${theme === id ? 'on' : ''}`} onClick={() => pickTheme(id)} aria-pressed={theme === id}>
+            <div className="tp-art"><div className="tp-side"><i /><i /><i /><i /></div><div className="tp-main"><div className="tp-row"><b /><s /><u /></div><div className="tp-row"><b /><s /><u /></div><div className="tp-row"><b /><s /></div></div></div>
+            <div className="tp-name"><span>{name} <small>{hint}</small></span><span className="radio" /></div>
+          </button>)}
+        </div>
+      </div>
       <div className="panel pad setting-card spot rise" style={{ ['--i' as any]: 0 }}>
         <div className="head"><span className="ic"><Icon.cpu /></span><div><h4>浏览器内核</h4><span>定制 Chromium + 原生指纹模板</span></div></div>
         <div className="choice">
@@ -67,7 +84,7 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
           </div>
           {envBusy && envS!.total > 0 && <div className="env-bar" style={{ marginTop: 8 }}><i style={{ width: `${Math.max(envS!.pct, 1)}%` }} /></div>}
           {envBusy && <div className="env-meta num"><span>{mb(envS!.done)}{envS!.total ? ` / ${mb(envS!.total)}` : ''}</span><span>{envS!.speedBps ? `${(envS!.speedBps / 1048576).toFixed(1)} MB/s` : ''}</span></div>}
-          {envS?.error && <div className="sub" style={{ color: '#ffb3bc', marginTop: 4, wordBreak: 'break-all' }}>{envS.error}</div>}
+          {envS?.error && <div className="sub" style={{ color: 'rgb(var(--k-ffb3bc))', marginTop: 4, wordBreak: 'break-all' }}>{envS.error}</div>}
           <div className="sub" style={{ marginTop: 4 }}>内核：<code className="mono">{envS?.chromeExe || defaultKernel || '未安装'}</code></div>
           <div className="sub" style={{ marginTop: 2 }}>校验：{envS?.manifestFromServer ? '服务器 manifest.json' : 'EXE 内置校验值'}{envS?.kitDir ? ` · ${envS.kitDir}` : ''}</div>
         </div>
@@ -124,7 +141,7 @@ export const SettingsView: React.FC<{ settings: Settings; onSaved: (s: Settings)
       <div className="panel pad setting-card spot rise" style={{ ['--i' as any]: 3 }}>
         <div className="head"><span className="ic"><Icon.cloud /></span><div><h4>云端同步</h4><span>你的 VPS + PHP，端到端加密</span></div></div>
         <Field label="同步服务器地址" hint="填 ghostsync.php 的完整网址（单文件 PHP，无需伪静态）"><input type="text" value={s.syncServer} onChange={e => set({ syncServer: e.target.value })} placeholder="https://你的域名/ghostsync.php" />
-          {/^http:\/\//i.test(s.syncServer || '') && !/^http:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/i.test(s.syncServer) && <div className="sub" style={{ color: '#ffcf8a', marginTop: 4 }}>⚠ 正在使用 http：同步包本身是加密的，但访问令牌会明文传输，可能被窃取。建议给域名配置 SSL 后改用 https。</div>}</Field>
+          {/^http:\/\//i.test(s.syncServer || '') && !/^http:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/i.test(s.syncServer) && <div className="sub" style={{ color: 'rgb(var(--k-ffcf8a))', marginTop: 4 }}>⚠ 正在使用 http：同步包本身是加密的，但访问令牌会明文传输，可能被窃取。建议给域名配置 SSL 后改用 https。</div>}</Field>
         <Field label="访问令牌 (Bearer Token)"><input type="password" value={s.syncToken} onChange={e => set({ syncToken: e.target.value })} /></Field>
         <Field label="同步密码 (端到端加密)" hint="用于派生 AES-256 密钥。只存在本机，绝不上传；忘记将无法解密云端数据。"><input type="password" value={s.syncPassword} onChange={e => set({ syncPassword: e.target.value })} /></Field>
         <Toggle on={!s.autoSyncOff} onChange={v => set({ autoSyncOff: !v })} label="自动同步" hint="启动时对比云端与本地；关闭浏览器后上传环境（含登录状态）；设置、代理列表、指纹库改动后自动上传" />

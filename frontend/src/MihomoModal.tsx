@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api } from './api';
 import { Icon, Latency, Segmented, useExit, useToast, Field, CC } from './ui';
+import { fxTheme } from './theme';
 
 // Windows has no flag glyphs: turn a regional-indicator pair into the app's country chip.
 const RI = /^\s*([\u{1F1E6}-\u{1F1FF}])([\u{1F1E6}-\u{1F1FF}])\s*/u;
@@ -90,7 +91,7 @@ export const MihomoModal: React.FC<{ onClose: () => void; onAdded?: () => void }
   const listen = st?.listenPort ? `${st.listenKind || 'mixed'} ${st.listenHost || '127.0.0.1'}:${st.listenPort}` : '';
 
   const badge = (name: string) => {
-    if (testing.has(name)) return <span className="mh-testing"><ThinkingOrb state="searching" size={20} theme="dark" /></span>;
+    if (testing.has(name)) return <span className="mh-testing"><ThinkingOrb state="searching" size={20} theme={fxTheme()} /></span>;
     if (fails[name] || (byName[name] && !byName[name].isGroup && !byName[name].alive)) return <span className="badge fail" title={fails[name] || ''}>超时</span>;
     return <Latency ms={delayOf(name)} />;
   };
@@ -104,7 +105,7 @@ export const MihomoModal: React.FC<{ onClose: () => void; onAdded?: () => void }
           <div style={{ marginLeft: 'auto' }}><button className="btn ghost icon" onClick={() => close()}><Icon.x /></button></div>
         </div>
         <div className="dbody">
-          {st === null && <div className="empty" style={{ padding: 40 }}><ThinkingOrb state="searching" size={32} theme="dark" /><div>正在读取连接状态…</div></div>}
+          {st === null && <div className="empty" style={{ padding: 40 }}><ThinkingOrb state="searching" size={32} theme={fxTheme()} /><div>正在读取连接状态…</div></div>}
 
           {st !== null && !connected && <div className="mh-connect">
             <div className="grid2">
@@ -120,7 +121,7 @@ export const MihomoModal: React.FC<{ onClose: () => void; onAdded?: () => void }
               <span className="sub" style={{ fontSize: 12 }}>支持 Clash Verge Rev、Mihomo Party、FlClash 等客户端内置的 Mihomo 内核</span>
               <div className="spacer" style={{ flex: 1 }} />
               {edit && <button className="btn" onClick={() => { setEdit(false); setErr(''); }}>取消</button>}
-              <button className="btn primary" onClick={connect} disabled={connecting || !ctl.trim()}>{connecting ? <><ThinkingOrb state="connecting" size={20} theme="dark" /> 连接中…</> : <><Icon.bolt s={15} /> 连接</>}</button>
+              <button className="btn primary" onClick={connect} disabled={connecting || !ctl.trim()}>{connecting ? <><ThinkingOrb state="connecting" size={20} theme={fxTheme()} /> 连接中…</> : <><Icon.bolt s={15} /> 连接</>}</button>
             </div>
           </div>}
 
@@ -142,10 +143,10 @@ export const MihomoModal: React.FC<{ onClose: () => void; onAdded?: () => void }
               <span className="sub num" style={{ fontSize: 12 }}>{alive} / {nodes.length} 个节点可用</span>
               <div className="spacer" style={{ flex: 1 }} />
               <button className="btn sm" onClick={loadProxies} disabled={loading}><Icon.refresh s={13} /> 刷新</button>
-              <button className="btn sm" onClick={() => testAll()} disabled={testing.size > 0 || !nodes.length}>{testing.size ? <><ThinkingOrb state="searching" size={20} theme="dark" /> 测速中 {testing.size}</> : <><Icon.bolt s={13} /> 全部测速</>}</button>
+              <button className="btn sm" onClick={() => testAll()} disabled={testing.size > 0 || !nodes.length}>{testing.size ? <><ThinkingOrb state="searching" size={20} theme={fxTheme()} /> 测速中 {testing.size}</> : <><Icon.bolt s={13} /> 全部测速</>}</button>
             </div>
 
-            {loading && !groups.length && <div className="empty" style={{ padding: 40 }}><ThinkingOrb state="searching" size={32} theme="dark" /><div>正在读取节点…</div></div>}
+            {loading && !groups.length && <div className="empty" style={{ padding: 40 }}><ThinkingOrb state="searching" size={32} theme={fxTheme()} /><div>正在读取节点…</div></div>}
 
             {view === 'groups' && groups.length > 0 && <div className="mh-groups">
               {groups.map(g => {
@@ -164,7 +165,7 @@ export const MihomoModal: React.FC<{ onClose: () => void; onAdded?: () => void }
                       const on = g.now === n; const sw = switching === `${g.name}\u0000${n}`;
                       return <button key={n} className={`mh-node ${on ? 'on' : ''}`} disabled={!manual || !!switching} onClick={() => select(g, n)} title={n}>
                         <span className="mh-nname ellip">{byName[n]?.isGroup ? <Icon.layers s={12} /> : null}<NodeName n={n} /></span>
-                        <span className="mh-nmeta">{sw ? <ThinkingOrb state="connecting" size={20} theme="dark" /> : <>{byName[n] && <span className="sub">{byName[n].isGroup ? '策略组' : byName[n].type}</span>}{badge(n)}</>}</span>
+                        <span className="mh-nmeta">{sw ? <ThinkingOrb state="connecting" size={20} theme={fxTheme()} /> : <>{byName[n] && <span className="sub">{byName[n].isGroup ? '策略组' : byName[n].type}</span>}{badge(n)}</>}</span>
                       </button>;
                     })}
                   </div>}

@@ -6,6 +6,7 @@ import { COUNTRIES } from './locales';
 import { MihomoModal } from './MihomoModal';
 import { GatewayModal } from './Gateway';
 import { SubsPanel, useSubs, groupOptions, groupKey, ProtoChip, isCore } from './Subscriptions';
+import { fxTheme } from './theme';
 
 const cname = (cc?: string) => (cc && COUNTRIES.find(c => c.cc === cc.toUpperCase())?.name) || cc || '';
 const IPTYPE: Record<string, [string, string]> = { residential: ['住宅', 'ok'], hosting: ['机房', 'warn'], mobile: ['移动', 'cy'] };
@@ -103,7 +104,7 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
   if (view === 'subs') return <>{tabs}<SubsPanel subs={subs} proxies={all} profiles={profiles} reload={reload} reloadSubs={reloadSubs} onShowGroup={id => { setGroup(id); setStatus('all'); setCountry(''); setQ(''); setSel(new Set()); setView('list'); }} /></>;
   if (proxies.length === 0) return (
     <>{tabs}<div className="empty">
-      <div className="halo"><ThinkingOrb state="searching" size={64} theme="dark" /></div>
+      <div className="halo"><ThinkingOrb state="searching" size={64} theme={fxTheme()} /></div>
       <h3>还没有代理</h3>
       <div>直接 <b>Ctrl+V</b> 粘贴一批代理，或拖入 .txt / .csv 文件。格式、协议、国家和延迟都会自动识别。</div>
       <div className="actions"><button className="btn" onClick={() => setMihomo(true)}><Icon.server s={15} /> Clash / Mihomo</button><button className="btn" onClick={() => setView('subs')}><Icon.link s={15} /> 添加订阅</button><button className="btn" onClick={() => setGw(true)}><Icon.lock s={15} /> 代理商账号</button><button className="btn primary" onClick={() => setImportText('')}><Icon.upload s={15} /> 批量导入</button></div>
@@ -150,8 +151,8 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
         <Pick label="国家" value={country} onChange={setCountry} icon={<Icon.globe />}
           options={[['', '全部国家'] as [string, string, number?], ...countries.map(c => [c, `${c} · ${cname(c)}`, all.filter(p => p.country === c).length] as [string, string, number])]} />
         <div className="spacer" />
-        <button className="btn" onClick={() => runCheck(target)} disabled={!!bulk} title={`检测${scope}`}>{bulk === '检测' ? <><ThinkingOrb state="searching" size={20} theme="dark" /> 检测中…</> : <><Icon.refresh s={14} /> 检测{sel.size ? '所选' : ''}</>}</button>
-        <button className="btn" onClick={() => runSpeed(target)} disabled={!!bulk} title={`测速${scope}（每个下载约 5 MB）`}>{bulk === '测速' ? <><ThinkingOrb state="searching" size={20} theme="dark" /> 测速中…</> : <><Icon.bolt s={14} /> 测速{sel.size ? '所选' : ''}</>}</button>
+        <button className="btn" onClick={() => runCheck(target)} disabled={!!bulk} title={`检测${scope}`}>{bulk === '检测' ? <><ThinkingOrb state="searching" size={20} theme={fxTheme()} /> 检测中…</> : <><Icon.refresh s={14} /> 检测{sel.size ? '所选' : ''}</>}</button>
+        <button className="btn" onClick={() => runSpeed(target)} disabled={!!bulk} title={`测速${scope}（每个下载约 5 MB）`}>{bulk === '测速' ? <><ThinkingOrb state="searching" size={20} theme={fxTheme()} /> 测速中…</> : <><Icon.bolt s={14} /> 测速{sel.size ? '所选' : ''}</>}</button>
         {sel.size > 0 ? <button className="btn danger" onClick={() => delMany([...sel], '所选代理')}><Icon.trash s={14} /> 删除所选</button>
           : failIds.length > 0 && <button className="btn" onClick={() => delMany(failIds, '全部不可用的代理')}><Icon.trash s={14} /> 清理不可用 ({failIds.length})</button>}
         <button className="btn tb-mh" onClick={() => setMihomo(true)} title="Clash / Mihomo：连接 Clash Verge / Mihomo，切换节点并作为代理使用"><Icon.server s={15} /><span>Clash / Mihomo</span></button>
@@ -185,7 +186,7 @@ export const ProxyView: React.FC<{ proxies: Proxy[]; profiles?: Profile[]; reloa
               <td><span className={`badge ${p.status || 'unknown'}`} title={p.error || ''}><i className="d" />{p.status === 'ok' ? '可用' : p.status === 'fail' ? '不可用' : p.error === '需要内核' ? '需要内核' : '未检测'}</span>
                 <div className="sub" style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.error}>{p.status === 'fail' ? p.error : p.error === '需要内核' ? '未安装内核' : ago(p.checkedAt)}</div></td>
               <td><div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                {busy.has(p.id) ? <span style={{ width: 26, display: 'grid', placeItems: 'center' }}><ThinkingOrb state="searching" size={20} theme="dark" /></span>
+                {busy.has(p.id) ? <span style={{ width: 26, display: 'grid', placeItems: 'center' }}><ThinkingOrb state="searching" size={20} theme={fxTheme()} /></span>
                   : <>
                     <button className="btn sm px-chk" onClick={() => runCheck([p.id])} title="检测国家、IP 类型和延迟"><Icon.refresh s={13} /><span>检测</span></button>
                     <button className="btn sm" onClick={() => runSpeed([p.id])} title="下载约 5 MB 测速"><Icon.bolt s={13} /></button>

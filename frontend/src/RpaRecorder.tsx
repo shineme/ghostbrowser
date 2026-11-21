@@ -5,6 +5,7 @@ import { ThinkingOrb } from 'thinking-orbs';
 import { api, onEvent, Profile } from './api';
 import { Icon, Toggle, Avatar, useToast, useConfirm, useExit } from './ui';
 import { RStep, StepIcon, toneOf, typeLabel, summary } from './rpaMeta';
+import { fxTheme } from './theme';
 
 const err = (e: any) => String(e?.message || e);
 
@@ -108,7 +109,7 @@ const Setup: React.FC<{ target: RecTarget; given?: Profile[]; onCancel: () => vo
       <div className="rec-label">在哪个环境里录制</div>
       <div className="rpa-search" style={{ marginBottom: 8 }}><Icon.search s={14} /><input type="text" placeholder="搜索环境名称、分组、标签" value={q} onChange={ev => setQ(ev.target.value)} /></div>
       <div className="assign-list rec-plist">
-        {profiles === null && <div className="rec-loading"><ThinkingOrb state="working" size={20} theme="dark" /> 正在读取环境…</div>}
+        {profiles === null && <div className="rec-loading"><ThinkingOrb state="working" size={20} theme={fxTheme()} /> 正在读取环境…</div>}
         {sorted.map(p => { const ff = (p as any).kernel === 'firefox'; return <div key={p.id} className={`assign-row ${pick === p.id ? 'on' : ''} ${ff ? 'ff-dis' : ''}`} title={ff ? 'Firefox 内核暂不支持' : undefined} onClick={() => !ff && setPick(p.id)}>
           <span className={`rec-radio ${pick === p.id ? 'on' : ''}`} />
           <Avatar seed={p.fingerprint?.noiseSeed || p.id} os={p.fingerprint?.os || 'windows'} running={open.has(p.id)} />
@@ -187,7 +188,7 @@ const Live: React.FC<{ st: RecState; setSt: (s: RecState) => void; onStop: () =>
       <button className="rec-pick" disabled={st.paused} onClick={() => pick('assert')} title="在浏览器里点一个元素，回放时等它出现再继续"><StepIcon type="wait_for" s={12} /> 等待元素</button>
     </div>
     <div className="rec-list" ref={listRef}>
-      {st.steps.length === 0 && <div className="rec-empty"><ThinkingOrb state="listening" size={32} theme="dark" /><b>等待你的第一个操作…</b><span>在浏览器里打开网页、点击或输入，步骤会实时出现在这里</span></div>}
+      {st.steps.length === 0 && <div className="rec-empty"><ThinkingOrb state="listening" size={32} theme={fxTheme()} /><b>等待你的第一个操作…</b><span>在浏览器里打开网页、点击或输入，步骤会实时出现在这里</span></div>}
       {st.steps.map(s => {
         if (isThink(s)) return <div key={s.id} className={`rec-think ${fresh.current.has(s.id) ? 'new' : ''}`}><i /><span>停顿 {(+s.params.ms / 1000).toFixed(1)} 秒</span><i /><button className="rec-x" title="删除这个停顿" onClick={() => del(s.id)}><Icon.x s={11} /></button></div>;
         n++;
@@ -263,7 +264,7 @@ const Review: React.FC<{ st: RecState; target: RecTarget; onAgain: () => void; o
       </div>
       {vars.length > 0 && <div className="notice warn rec-vars"><Icon.alert /><span className="grow">回放前请在「初始变量」里填写：{vars.map(v => <code key={v}>{v}</code>)}{vars.some(v => v.startsWith('upload_file')) ? '（上传文件填本机完整路径）' : ''}</span></div>}
       <div className="rec-list review">
-        {out.length === 0 && <div className="rec-empty"><ThinkingOrb state="breathing" size={32} theme="dark" /><b>没有录制到步骤</b><span>可以重新录制，或直接关闭</span></div>}
+        {out.length === 0 && <div className="rec-empty"><ThinkingOrb state="breathing" size={32} theme={fxTheme()} /><b>没有录制到步骤</b><span>可以重新录制，或直接关闭</span></div>}
         {out.map((s, i) => <div key={s.id} className="rec-row static" style={{ ['--i' as any]: Math.min(i, 16) }}>
           <div className="rec-row-main">
             <span className="rec-n num">{i + 1}</span>

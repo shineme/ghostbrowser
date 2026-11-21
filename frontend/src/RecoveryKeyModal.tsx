@@ -4,6 +4,7 @@ import { ThinkingOrb } from 'thinking-orbs';
 import { api } from './api';
 import { Icon, useToast, useExit, Field, Segmented } from './ui';
 import { ShIc } from './SharingView';
+import { fxTheme } from './theme';
 
 type RState = { supported: boolean; configured: boolean; unlocked: boolean; legacy: boolean; kid: string; rkCreated: number; pwChanged: number; shareReady: boolean; user: string; error?: string };
 type Mode = 'setup' | 'rotate' | 'unlock' | 'password';
@@ -23,7 +24,7 @@ export const RecoveryCard: React.FC = () => {
         <div className="dv-h"><h4>账号密钥与恢复</h4><div className="sub">云端数据用账号主密钥加密；同步密码和恢复密钥都只是用来解开它的钥匙。</div></div>
         {st?.configured && (st.unlocked ? <span className="badge ok"><i className="d" />已解锁</span> : <span className="badge warn"><i className="d" />本机未解锁</span>)}
       </div>
-      {!st ? <div className="dv-blank"><ThinkingOrb state="connecting" size={32} theme="dark" /><div className="sub">正在检查…</div></div>
+      {!st ? <div className="dv-blank"><ThinkingOrb state="connecting" size={32} theme={fxTheme()} /><div className="sub">正在检查…</div></div>
         : st.error ? <div className="notice bad dv-in"><Icon.alert s={14} /><div className="grow">{st.error}</div><button className="btn sm" onClick={() => { setSt(null); load(); }}>重试</button></div>
           : !st.supported ? <div className="notice warn dv-in"><Icon.alert s={14} /><div className="grow">服务器版本过旧，不支持恢复密钥：请更新 ghostsync.php。</div></div>
             : !st.configured ? <div className="rk-setup">
@@ -135,7 +136,7 @@ export const RecoveryKeyModal: React.FC<{ mode: Mode; onClose: () => void; onDon
       <div className="dfoot">
         {showing ? <><div className="spacer" /><button className="btn primary" disabled={!saved} onClick={() => close()}><Icon.check s={15} /> 我已保存，完成</button></>
           : <><div className="spacer" /><button className="btn" disabled={busy} onClick={() => close()}>取消</button>
-            <button className="btn primary" disabled={!canSubmit} onClick={submit}>{busy ? <ThinkingOrb state="weaving" size={20} theme="dark" /> : mode === 'setup' || mode === 'rotate' ? <ShIc.key s={15} /> : <Icon.check s={15} />} {({ setup: '生成恢复密钥', rotate: '生成新密钥', unlock: '解锁', password: '修改密码' } as const)[mode]}</button></>}
+            <button className="btn primary" disabled={!canSubmit} onClick={submit}>{busy ? <ThinkingOrb state="weaving" size={20} theme={fxTheme()} /> : mode === 'setup' || mode === 'rotate' ? <ShIc.key s={15} /> : <Icon.check s={15} />} {({ setup: '生成恢复密钥', rotate: '生成新密钥', unlock: '解锁', password: '修改密码' } as const)[mode]}</button></>}
       </div>
     </div>
   </div>;

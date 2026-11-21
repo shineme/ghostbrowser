@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api, Profile } from './api';
 import { Icon, Pick, StatCard, ago, useConfirm, useExit, useToast, Avatar } from './ui';
+import { fxTheme } from './theme';
 
 export type Ext = { id: string; name: string; version: string; description: string; source: string; origin: string; dir: string; icon: string; manifestVersion: number; size: number; addedAt: number; profiles: number };
 
@@ -69,7 +70,7 @@ export function ExtensionsView({ profiles, reload }: { profiles: Profile[]; relo
         <input type="text" value={src} onChange={e => { setSrc(e.target.value); setAddErr(''); }} onKeyDown={e => { if (e.key === 'Enter' && !adding) add(); }} disabled={adding}
           placeholder="粘贴扩展 ID、Chrome 应用商店链接，或 .crx / .zip 的下载链接 / 本地路径" spellCheck={false} />
         <button className="btn primary" onClick={add} disabled={adding || !src.trim()}>
-          {adding ? <><ThinkingOrb state="connecting" size={20} theme="dark" /> 正在下载…</> : <><Icon.download s={15} /> 添加扩展</>}
+          {adding ? <><ThinkingOrb state="connecting" size={20} theme={fxTheme()} /> 正在下载…</> : <><Icon.download s={15} /> 添加扩展</>}
         </button>
       </div>
       <div className="ext-add-hint">
@@ -80,14 +81,14 @@ export function ExtensionsView({ profiles, reload }: { profiles: Profile[]; relo
     </div>
   );
 
-  if (list === null) return <div className="empty"><ThinkingOrb state="searching" size={32} theme="dark" /><div>正在读取扩展…</div></div>;
+  if (list === null) return <div className="empty"><ThinkingOrb state="searching" size={32} theme={fxTheme()} /><div>正在读取扩展…</div></div>;
 
   if (all.length === 0) return (
     <>
       {addBar}
       {loadErr && <div className="notice bad"><Icon.alert /><span className="grow">读取扩展失败：{loadErr}</span><button className="btn sm" onClick={load}>重试</button></div>}
       <div className="empty">
-        <div className="halo"><ThinkingOrb state="searching" size={64} theme="dark" /></div>
+        <div className="halo"><ThinkingOrb state="searching" size={64} theme={fxTheme()} /></div>
         <h3>还没有扩展</h3>
         <div style={{ maxWidth: 640 }}>在上方粘贴 Chrome 应用商店的扩展 ID 或链接，一键下载安装，再分配给环境。<br />定制内核（Undetectable）和开源内核（Chromium）都会在启动时加载已分配的扩展。</div>
         <div className="sub" style={{ fontSize: 12 }}>品牌版 Chrome 137 及以上版本可能会忽略命令行加载的扩展。</div>
@@ -123,7 +124,7 @@ export function ExtensionsView({ profiles, reload }: { profiles: Profile[]; relo
                 <div className="ext-name" title={e.name}>{e.name}</div>
                 <div className="ext-ver"><span className="num">v{e.version}</span><span className={`mv ${e.manifestVersion >= 3 ? 'v3' : 'v2'}`} title={e.manifestVersion >= 3 ? 'Manifest V3' : 'Manifest V2：新版 Chrome 已停止支持，定制内核仍可加载'}>MV{e.manifestVersion}</span></div>
               </div>
-              <button className="btn ghost icon danger" title="删除扩展" disabled={removing === e.id} onClick={() => remove(e)}>{removing === e.id ? <ThinkingOrb state="breathing" size={20} theme="dark" /> : <Icon.trash s={15} />}</button>
+              <button className="btn ghost icon danger" title="删除扩展" disabled={removing === e.id} onClick={() => remove(e)}>{removing === e.id ? <ThinkingOrb state="breathing" size={20} theme={fxTheme()} /> : <Icon.trash s={15} />}</button>
             </div>
             <div className="ext-desc" title={e.description}>{e.description || '没有描述'}</div>
             <div className="ext-info">

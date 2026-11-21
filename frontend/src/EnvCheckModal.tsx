@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api } from './api';
 import { Icon, Segmented, useToast, useConfirm, useExit, ago } from './ui';
+import { fxTheme } from './theme';
 
 // 环境检测 / 一键修复 / 修复记录 / 系统时钟
 export type EnvItem = { key: string; label: string; status: 'pass' | 'warn' | 'fail' | 'unknown'; actual: string; expected: string; detail: string; fixable: boolean; fixHint: string };
@@ -33,7 +34,7 @@ export const ClockCard: React.FC<{ clock: ClockReport | null; busy: boolean; onR
       </div>
       <div className="ec-clock-v">
         <div className={`ec-skew num ${st === 'unknown' ? 'na' : ''}`}>{big}{st !== 'unknown' && <small>秒</small>}</div>
-        <button className="btn sm ghost" disabled={busy} onClick={onRecheck}>{busy ? <ThinkingOrb state="connecting" size={20} theme="dark" /> : <Icon.refresh s={13} />} 重新比对</button>
+        <button className="btn sm ghost" disabled={busy} onClick={onRecheck}>{busy ? <ThinkingOrb state="connecting" size={20} theme={fxTheme()} /> : <Icon.refresh s={13} />} 重新比对</button>
       </div>
     </div>
   );
@@ -115,15 +116,15 @@ export const EnvCheckModal: React.FC<{ profileId: string; name: string; onClose:
           {tab === 'check' ? <>
             {err ? <div className="notice bad"><Icon.alert /><span className="grow">检测失败：{err}</span><button className="btn sm" onClick={run}>重试</button></div> : null}
             <div className="ec-sum">
-              {loading && !rep ? <div className="ec-sum-load"><ThinkingOrb state="connecting" size={32} theme="dark" /><div><b>正在检测…</b><div className="sub">查询出口 IP、比对系统时钟、检查指纹一致性</div></div></div>
+              {loading && !rep ? <div className="ec-sum-load"><ThinkingOrb state="connecting" size={32} theme={fxTheme()} /><div><b>正在检测…</b><div className="sub">查询出口 IP、比对系统时钟、检查指纹一致性</div></div></div>
                 : rep ? <>
                   <div className="ec-cnt ok"><b className="num">{rep.pass}</b><span>通过</span></div>
                   <div className="ec-cnt warn"><b className="num">{rep.warn}</b><span>注意</span></div>
                   <div className="ec-cnt fail"><b className="num">{rep.fail}</b><span>异常</span></div>
                   <div className="spacer" />
-                  <button className="btn sm ghost" disabled={loading || busy} onClick={run}>{loading ? <ThinkingOrb state="connecting" size={20} theme="dark" /> : <Icon.refresh s={13} />} 重新检测</button>
+                  <button className="btn sm ghost" disabled={loading || busy} onClick={run}>{loading ? <ThinkingOrb state="connecting" size={20} theme={fxTheme()} /> : <Icon.refresh s={13} />} 重新检测</button>
                   <button className="btn sm primary" disabled={!fixable.length || loading || busy} onClick={() => repair(fixable, '*')} title={fixable.length ? fixable.map(k => ITEM_CN[k] || k).join('、') : '没有可自动修复的项目'}>
-                    {fixing === '*' ? <><ThinkingOrb state="weaving" size={20} theme="dark" /> 修复中…</> : <><Icon.sparkles s={13} /> {fixable.length ? `一键修复 ${fixable.length} 项` : '无需修复'}</>}
+                    {fixing === '*' ? <><ThinkingOrb state="weaving" size={20} theme={fxTheme()} /> 修复中…</> : <><Icon.sparkles s={13} /> {fixable.length ? `一键修复 ${fixable.length} 项` : '无需修复'}</>}
                   </button>
                 </> : null}
             </div>
@@ -139,7 +140,7 @@ export const EnvCheckModal: React.FC<{ profileId: string; name: string; onClose:
                   </div>
                   <div className="ec-act">
                     {it.status === 'pass' ? <span className="ec-okmark"><Icon.check s={14} /></span>
-                      : it.fixable ? <button className="btn sm" disabled={busy || loading} title={it.fixHint} onClick={() => repair([it.key], it.key)}>{fixing === it.key ? <ThinkingOrb state="weaving" size={20} theme="dark" /> : '修复'}</button>
+                      : it.fixable ? <button className="btn sm" disabled={busy || loading} title={it.fixHint} onClick={() => repair([it.key], it.key)}>{fixing === it.key ? <ThinkingOrb state="weaving" size={20} theme={fxTheme()} /> : '修复'}</button>
                         : <span className="ec-manual" title={it.key === 'ua' ? '请在编辑里重新生成指纹' : it.key === 'exit' ? '请检查或更换代理' : '只能检测'}>仅检测</span>}
                   </div>
                 </div>)}
@@ -147,15 +148,15 @@ export const EnvCheckModal: React.FC<{ profileId: string; name: string; onClose:
             {rep && <div className="ec-foot-note"><Icon.alert s={13} />出口 IP、UA 一致性、系统时钟只能检测，无法自动修复；webdriver 按配置判断，不读取运行中的浏览器。修复前会自动备份原值。</div>}
           </> : <>
             {logErr && <div className="notice bad"><Icon.alert /><span className="grow">读取修复记录失败：{logErr}</span><button className="btn sm" onClick={loadLog}>重试</button></div>}
-            {log === null ? <div className="cdel-load"><ThinkingOrb state="connecting" size={32} theme="dark" /></div>
-              : log.length === 0 && !logErr ? <div className="empty ec-empty"><div className="halo"><ThinkingOrb state="breathing" size={64} theme="dark" /></div><h3>还没有修复记录</h3><div>一键修复或单项修复后，这里会记录修改的字段和原值，可随时恢复。</div></div>
+            {log === null ? <div className="cdel-load"><ThinkingOrb state="connecting" size={32} theme={fxTheme()} /></div>
+              : log.length === 0 && !logErr ? <div className="empty ec-empty"><div className="halo"><ThinkingOrb state="breathing" size={64} theme={fxTheme()} /></div><h3>还没有修复记录</h3><div>一键修复或单项修复后，这里会记录修改的字段和原值，可随时恢复。</div></div>
                 : <div className="ec-log">{log.map((e, i) => <div key={e.id} className={`ec-entry ${e.kind} ${e.restored ? 'restored' : ''}`} style={{ ['--i' as any]: i }}>
                   <div className="ec-entry-h">
                     <span className={`badge ${e.kind === 'restore' ? 'cy' : e.restored ? 'unknown' : 'ok'}`}>{e.kind === 'restore' ? '恢复' : e.restored ? '已恢复' : '修复'}</span>
                     <b className="num">{fmtTime(e.at)}</b>
                     <span className="ec-items" title={e.items.map(k => ITEM_CN[k] || k).join('、')}>{e.items.map(k => <span key={k} className="ec-chip">{ITEM_CN[k] || k}</span>)}</span>
                     <span className="spacer" />
-                    {e.kind === 'repair' && !e.restored && <button className="btn sm ghost" disabled={busy} onClick={() => restore(e)}>{restoring === e.id ? <ThinkingOrb state="weaving" size={20} theme="dark" /> : <Icon.refresh s={13} />} 恢复</button>}
+                    {e.kind === 'repair' && !e.restored && <button className="btn sm ghost" disabled={busy} onClick={() => restore(e)}>{restoring === e.id ? <ThinkingOrb state="weaving" size={20} theme={fxTheme()} /> : <Icon.refresh s={13} />} 恢复</button>}
                     {e.restored && e.restoredAt && <span className="sub">恢复于 {fmtTime(e.restoredAt)}</span>}
                   </div>
                   <div className="ec-changes">{e.changes.map((c, j) => <div key={j} className="ec-chg">

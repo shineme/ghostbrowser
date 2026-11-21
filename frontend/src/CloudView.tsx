@@ -8,6 +8,7 @@ import { SharingView } from './SharingView'; // share
 import { DevicesCard } from './DevicesCard';
 import { RecoveryCard } from './RecoveryKeyModal';
 import { syncErrorToast } from './leftover';
+import { fxTheme } from './theme';
 
 type CloudOnlyItem = { id: string; name: string; version: number; updatedAt: number; deviceName: string; size: number; lockedBy: string; localDeleted: boolean; deletedVersion: number; deletedAt: number; cloudNewer: boolean; pendingDelete: boolean; pendingError?: string };
 
@@ -81,7 +82,7 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
 
   if (!configured) return (
     <div className="empty">
-      <div className="halo"><ThinkingOrb state="connecting" size={64} theme="dark" /></div>
+      <div className="halo"><ThinkingOrb state="connecting" size={64} theme={fxTheme()} /></div>
       <h3>尚未配置同步服务器</h3>
       <div>到「设置 → 云端同步」填入你的 VPS 地址、访问令牌和同步密码后，<br />即可把环境加密上传到自己的服务器。Cookies 在本地加密，服务器拿不到明文。</div>
     </div>
@@ -98,7 +99,7 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
         <div>
           <h4>同步服务器 {infoErr ? <span className="badge fail" style={{ marginLeft: 8, verticalAlign: 2 }}><i className="d" />连接失败</span> : <span className="badge ok" style={{ marginLeft: 8, verticalAlign: 2 }}><i className="d" />{info ? '已连接' : '检测中'}</span>}</h4>
           <div className="sub"><code className="mono">{settings!.syncServer}</code> · 本机 {settings!.deviceName || settings!.deviceId}{info?.user && info.user !== 'owner' ? ` · 用户 ${info.user}` : ''}</div>
-          {infoErr ? <div className="sub" style={{ color: '#ffb3bc' }}>{infoErr}</div> : info && <div className="sub num" style={{ marginTop: 4 }}>
+          {infoErr ? <div className="sub" style={{ color: 'rgb(var(--k-ffb3bc))' }}>{infoErr}</div> : info && <div className="sub num" style={{ marginTop: 4 }}>
             已用 {size(info.usedBytes)} · 磁盘剩余 {size(info.freeBytes)} · 单次上传上限 {info.maxBody ? size(info.maxBody) : '不限'} · 保留 {info.keepVersions || 1} 个版本 · {has('chunks') ? '增量同步' : '整包同步（建议更新 ghostsync.php）'}
           </div>}
         </div>
@@ -124,8 +125,8 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
         : tab === 'security' ? <div className="dv-grid"><DevicesCard /><RecoveryCard /></div>
         : tab === 'only' ? <div className="panel list cdel-only">
         {onlyErr && <div className="notice bad" style={{ margin: 12 }}><Icon.alert s={14} /> 无法连接同步服务器，下面只显示本机记录：{onlyErr}</div>}
-        {only === null ? <div className="empty" style={{ padding: 40 }}><ThinkingOrb state="connecting" size={32} theme="dark" /></div>
-          : only.length === 0 ? <div className="empty" style={{ padding: 44 }}><div className="halo"><ThinkingOrb state="breathing" size={32} theme="dark" /></div><h3>云端没有本机缺少的环境</h3><div>用「只删本地」删除的环境会出现在这里，可以随时恢复到本机或从云端删除。</div></div>
+        {only === null ? <div className="empty" style={{ padding: 40 }}><ThinkingOrb state="connecting" size={32} theme={fxTheme()} /></div>
+          : only.length === 0 ? <div className="empty" style={{ padding: 44 }}><div className="halo"><ThinkingOrb state="breathing" size={32} theme={fxTheme()} /></div><h3>云端没有本机缺少的环境</h3><div>用「只删本地」删除的环境会出现在这里，可以随时恢复到本机或从云端删除。</div></div>
             : <table>
               <colgroup><col /><col style={{ width: '27%' }} /><col style={{ width: 84 }} /><col style={{ width: '19%' }} /><col style={{ width: 228 }} /></colgroup>
               <thead><tr><th>环境</th><th>状态</th><th>云端版本</th><th>云端更新</th><th style={{ textAlign: 'right' }}>操作</th></tr></thead>
@@ -143,7 +144,7 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
                 <td className="sub num">{it.version ? `v${it.version}` : '—'}</td>
                 <td className="sub"><div className="cdel-ell">{it.updatedAt ? <>{new Date(it.updatedAt * 1000).toLocaleString()}</> : '—'}</div>{it.updatedAt ? <>{it.deviceName && <div className="cdel-ell" title={it.deviceName}>来自 {it.deviceName}</div>}</> : null}</td>
                 <td><div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                  {onlyBusy === it.id ? <span style={{ width: 26, display: 'grid', placeItems: 'center' }}><ThinkingOrb state="weaving" size={20} theme="dark" /></span> : it.pendingDelete ? <span className="sub">联网后自动重试</span> : <>
+                  {onlyBusy === it.id ? <span style={{ width: 26, display: 'grid', placeItems: 'center' }}><ThinkingOrb state="weaving" size={20} theme={fxTheme()} /></span> : it.pendingDelete ? <span className="sub">联网后自动重试</span> : <>
                     <button className="btn sm" disabled={!!onlyBusy || !it.version} onClick={() => restoreLocal(it)}><Icon.download s={13} /> 恢复到本机</button>
                     <button className="btn sm ghost danger" disabled={!!onlyBusy} onClick={() => setDelT([{ id: it.id, name: it.name || it.id, inCloud: true }])}><Icon.trash s={13} /> 删除云端</button>
                   </>}
@@ -162,7 +163,7 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
                 <td className="sub num">{p.cloudVersion ? `v${p.cloudVersion}` : '—'}</td>
                 <td className="sub">{p.syncedAt ? new Date(p.syncedAt * 1000).toLocaleString() : '—'}</td>
                 <td><div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                  {busy.has(p.id) ? <span style={{ width: 26, display: 'grid', placeItems: 'center' }}><ThinkingOrb state="weaving" size={20} theme="dark" /></span> : <>
+                  {busy.has(p.id) ? <span style={{ width: 26, display: 'grid', placeItems: 'center' }}><ThinkingOrb state="weaving" size={20} theme={fxTheme()} /></span> : <>
                     <button className="btn sm" onClick={() => run(p, () => api.PushProfile(p.id), `已上传 ${p.name}`)}><Icon.upload s={13} /> 上传</button>
                     {p.storage === 'cloud' && <button className="btn sm" onClick={() => run(p, () => api.PullProfile(p.id), `已拉取 ${p.name}`)}><Icon.download s={13} /> 拉取</button>}
                     {p.storage === 'cloud' && has('history') && <button className="btn sm ghost" onClick={() => setHist(p)}><Icon.layers s={13} /> 历史版本</button>}
@@ -184,7 +185,7 @@ export const CloudView: React.FC<{ profiles: Profile[]; settings: Settings | nul
               <td className="sub num" title={new Date(r.time * 1000).toLocaleString()}>{ago(r.time)}</td>
               <td><div className="nm">{r.name || r.id}</div>{r.version ? <div className="sub num">v{r.version}</div> : null}</td>
               <td>{ACTION[r.action] || r.action}</td>
-              <td>{r.ok ? <span className="badge ok"><i className="d" />成功</span> : <><span className="badge fail"><i className="d" />失败</span><div className="sub" style={{ color: '#ffb3bc', maxWidth: 380, wordBreak: 'break-all' }}>{r.error}</div></>}</td>
+              <td>{r.ok ? <span className="badge ok"><i className="d" />成功</span> : <><span className="badge fail"><i className="d" />失败</span><div className="sub" style={{ color: 'rgb(var(--k-ffb3bc))', maxWidth: 380, wordBreak: 'break-all' }}>{r.error}</div></>}</td>
               <td className="sub num">{r.bytes ? size(r.bytes) : '—'} · {(r.ms / 1000).toFixed(1)}s</td>
               <td style={{ textAlign: 'right' }}>{!r.ok && r.action !== 'restore' && <button className="btn sm" onClick={() => retry(r)}><Icon.refresh s={13} /> 重试</button>}</td>
             </tr>)}
@@ -221,13 +222,13 @@ const HistoryModal: React.FC<{ p: Profile; onClose: () => void; onDone: () => vo
       <div className="modal">
         <div className="dhead"><div className="glyph"><Icon.layers s={18} /></div><div><h3>历史版本</h3><div className="sub">{p.name} · 服务器保留的版本可以随时恢复</div></div><div style={{ marginLeft: 'auto' }}><button className="btn ghost icon" onClick={() => close()}><Icon.x /></button></div></div>
         <div className="dbody">
-          {err ? <div className="sub" style={{ color: '#ffb3bc' }}>{err}</div> : !list ? <div style={{ display: 'grid', placeItems: 'center', padding: 30 }}><ThinkingOrb state="connecting" size={32} theme="dark" /></div> :
+          {err ? <div className="sub" style={{ color: 'rgb(var(--k-ffb3bc))' }}>{err}</div> : !list ? <div style={{ display: 'grid', placeItems: 'center', padding: 30 }}><ThinkingOrb state="connecting" size={32} theme={fxTheme()} /></div> :
             <table><tbody>{list.map(v => <tr key={v.version}>
               <td className="num"><b>v{v.version}</b>{v.current && <span className="badge ok" style={{ marginLeft: 6 }}>当前</span>}</td>
               <td className="sub">{v.updatedAt ? new Date(v.updatedAt * 1000).toLocaleString() : '—'}</td>
               <td className="sub">{v.deviceName || '—'}</td>
               <td className="sub num">{size(v.size)}</td>
-              <td style={{ textAlign: 'right' }}>{!v.current && (busy === v.version ? <ThinkingOrb state="weaving" size={20} theme="dark" /> : <button className="btn sm" disabled={!!busy} onClick={() => restore(v)}><Icon.refresh s={13} /> 恢复</button>)}</td>
+              <td style={{ textAlign: 'right' }}>{!v.current && (busy === v.version ? <ThinkingOrb state="weaving" size={20} theme={fxTheme()} /> : <button className="btn sm" disabled={!!busy} onClick={() => restore(v)}><Icon.refresh s={13} /> 恢复</button>)}</td>
             </tr>)}</tbody></table>}
           {list && list.length < 2 && <div className="sub" style={{ marginTop: 8 }}>只有当前版本。之后每次上传，旧版本会自动保留。</div>}
         </div>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api, Settings } from './api';
 import { Icon, useToast, useConfirm, useExit } from './ui';
+import { fxTheme } from './theme';
 
 // Cloud-aware delete dialog: "只删本地" or "同时删云端".
 export type DelTarget = { id: string; name: string; inCloud: boolean; running?: boolean };
@@ -95,7 +96,7 @@ export const DeleteModal: React.FC<{ targets: DelTarget[]; cloudOnly?: boolean; 
             {targets.slice(0, 6).map(t => <span key={t.id} className="cdel-name" title={t.name}>{t.name}</span>)}
             {n > 6 && <span className="cdel-name more">等 {n} 个</span>}
           </div>}
-          {!st ? <div className="cdel-load"><ThinkingOrb state="connecting" size={20} theme="dark" /></div>
+          {!st ? <div className="cdel-load"><ThinkingOrb state="connecting" size={20} theme={fxTheme()} /></div>
             : cloudOnly ? <div className="cdel-note bad"><Icon.alert s={15} /><span>将从同步服务器删除数据和全部历史版本，所有设备都不会再下载它，<b>无法恢复</b>。服务器只保留一条不含数据的删除记录（90 天）。</span></div>
               : sync ? <div className="cdel-opts" role="radiogroup">
                 {opts.map(([v, label, ic, desc], i) => <button key={v} role="radio" aria-checked={mode === v} className={`cdel-opt ${v} ${mode === v ? 'on' : ''}`} style={{ ['--i' as any]: i }} onClick={() => setMode(v)} disabled={busy}>
@@ -111,7 +112,7 @@ export const DeleteModal: React.FC<{ targets: DelTarget[]; cloudOnly?: boolean; 
         <div className="dfoot"><div className="spacer" />
           <button className="btn" disabled={busy} onClick={() => close()}>取消</button>
           <button className="btn solid-bad cdel-go" disabled={busy || !st} onClick={go} autoFocus>
-            {busy ? <><ThinkingOrb state="weaving" size={20} theme="dark" /> 正在删除…</> : <><Icon.trash s={14} /> {cloudOnly ? '删除云端' : effective === 'cloud' ? (n > 1 ? `删除 ${n} 个（含云端）` : '删除（含云端）') : (n > 1 ? `删除 ${n} 个` : '删除')}</>}
+            {busy ? <><ThinkingOrb state="weaving" size={20} theme={fxTheme()} /> 正在删除…</> : <><Icon.trash s={14} /> {cloudOnly ? '删除云端' : effective === 'cloud' ? (n > 1 ? `删除 ${n} 个（含云端）` : '删除（含云端）') : (n > 1 ? `删除 ${n} 个` : '删除')}</>}
           </button>
         </div>
       </div>

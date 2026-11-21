@@ -3,6 +3,7 @@ import { ThinkingOrb } from 'thinking-orbs';
 import { api, onEvent, Profile } from './api';
 import { Icon, Segmented, Avatar, ago, useToast, useConfirm, useExit } from './ui';
 import { RI, RWorkflow, RRun, RTarget, REvent, RStepEvent, StatusBadge, StepIcon, toneOf, typeLabel, flat, dur, clock } from './rpaMeta';
+import { fxTheme } from './theme';
 
 const err = (e: any) => String(e?.message || e);
 const live = (s: string) => s === 'running' || s === 'starting' || s === 'pending';
@@ -63,7 +64,7 @@ export const RpaRunDrawer: React.FC<{ wf: RWorkflow; runId: string; profiles: Pr
     <div className={`overlay ${out ? 'out' : ''}`} onMouseDown={e => e.target === e.currentTarget && close()}>
       <div className="drawer rpa-run">
         <div className="dhead">
-          <div className="glyph">{isRunning ? <ThinkingOrb state="working" size={20} theme="dark" /> : <RI.history s={20} />}</div>
+          <div className="glyph">{isRunning ? <ThinkingOrb state="working" size={20} theme={fxTheme()} /> : <RI.history s={20} />}</div>
           <div style={{ minWidth: 0, flex: 1 }}>
             <h3 className="ell">{wf.name}</h3>
             <div className="sub">{run ? <>开始于 {clock(run.startedAt)} · 用时 {dur(Math.max(0, Math.round(elapsed)))} · 并发 {run.concurrency}</> : '运行详情与历史记录'}</div>
@@ -73,9 +74,9 @@ export const RpaRunDrawer: React.FC<{ wf: RWorkflow; runId: string; profiles: Pr
         </div>
 
         {tab === 'run' && <div className="dbody">
-          {loading && !run ? <div className="empty" style={{ padding: 60 }}><ThinkingOrb state="working" size={32} theme="dark" /><div>正在读取运行记录…</div></div>
+          {loading && !run ? <div className="empty" style={{ padding: 60 }}><ThinkingOrb state="working" size={32} theme={fxTheme()} /><div>正在读取运行记录…</div></div>
             : loadErr ? <div className="notice bad"><Icon.alert /><span className="grow">{loadErr}</span><button className="btn sm" onClick={() => loadRun(cur)}>重试</button></div>
-              : !run ? <div className="empty" style={{ padding: 60 }}><ThinkingOrb state="breathing" size={32} theme="dark" /><h3>这个流程还没有运行过</h3><button className="btn primary" onClick={onRerun}><Icon.play s={14} /> 运行流程</button></div>
+              : !run ? <div className="empty" style={{ padding: 60 }}><ThinkingOrb state="breathing" size={32} theme={fxTheme()} /><h3>这个流程还没有运行过</h3><button className="btn primary" onClick={onRerun}><Icon.play s={14} /> 运行流程</button></div>
                 : <>
                   <div className={`rr-sum panel ${run.status}`}>
                     <div className="rr-sum-l">
@@ -101,8 +102,8 @@ export const RpaRunDrawer: React.FC<{ wf: RWorkflow; runId: string; profiles: Pr
         </div>}
 
         {tab === 'history' && <div className="dbody">
-          {hist === null ? <div className="empty" style={{ padding: 60 }}><ThinkingOrb state="working" size={32} theme="dark" /></div>
-            : hist.length === 0 ? <div className="empty" style={{ padding: 60 }}><ThinkingOrb state="breathing" size={32} theme="dark" /><h3>还没有运行记录</h3><div>运行后，每次的结果、日志和截图都会保存在这里。</div></div>
+          {hist === null ? <div className="empty" style={{ padding: 60 }}><ThinkingOrb state="working" size={32} theme={fxTheme()} /></div>
+            : hist.length === 0 ? <div className="empty" style={{ padding: 60 }}><ThinkingOrb state="breathing" size={32} theme={fxTheme()} /><h3>还没有运行记录</h3><div>运行后，每次的结果、日志和截图都会保存在这里。</div></div>
               : <div className="rr-hist">{hist.map(h => {
                 const ok = h.targets.filter(x => x.status === 'ok').length;
                 return <button key={h.id} className={`rr-hrow ${h.id === cur ? 'on' : ''}`} onClick={() => { setCur(h.id); setTab('run'); }}>
@@ -161,7 +162,7 @@ const TargetCard: React.FC<{ t: RTarget; total: number; names: Record<string, st
         <div className="rr-log" ref={logRef}>
           {t.steps.length === 0 && !t.cur && <div className="sub" style={{ padding: 14, textAlign: 'center' }}>{t.status === 'pending' ? '排队中，还没开始执行' : t.error || '没有执行记录'}</div>}
           {[...t.steps, ...(t.cur ? [t.cur] : [])].map((s, i) => <div key={i} className={`rr-l ${s.status}`}>
-            <span className="st">{s.status === 'running' ? <ThinkingOrb state="working" size={20} theme="dark" /> : s.status === 'ok' ? <Icon.check s={12} /> : s.status === 'failed' ? <Icon.x s={12} /> : <RI.dot s={10} />}</span>
+            <span className="st">{s.status === 'running' ? <ThinkingOrb state="working" size={20} theme={fxTheme()} /> : s.status === 'ok' ? <Icon.check s={12} /> : s.status === 'failed' ? <Icon.x s={12} /> : <RI.dot s={10} />}</span>
             <span className="ix num">#{s.index + 1}</span>
             <span className={`rpa-glyph xs ${toneOf(s.type)}`}><StepIcon type={s.type} s={11} /></span>
             <span className="nm">{names[s.stepId] || typeLabel(s.type)}{s.iter ? <em>第 {s.iter} 轮</em> : null}</span>
@@ -181,7 +182,7 @@ const Thumb: React.FC<{ path: string; label: string; onOpen: (src: string) => vo
   const [bad, setBad] = useState(false);
   useEffect(() => { if (src) return; api.RpaScreenshot(path).then(u => { shotCache[path] = u; setSrc(u); }).catch(() => setBad(true)); }, [path]);
   return <button className="rr-thumb" onClick={() => src && onOpen(src)} title={path}>
-    {src ? <img src={src} alt="" /> : bad ? <span className="sub">无法读取</span> : <ThinkingOrb state="working" size={20} theme="dark" />}
+    {src ? <img src={src} alt="" /> : bad ? <span className="sub">无法读取</span> : <ThinkingOrb state="working" size={20} theme={fxTheme()} />}
     <span className="cap num">{label}</span>
   </button>;
 };

@@ -5,6 +5,7 @@ import { ThinkingOrb } from 'thinking-orbs';
 import { api, Profile, onEvent, TerminalTool, TerminalSession } from './api';
 import { Icon, Pick, Segmented, Avatar, useToast, useConfirm, ago } from './ui';
 import { TimezoneSelect, SearchSelect, LANGS } from './locales';
+import { fxTheme } from './theme';
 
 const openURL = (u: string) => { const rt = (window as any).runtime; if (rt?.BrowserOpenURL) rt.BrowserOpenURL(u); else window.open(u, '_blank'); };
 
@@ -197,7 +198,7 @@ export function TerminalView({ profiles, proxyName }: { profiles: Profile[]; pro
               {!tool ? '请选择一个工具' : !tool.installed ? `${tool.name} 未安装，先按卡片上的命令安装` : pr.envMode === 'profile' && !prof ? '请选择要继承的环境' : pr.envMode === 'custom' && !pr.tz && !pr.lang ? '请至少设置时区或语言' : dirState && !dirState.ok ? '工作目录无效' : `将在新窗口运行 ${tool.id === 'shell' ? tool.bin : tool.bin}`}
             </span>
             <button className="btn primary" disabled={blocked || launching} onClick={launch}>
-              {launching ? <><ThinkingOrb state="connecting" size={20} theme="dark" /> 正在打开…</> : <><Icon.terminal s={15} /> 启动 {tool?.name || ''}</>}
+              {launching ? <><ThinkingOrb state="connecting" size={20} theme={fxTheme()} /> 正在打开…</> : <><Icon.terminal s={15} /> 启动 {tool?.name || ''}</>}
             </button>
           </div>
         </div>
@@ -221,7 +222,7 @@ export function TerminalView({ profiles, proxyName }: { profiles: Profile[]; pro
                 {!s.tracked && <span className="envchip sm dim" title="Windows Terminal 自己管理这个窗口"><span>Windows Terminal</span></span>}
               </div>
             </div>
-            <button className="btn ghost icon danger" title={s.tracked ? '关闭终端' : '移除并停止代理中转'} disabled={closing === s.id} onClick={() => close(s)}>{closing === s.id ? <ThinkingOrb state="breathing" size={20} theme="dark" /> : <Icon.x s={15} />}</button>
+            <button className="btn ghost icon danger" title={s.tracked ? '关闭终端' : '移除并停止代理中转'} disabled={closing === s.id} onClick={() => close(s)}>{closing === s.id ? <ThinkingOrb state="breathing" size={20} theme={fxTheme()} /> : <Icon.x s={15} />}</button>
           </div>)}</div>}
         </div>
       </div>

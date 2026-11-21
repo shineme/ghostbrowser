@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api } from './api';
 import { Icon, useToast, useConfirm, ago, Toggle, OsIcon } from './ui';
+import { fxTheme } from './theme';
 
 type Dev = { id: string; name: string; os: string; firstSeen: number; lastSeen: number; approved: boolean; revoked: boolean; status: 'approved' | 'pending' | 'revoked'; current: boolean };
 type DevList = { supported: boolean; self: string; selfStatus: string; requireApproval: boolean; devices: Dev[]; error?: string };
@@ -39,9 +40,9 @@ export const DevicesCard: React.FC = () => {
         {pending > 0 && <span className="badge warn"><i className="d" />{pending} 台待批准</span>}
         <button className="btn sm ghost icon" title="刷新" onClick={() => { setData(null); load(); }}><Icon.refresh s={14} /></button>
       </div>
-      {!data ? <div className="dv-blank"><ThinkingOrb state="connecting" size={32} theme="dark" /><div className="sub">正在读取设备列表…</div></div>
+      {!data ? <div className="dv-blank"><ThinkingOrb state="connecting" size={32} theme={fxTheme()} /><div className="sub">正在读取设备列表…</div></div>
         : !data.supported ? <div className="notice warn dv-in"><Icon.alert s={14} /><div className="grow">{data.error || '服务器版本过旧，不支持设备管理：请更新 ghostsync.php。'}</div></div>
-          : data.selfStatus === 'pending' ? <div className="dv-self pending"><ThinkingOrb state="breathing" size={32} theme="dark" /><div><b>本机正在等待批准</b><div className="sub">请在一台已批准的设备上打开「云同步 → 设备与密钥」，批准「{data.devices.find(d => d.current)?.name || data.self}」。批准前本机无法同步。</div></div><button className="btn sm" onClick={load}><Icon.refresh s={13} /> 重新检查</button></div>
+          : data.selfStatus === 'pending' ? <div className="dv-self pending"><ThinkingOrb state="breathing" size={32} theme={fxTheme()} /><div><b>本机正在等待批准</b><div className="sub">请在一台已批准的设备上打开「云同步 → 设备与密钥」，批准「{data.devices.find(d => d.current)?.name || data.self}」。批准前本机无法同步。</div></div><button className="btn sm" onClick={load}><Icon.refresh s={13} /> 重新检查</button></div>
             : data.selfStatus === 'revoked' ? <div className="dv-self revoked"><Icon.alert s={22} /><div><b>本机已被吊销</b><div className="sub">{data.error || '此设备不能再访问该同步账号。'}如需恢复，请在其他已批准的设备上重新批准本机。</div></div></div>
               : <>
                 {data.error && <div className="notice bad dv-in"><Icon.alert s={14} /> {data.error}</div>}
@@ -55,7 +56,7 @@ export const DevicesCard: React.FC = () => {
                     </div>
                     <span className={`badge ${d.status === 'approved' ? 'ok' : d.status === 'pending' ? 'warn' : 'fail'}`}><i className="d" />{d.status === 'approved' ? '已批准' : d.status === 'pending' ? '待批准' : '已吊销'}</span>
                     <div className="dv-acts">
-                      {busy === d.id ? <span className="dv-spin"><ThinkingOrb state="weaving" size={20} theme="dark" /></span>
+                      {busy === d.id ? <span className="dv-spin"><ThinkingOrb state="weaving" size={20} theme={fxTheme()} /></span>
                         : d.current ? <span className="sub dv-cur">当前设备</span>
                           : d.status === 'pending' ? <>
                             <button className="btn sm primary" disabled={!!busy} onClick={() => act(d.id, () => api.ApproveCloudDevice(d.id), `已批准「${d.name || d.id}」`)}><Icon.check s={13} /> 批准</button>

@@ -243,6 +243,8 @@ go run ./cmd/sign-release sign -key keys/ghostbrowser-update.key -file build/bin
 curl -H "X-API-Key: gb_xxx" "http://127.0.0.1:25325/profile/start?profile=<环境ID>"
 ```
 
+- 外观主题：暗色 / 灰色 / 亮色（设置 → 外观，立即生效，随设置同步）。颜色全部是主题变量（frontend/src/themes-gen.css 由 frontend/themegen.py 生成，手调部分在 themes.css）
+
 ## 云同步 PHP 服务端（已提供）
 
 单文件 `cloud-server/ghostsync.php`（PHP 7.4+，无需数据库和伪静态），部署方式见 [云同步部署文档](cloud-server/README.zh-CN.md)。`undetectable-kit/cloud-server/` 附带相同的文件。

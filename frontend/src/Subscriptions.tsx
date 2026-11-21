@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { api, onEvent, Proxy, Profile, Subscription, SubPreview, CoreStatus } from './api';
 import { Icon, Field, Toggle, ago, useToast, useExit, Segmented, Floating, Tip, flag } from './ui';
+import { fxTheme } from './theme';
 
 // ---- shared helpers (proxy list, drawer picker, assign dialog) ----
 const DIRECT = new Set(['http', 'socks5']);
@@ -100,7 +101,7 @@ export const SubsPanel: React.FC<{ subs: Subscription[]; proxies: Proxy[]; profi
     <div className="toolbar">
       <div className="sub" style={{ fontSize: 12.5 }}>{subs.length ? `${subs.length} 个订阅 · ${subs.reduce((a, s) => a + (s.nodeCount || 0), 0)} 个节点` : '把机场 / 代理服务商的订阅链接加进来，节点会按订阅分组显示'}</div>
       <div className="spacer" />
-      {subs.length > 0 && <button className="btn" disabled={all} onClick={updateAll}>{all ? <><ThinkingOrb state="searching" size={20} theme="dark" /> 更新中…</> : <><Icon.refresh s={14} /> 全部更新</>}</button>}
+      {subs.length > 0 && <button className="btn" disabled={all} onClick={updateAll}>{all ? <><ThinkingOrb state="searching" size={20} theme={fxTheme()} /> 更新中…</> : <><Icon.refresh s={14} /> 全部更新</>}</button>}
       <button className="btn primary" onClick={() => setAdding(true)}><Icon.plus s={15} /> 添加订阅</button>
     </div>
     {subs.length === 0 ? <div className="empty" style={{ minHeight: 280 }}>
@@ -120,7 +121,7 @@ export const SubsPanel: React.FC<{ subs: Subscription[]; proxies: Proxy[]; profi
             {s.lastError && <div className="sub ellip" style={{ maxWidth: 170 }}>{s.lastUpdated ? `成功于 ${ago(s.lastUpdated)}` : s.lastError}</div>}</td>
           <td className="sub nowrap">{s.autoUpdateHours ? `每 ${s.autoUpdateHours} 小时` : '关闭'}</td>
           <td><div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-            {busy.has(s.id) ? <span style={{ width: 26, display: 'grid', placeItems: 'center' }}><ThinkingOrb state="searching" size={20} theme="dark" /></span>
+            {busy.has(s.id) ? <span style={{ width: 26, display: 'grid', placeItems: 'center' }}><ThinkingOrb state="searching" size={20} theme={fxTheme()} /></span>
               : <button className="btn sm" onClick={() => update(s)} title="立即下载订阅并更新节点（已有节点的 ID 保持不变，绑定的环境不受影响）"><Icon.refresh s={13} /> 更新</button>}
             <button className="btn sm" onClick={() => onShowGroup(s.id)} title="在代理列表中只看这个订阅的节点">节点</button>
             <button className="btn ghost icon" title="编辑" onClick={() => setEditing(s)}><Icon.edit s={15} /></button>
@@ -163,7 +164,7 @@ const AddSubModal: React.FC<{ onClose: () => void; onDone: (id: string) => void 
         <div className="dbody">
           <Field label="订阅链接" hint="以 Clash Verge 的身份下载（User-Agent: clash-verge/v1.7），大多数机场会返回 Clash 配置；也支持 Base64 / 分享链接列表">
             <div className="row"><input type="text" autoFocus value={url} onChange={e => setUrl(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && valid) preview(); }} placeholder="https://example.com/api/v1/client/subscribe?token=…" />
-              <button className="btn" style={{ flex: 'none' }} disabled={!valid || !!phase} onClick={preview}>{phase === 'preview' ? <><ThinkingOrb state="searching" size={20} theme="dark" /> 解析中…</> : <><Icon.search s={14} /> 解析预览</>}</button></div>
+              <button className="btn" style={{ flex: 'none' }} disabled={!valid || !!phase} onClick={preview}>{phase === 'preview' ? <><ThinkingOrb state="searching" size={20} theme={fxTheme()} /> 解析中…</> : <><Icon.search s={14} /> 解析预览</>}</button></div>
           </Field>
           <Field label="名称（可选）" hint="留空 = 使用订阅自带的名称（文件名）或域名"><input type="text" value={name} onChange={e => setName(e.target.value)} placeholder={pv?.name || '如 机场 A'} /></Field>
           {err && <div className="notice bad" style={{ margin: '4px 0 0' }}><Icon.alert /><span className="grow" style={{ wordBreak: 'break-all' }}>{err}</span></div>}
@@ -178,7 +179,7 @@ const AddSubModal: React.FC<{ onClose: () => void; onDone: (id: string) => void 
               <span>到期：{pv.expire ? dateText(pv.expire) : '长期'}</span>
               <span>自动更新：每 {pv.interval || 24} 小时{pv.interval ? '（订阅建议）' : ''}</span>
             </div>
-            {pv.coreCount > 0 && <div className="sub" style={{ marginTop: 6, color: '#c9d1ff' }}><Icon.cpu s={12} /> 其中 {pv.coreCount} 个节点（{Object.keys(pv.protocols || {}).filter(k => !DIRECT.has(k)).map(protoName).join(' / ')}）需要代理内核 mihomo 转换后使用。</div>}
+            {pv.coreCount > 0 && <div className="sub" style={{ marginTop: 6, color: 'rgb(var(--k-c9d1ff))' }}><Icon.cpu s={12} /> 其中 {pv.coreCount} 个节点（{Object.keys(pv.protocols || {}).filter(k => !DIRECT.has(k)).map(protoName).join(' / ')}）需要代理内核 mihomo 转换后使用。</div>}
           </div>}
         </div>
         <div className="dfoot"><div className="spacer" /><button className="btn" onClick={() => close()}>取消</button>
@@ -274,12 +275,12 @@ export const CoreCard: React.FC = () => {
           {st?.installed && <span className={`badge ${st.running ? 'ok' : 'unknown'}`}><span className="d" />{st.running ? `运行中 · ${st.listeners} 个节点端口` : '未运行（有环境使用内核节点时自动启动）'}</span>}
         </div>
         {busy && <div className="env-bar" style={{ marginTop: 8 }}><i style={{ width: `${Math.max(st?.progress || 0, 2)}%` }} /></div>}
-        {st?.error && <div className="sub" style={{ color: '#ffb3bc', marginTop: 4, wordBreak: 'break-all' }}>{st.error}</div>}
+        {st?.error && <div className="sub" style={{ color: 'rgb(var(--k-ffb3bc))', marginTop: 4, wordBreak: 'break-all' }}>{st.error}</div>}
         <div className="sub" style={{ marginTop: 4 }}>程序：<code className="mono">{st?.path || '未找到'}</code>{st?.installed && (st.managed ? ' · 由 GhostBrowser 下载' : ' · 本地文件')}</div>
         <div className="sub" style={{ marginTop: 2 }}>每个在用节点一个本机端口（127.0.0.1，仅本机可连），不修改系统代理和 DNS；没有环境使用时自动停止。</div>
       </div>
       <div className="core-actions">
-        <button className="btn primary" disabled={!!busy} onClick={download}>{busy ? <><ThinkingOrb state="searching" size={20} theme="dark" /> 下载中 {Math.round(st?.progress || 0)}%</> : <><Icon.download s={14} /> {st?.installed && st.managed ? '更新到最新版' : '一键下载最新版'}</>}</button>
+        <button className="btn primary" disabled={!!busy} onClick={download}>{busy ? <><ThinkingOrb state="searching" size={20} theme={fxTheme()} /> 下载中 {Math.round(st?.progress || 0)}%</> : <><Icon.download s={14} /> {st?.installed && st.managed ? '更新到最新版' : '一键下载最新版'}</>}</button>
         {st?.running && <button className="btn ghost" onClick={stop}><Icon.stop s={13} /> 停止内核</button>}
       </div>
       <Field label="使用本地 mihomo 程序（可选）" hint="已经有 mihomo / Clash Meta 内核时可直接选择，会先运行 -v 校验；留空 = 使用下载的版本">

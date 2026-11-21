@@ -6,6 +6,7 @@ import { RI, RWorkflow, REvent, StepIcon, toneOf, typeLabel, countSteps, StatusB
 import { RpaEditor } from './RpaEditor';
 import { RpaRunDrawer } from './RpaRunDrawer';
 import { RpaRecorder, recName } from './RpaRecorder';
+import { fxTheme } from './theme';
 
 const err = (e: any) => String(e?.message || e);
 
@@ -85,11 +86,11 @@ export function RpaView({ profiles }: { profiles: Profile[]; reload?: () => void
     {importing !== null && <ImportModal initial={importing} onClose={() => setImporting(null)} onDone={w => { load(); setEditing(w); }} />}
   </>;
 
-  if (list === null) return <div className="empty"><ThinkingOrb state="working" size={32} theme="dark" /><div>正在读取流程…</div></div>;
+  if (list === null) return <div className="empty"><ThinkingOrb state="working" size={32} theme={fxTheme()} /><div>正在读取流程…</div></div>;
 
   if (list.length === 0) return (
     <div className="empty">
-      <div className="halo"><ThinkingOrb state="working" size={64} theme="dark" /></div>
+      <div className="halo"><ThinkingOrb state="working" size={64} theme={fxTheme()} /></div>
       <h3>还没有自动化流程</h3>
       <div style={{ maxWidth: 460 }}>把打开网页、点击、输入、采集数据、截图这些重复操作编排成流程，<br />一键在多个环境里批量执行，进度和结果实时可见。</div>
       {loadErr && <div className="notice bad" style={{ marginTop: 4 }}><Icon.alert />{loadErr}</div>}
@@ -133,7 +134,7 @@ export function RpaView({ profiles }: { profiles: Profile[]; reload?: () => void
       </div>
 
       {shown.length === 0
-        ? <div className="panel empty" style={{ padding: '56px 20px' }}><ThinkingOrb state="searching" size={32} theme="dark" /><div>没有匹配「{q || '当前筛选'}」的流程</div><button className="btn sm" onClick={() => { setQ(''); setStatus('all'); }}>清除筛选</button></div>
+        ? <div className="panel empty" style={{ padding: '56px 20px' }}><ThinkingOrb state="searching" size={32} theme={fxTheme()} /><div>没有匹配「{q || '当前筛选'}」的流程</div><button className="btn sm" onClick={() => { setQ(''); setStatus('all'); }}>清除筛选</button></div>
         : <div className="rpa-grid">
           {shown.map((w, i) => {
             const n = countSteps(w.steps);

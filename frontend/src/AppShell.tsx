@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ThinkingOrb } from 'thinking-orbs';
 import { api, onEvent, Profile, Settings } from './api';
 import { Icon, Field, Toggle, useToast, useExit, Floating } from './ui';
+import { fxTheme } from './theme';
 
 const A = api as any;
 
@@ -167,10 +168,10 @@ const AnnouncementBell: React.FC = () => {
           {unread.length > 0 && <span className="badge cy">{unread.length} 条未读</span>}
           <span className="spacer" />
           {state?.offline && <span className="ash-off" title={state.error || ''}><span className="d" />离线缓存</span>}
-          <button className="btn ghost icon sm" title="刷新" disabled={loading} onClick={refresh}>{loading ? <ThinkingOrb state="connecting" size={20} theme="dark" /> : <Icon.refresh s={14} />}</button>
+          <button className="btn ghost icon sm" title="刷新" disabled={loading} onClick={refresh}>{loading ? <ThinkingOrb state="connecting" size={20} theme={fxTheme()} /> : <Icon.refresh s={14} />}</button>
         </div>
         <div className="ann-list">
-          {!state && <div className="ash-empty"><ThinkingOrb state="connecting" size={32} theme="dark" /><span>正在加载公告…</span></div>}
+          {!state && <div className="ash-empty"><ThinkingOrb state="connecting" size={32} theme={fxTheme()} /><span>正在加载公告…</span></div>}
           {state && list.length === 0 && <div className="ash-empty">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
             <b>暂无公告</b><span>{state.offline ? (state.fetchedAt ? '无法连接服务器，显示的是上次缓存' : '没有连接到同步服务器，配置后会自动获取公告') : '有新公告时这里会显示红点'}</span>
@@ -250,7 +251,7 @@ export const UpdateModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </div>
         <div className="dfoot"><div className="spacer" />
           <button className="btn" disabled={busy} onClick={() => close()}>稍后</button>
-          <button className="btn primary" disabled={busy || !info?.available} onClick={install}>{busy ? <ThinkingOrb state="connecting" size={20} theme="dark" /> : <Icon.download s={15} />} {prog.phase === 'error' ? '重试' : busy ? PHASE[prog.phase] : '立即更新'}</button>
+          <button className="btn primary" disabled={busy || !info?.available} onClick={install}>{busy ? <ThinkingOrb state="connecting" size={20} theme={fxTheme()} /> : <Icon.download s={15} />} {prog.phase === 'error' ? '重试' : busy ? PHASE[prog.phase] : '立即更新'}</button>
         </div>
       </div>
     </div>
@@ -323,22 +324,22 @@ export const SiteLaunch: React.FC<{ profile: Profile; running: boolean; onLaunch
           <b>网站快捷入口</b><span className="sub ellip">{running ? `在「${profile.name}」中新标签页打开` : `启动「${profile.name}」并直接打开`}</span>
           <span className="spacer" />
           {state?.offline && state.fetchedAt > 0 && <span className="ash-off" title={state.error || ''}><span className="d" />离线缓存</span>}
-          <button className="btn ghost icon sm" title="刷新快捷入口" disabled={loading} onClick={refresh}>{loading ? <ThinkingOrb state="connecting" size={20} theme="dark" /> : <Icon.refresh s={14} />}</button>
+          <button className="btn ghost icon sm" title="刷新快捷入口" disabled={loading} onClick={refresh}>{loading ? <ThinkingOrb state="connecting" size={20} theme={fxTheme()} /> : <Icon.refresh s={14} />}</button>
         </div>
         {groups.length > 0 && <div className="site-search"><Icon.search s={14} /><input autoFocus type="text" placeholder="搜索网站" value={q} onChange={e => setQ(e.target.value)} /></div>}
         {!q && groups.length > 1 && <div className="site-tabs">{groups.map(x => <button key={x.id} className={x.id === cur?.id ? 'on' : ''} onClick={() => setG(x.id)}>{x.name}<span className="num">{x.sites.length}</span></button>)}</div>}
         <div className="site-grid">
-          {!state && <div className="ash-empty"><ThinkingOrb state="connecting" size={32} theme="dark" /><span>正在加载快捷入口…</span></div>}
+          {!state && <div className="ash-empty"><ThinkingOrb state="connecting" size={32} theme={fxTheme()} /><span>正在加载快捷入口…</span></div>}
           {state && groups.length === 0 && <div className="ash-empty"><Icon.grid s={26} /><b>还没有快捷入口</b><span>{state.offline && !state.fetchedAt ? '连接同步服务器后自动获取（服务器上的 catalog.json）。也可以在下方直接输入网址。' : '服务器的 catalog.json 里没有网站，可以在下方直接输入网址。'}</span></div>}
           {state && groups.length > 0 && sites.length === 0 && <div className="ash-empty"><Icon.search s={24} /><span>没有匹配「{q}」的网站</span></div>}
           {sites.map(s => <button key={s.id} className="site" disabled={!!busy} onClick={() => go(s.url, s.id)} title={s.url}>
-            {busy === s.id ? <span className="site-ic"><ThinkingOrb state="connecting" size={20} theme="dark" /></span> : <SiteIcon s={s} />}
+            {busy === s.id ? <span className="site-ic"><ThinkingOrb state="connecting" size={20} theme={fxTheme()} /></span> : <SiteIcon s={s} />}
             <span className="site-t"><b>{s.name}</b><small>{s.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</small></span>
           </button>)}
         </div>
         <form className="site-custom" onSubmit={e => { e.preventDefault(); go(custom, '_custom'); }}>
           <Icon.globe s={14} /><input type="text" placeholder="或输入网址，例如 example.com" value={custom} onChange={e => setCustom(e.target.value)} />
-          <button className="btn sm primary" disabled={!custom.trim() || !!busy}>{busy === '_custom' ? <ThinkingOrb state="connecting" size={20} theme="dark" /> : '打开'}</button>
+          <button className="btn sm primary" disabled={!custom.trim() || !!busy}>{busy === '_custom' ? <ThinkingOrb state="connecting" size={20} theme={fxTheme()} /> : '打开'}</button>
         </form>
       </Floating>
     </div>
@@ -377,7 +378,7 @@ export const AppShellSettings: React.FC<{ s: Settings; set: (patch: Partial<Sett
             {info?.error && <div className="sub upd-err">{info.error}</div>}
           </div>
           <div className="row" style={{ gap: 8, flex: 'none', width: 'auto' }}>
-            <button className="btn" disabled={checking || busy} onClick={doCheck}>{checking ? <ThinkingOrb state="connecting" size={20} theme="dark" /> : <Icon.refresh s={14} />} {checking ? '检查中…' : '检查更新'}</button>
+            <button className="btn" disabled={checking || busy} onClick={doCheck}>{checking ? <ThinkingOrb state="connecting" size={20} theme={fxTheme()} /> : <Icon.refresh s={14} />} {checking ? '检查中…' : '检查更新'}</button>
             {(info?.available || busy) && <button className="btn primary" onClick={() => setOpen(true)}><Icon.download s={14} /> {busy ? '查看进度' : '立即更新'}</button>}
           </div>
         </div>

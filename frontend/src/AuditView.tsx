@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ThinkingOrb } from 'thinking-orbs';
 import { api, Profile, Settings } from './api';
 import { Icon, Pick, Floating, Segmented, Avatar, useToast, useConfirm } from './ui';
+import { fxTheme } from './theme';
 
 type McpStatus = Awaited<ReturnType<typeof api.McpStatus>>;
 type AuditEntry = { id: string; time: number; source: string; action: string; target: string; name: string; ok: boolean; error?: string; detail?: string };
@@ -130,7 +131,7 @@ const McpCard: React.FC<{ st: McpStatus | null; onChange: (s: McpStatus) => void
       <div className="au-head">
         <span className="ic"><Icon.sparkles /></span>
         <div className="grow"><h4>MCP 服务</h4><span>让 Cursor、Claude 等 AI 客户端直接管理环境{st?.protocol ? ` · 协议 ${st.protocol}` : ''}</span></div>
-        {state === 'loading' ? <ThinkingOrb state="searching" size={20} theme="dark" />
+        {state === 'loading' ? <ThinkingOrb state="searching" size={20} theme={fxTheme()} />
           : state === 'on' ? <span className="badge ok"><span className="live sm" />运行中</span>
           : state === 'err' ? <span className="badge fail"><i className="d" />启动失败</span>
           : <span className="badge unknown"><i className="d" />已停止</span>}
@@ -149,9 +150,9 @@ const McpCard: React.FC<{ st: McpStatus | null; onChange: (s: McpStatus) => void
         {running
           ? <>
             {changed && <button className="btn primary" disabled={busy || portBad} onClick={start}><Icon.refresh s={14} /> 换端口重启</button>}
-            <button className="btn stop" disabled={busy} onClick={stop}>{busy ? <ThinkingOrb state="searching" size={20} theme="dark" /> : <Icon.stop s={13} />} 停止</button>
+            <button className="btn stop" disabled={busy} onClick={stop}>{busy ? <ThinkingOrb state="searching" size={20} theme={fxTheme()} /> : <Icon.stop s={13} />} 停止</button>
           </>
-          : <button className="btn primary" disabled={busy || portBad || !st} onClick={start}>{busy ? <ThinkingOrb state="searching" size={20} theme="dark" /> : <Icon.play s={13} />} {errorText ? '重试启动' : '启动'}</button>}
+          : <button className="btn primary" disabled={busy || portBad || !st} onClick={start}>{busy ? <ThinkingOrb state="searching" size={20} theme={fxTheme()} /> : <Icon.play s={13} />} {errorText ? '重试启动' : '启动'}</button>}
         {portBad && <span className="au-hint bad">端口范围 1–65535</span>}
       </div>
 
@@ -161,7 +162,7 @@ const McpCard: React.FC<{ st: McpStatus | null; onChange: (s: McpStatus) => void
 
       {!(errorText && !running) && <div className="au-recent">
         <div className="au-recent-h">最近调用</div>
-        {recent === null ? <div className="au-recent-e"><ThinkingOrb state="searching" size={20} theme="dark" /></div>
+        {recent === null ? <div className="au-recent-e"><ThinkingOrb state="searching" size={20} theme={fxTheme()} /></div>
           : recent.length === 0 ? <div className="au-recent-e">还没有 AI 客户端调用过，复制下方配置即可接入</div>
           : recent.map(e => { const rest = (e.detail || '').startsWith(e.name) ? (e.detail || '').slice(e.name.length).trim() : e.detail; return (
             <div key={e.id} className={`au-recent-r ${e.ok ? '' : 'bad'}`} title={[e.error, e.detail].filter(Boolean).join(' · ')}>
@@ -192,7 +193,7 @@ const ApiCard: React.FC<{ settings: Settings | null; keyRequired: boolean; revea
       <div className="au-head">
         <span className="ic"><Icon.terminal /></span>
         <div className="grow"><h4>本地 API</h4><span>Puppeteer / Playwright / Selenium 接管</span></div>
-        {!settings ? <ThinkingOrb state="searching" size={20} theme="dark" /> : on ? <span className="badge ok"><span className="live sm" />运行中</span> : <span className="badge unknown"><i className="d" />已关闭</span>}
+        {!settings ? <ThinkingOrb state="searching" size={20} theme={fxTheme()} /> : on ? <span className="badge ok"><span className="live sm" />运行中</span> : <span className="badge unknown"><i className="d" />已关闭</span>}
       </div>
       <div className="au-url">
         <span className="k">地址</span>
@@ -243,7 +244,7 @@ const ConfigCard: React.FC<{ st: McpStatus | null; hideKey: (s: string) => strin
       <Segmented className="block" value={mode} onChange={setMode}
         items={[['http', 'Cursor · HTTP'], ['stdio', 'Claude Desktop · stdio'], ['cli', 'Claude Code · CLI']]} />
       <div className={`au-code ${mode === 'cli' ? 'cli' : ''}`}>
-        {st ? <pre className="mono">{mode === 'cli' && <span className="pr">$ </span>}{hideKey(raw)}</pre> : <div className="au-code-load"><ThinkingOrb state="searching" size={20} theme="dark" /></div>}
+        {st ? <pre className="mono">{mode === 'cli' && <span className="pr">$ </span>}{hideKey(raw)}</pre> : <div className="au-code-load"><ThinkingOrb state="searching" size={20} theme={fxTheme()} /></div>}
         <button className={`btn sm au-copy ${copied ? 'done' : ''}`} disabled={!st} onClick={copy}>{copied ? <><Icon.check s={13} /> 已复制</> : <><Icon.copy s={13} /> 复制</>}</button>
       </div>
       <div className="au-hint">{MODE_HINT[mode]}{st?.keyRequired && mode !== 'stdio' ? '复制的内容包含完整 API Key。' : ''}</div>
@@ -263,7 +264,7 @@ const ToolsCard: React.FC<{ st: McpStatus | null }> = ({ st }) => {
         <span className="ic"><Icon.bolt /></span>
         <div className="grow"><h4>可用工具</h4><span>{st ? `${tools.length} 个工具 · ${tools.filter(read).length} 个只读` : '读取中…'}</span></div>
       </div>
-      {!st ? <div className="au-code-load"><ThinkingOrb state="searching" size={20} theme="dark" /></div>
+      {!st ? <div className="au-code-load"><ThinkingOrb state="searching" size={20} theme={fxTheme()} /></div>
         : tools.length === 0 ? <div className="sub">没有可用工具</div>
         : <div className="au-chips">{tools.map((t: string) => <span key={t} className={`au-tool ${read(t) ? 'ro' : 'rw'}`} title={`${TOOLS[t] || t}${read(t) ? '（只读）' : '（会修改数据，记入操作日志）'}`}>
           <b>{TOOLS[t] || t}</b><span className="mono">{t}</span>
@@ -325,7 +326,7 @@ const AuditLog: React.FC<{ profiles: Profile[] }> = ({ profiles }) => {
 
       {res && all === 0 && !loading ? (
         <div className="panel empty au-empty">
-          <div className="halo"><ThinkingOrb state="breathing" size={64} theme="dark" /></div>
+          <div className="halo"><ThinkingOrb state="breathing" size={64} theme={fxTheme()} /></div>
           <h3>还没有操作记录</h3>
           <div>启动、新建、删除环境，分配代理，云端同步，以及本地 API 和 MCP 的每一次调用都会记在这里。<br />可以按来源、环境筛选，并导出为 CSV / JSON 留档。</div>
         </div>
@@ -357,7 +358,7 @@ const AuditLog: React.FC<{ profiles: Profile[] }> = ({ profiles }) => {
               {(res?.items || []).map((e, i) => <Row key={e.id} e={e} i={i} p={byId[e.target]} px={pxName} />)}
             </tbody>
           </table>
-          {loading && !res && <div className="au-loading"><ThinkingOrb state="searching" size={32} theme="dark" /><span>读取操作日志…</span></div>}
+          {loading && !res && <div className="au-loading"><ThinkingOrb state="searching" size={32} theme={fxTheme()} /><span>读取操作日志…</span></div>}
           {res && res.items.length === 0 && <div className="au-none">
             <Icon.search s={18} /><span>没有符合筛选条件的记录</span>{filtered && <button className="btn sm" onClick={reset}>清除筛选</button>}
           </div>}

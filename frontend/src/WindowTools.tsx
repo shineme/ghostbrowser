@@ -19,7 +19,7 @@ const MODE_HINT: Record<Mode, string> = {
   cascade: '等大窗口斜向错开，标题栏都可见',
   stack: '所有窗口叠在同一位置，适合配合同步器',
 };
-const ACCENTS = ['#7c8cff', '#b07cff', '#4fe0d0', '#e58bff', '#3ee6a8', '#ffc857', '#60a5fa', '#ff8a9a'];
+const ACCENTS = ['#7c8cff', '#b07cff', '#4fe0d0', '#e58bff', '#3ee6a8', '#ffc857', '#60a5fa', 'rgb(var(--k-ff8a9a))'];
 const initials = (n: string) => (n.match(/[A-Za-z0-9\u4e00-\u9fa5]+/g) || [n]).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const errMsg = (e: any) => String(e?.message || e || '未知错误');
 

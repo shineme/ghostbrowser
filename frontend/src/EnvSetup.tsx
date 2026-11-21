@@ -58,7 +58,7 @@ export const EnvSetup: React.FC<{ onReady: () => void }> = ({ onReady }) => {
           {!failed && s.phase !== 'downloading' && <div className="env-meta"><span className="sub">{s.message || '检测中…'}</span></div>}
 
           {failed && <div className="panel pad" style={{ background: 'rgba(255,107,122,.06)', borderColor: 'rgba(255,107,122,.22)' }}>
-            <div className="sub" style={{ color: '#ffb3bc', wordBreak: 'break-all' }}>{s.error}</div>
+            <div className="sub" style={{ color: 'rgb(var(--k-ffb3bc))', wordBreak: 'break-all' }}>{s.error}</div>
             <div className="sub" style={{ marginTop: 8 }}>目标目录：<code className="mono">{s.kitDir}</code></div>
             <div className="sub" style={{ marginTop: 4 }}>校验来源：{s.manifestFromServer ? '服务器 manifest.json' : 'EXE 内置校验值'}</div>
           </div>}
